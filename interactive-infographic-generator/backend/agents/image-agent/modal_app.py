@@ -93,14 +93,8 @@ def setup_model_weights() -> None:
 
 # ── Agent class ───────────────────────────────────────────────────────────────
 
-@app.cls(
-    gpu="A10G",
-    secrets=[modal.Secret.from_name("hf-secret")],
-    volumes={"/model-cache": model_weights_vol},
-    timeout=600,
-)
-class ImageAgent:
-    """FLUX.1-dev image generation. Pipeline loaded once per container."""
+class _ImageAgentBase:
+    """FLUX.1-dev image generation on A10G. Pipeline loaded once per container."""
 
     @modal.enter()
     def load_pipeline(self) -> None:
@@ -146,7 +140,39 @@ class ImageAgent:
             return {"image_bytes": None, "error": f"ImageGenerationFailed: {exc}"}
 
 
-# ── FastAPI ───────────────────────────────────────────────────────────────────
+# ── H100 variant (Pro Max mode) ──────────────────────────────────────────────────
+# H100 (Hopper) is 1.5–2× faster than A100 for FLUX.1-dev diffusion inference.
+# It replaces A100 for Pro Max to maximise generation speed.
+
+@app.cls(
+    gpu="A10G",
+    secrets=[modal.Secret.from_name("hf-secret")],
+    volumes={"/model-cache": model_weights_vol},
+    timeout=600,
+)
+class ImageAgentA10G(_ImageAgentBase):
+    """FLUX.1-dev image generation on A10G. Pipeline loaded once per container."""
+
+@app.cls(
+    gpu="A100",
+    secrets=[modal.Secret.from_name("hf-secret")],
+    volumes={"/model-cache": model_weights_vol},
+    timeout=300,
+)
+class ImageAgentA100(_ImageAgentBase):
+    """FLUX.1-dev on A100 — (Pro mode)."""
+
+@app.cls(
+    gpu="H100",
+    secrets=[modal.Secret.from_name("hf-secret")],
+    volumes={"/model-cache": model_weights_vol},
+    timeout=180,
+)
+class ImageAgentH100(_ImageAgentBase):
+    """FLUX.1-dev on H100 — fastest available inference (Pro Max mode)."""
+
+
+# ── FastAPI ───────────────────────────────────────────────────────────────
 
 web_app = FastAPI(
     title="Image Generation Agent",
@@ -164,6 +190,7 @@ web_app.add_middleware(
 
 class GenerateRequest(BaseModel):
     prompt: str
+    speed_mode: str = "pro"  # "normal" | "pro" | "promax"
 
 
 @web_app.get("/health")
@@ -173,9 +200,15 @@ def health() -> dict:
 
 @web_app.post("/generate")
 def generate(req: GenerateRequest) -> dict:
-    """Returns base64-encoded PNG."""
+    """Returns base64-encoded PNG. Routes to A10G (Normal/Pro) or A100 (Pro Max)."""
     try:
-        agent = ImageAgent()
+        # Pro Max gets H100 for fastest FLUX.1-dev inference
+        if req.speed_mode == "promax":
+            agent = ImageAgentH100()
+        elif req.speed_mode == "pro":
+            agent = ImageAgentA100()
+        else:  # "normal" → A10G (same as original)
+            agent = ImageAgentA10G()
         result = agent.generate.remote({"prompt": req.prompt})
 
         if result.get("error"):
@@ -196,7 +229,7 @@ def generate(req: GenerateRequest) -> dict:
         return {"image_base64": None, "error": f"ImageGenerationFailed: {exc}"}
 
 
-@app.function(image=image)
+@app.function(image=image, timeout=900)
 @modal.asgi_app()
 def api() -> FastAPI:
     return web_app

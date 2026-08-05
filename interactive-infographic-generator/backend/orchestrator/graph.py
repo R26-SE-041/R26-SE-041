@@ -67,12 +67,17 @@ def image_node(state: PipelineState) -> dict[str, Any]:
     """Call image-agent /generate and merge raw image bytes into state."""
     url = os.environ["IMAGE_AGENT_URL"].rstrip("/") + "/generate"
     try:
+        # image-agent expects a single "prompt" key — use enhanced if available
+        best_prompt = (
+            state.get("enhanced_prompt")
+            or state.get("raw_prompt")
+            or ""
+        )
         resp = requests.post(
             url,
             json={
-                "raw_prompt": state["raw_prompt"],
-                "enhanced_prompt": state.get("enhanced_prompt"),
-                "prompt_parse_error": state.get("prompt_parse_error", False),
+                "prompt": best_prompt,
+                "speed_mode": state.get("speed_mode", "pro"),
             },
             timeout=360,
         )

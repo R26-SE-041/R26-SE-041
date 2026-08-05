@@ -17,11 +17,14 @@ interface InteractionCoords {
   coords: number[]; // [x, y] or [x1, y1, x2, y2] normalized 0..1
 }
 
+type SpeedMode = "normal" | "pro" | "promax";
+
 interface InteractiveCanvasProps {
   imageBase64: string; // Base64 PNG
+  speedMode?: SpeedMode;
 }
 
-export default function InteractiveCanvas({ imageBase64 }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: InteractiveCanvasProps) {
   const [selectionType, setSelectionType] = useState<SelectionType>("point");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("identify");
   const [customQuestion, setCustomQuestion] = useState("");
@@ -120,6 +123,7 @@ export default function InteractiveCanvas({ imageBase64 }: InteractiveCanvasProp
           interaction: currentSelection,
           mode: analysisMode,
           question: analysisMode === "ask" ? customQuestion.trim() : undefined,
+          speed_mode: speedMode,
         }),
       });
 
@@ -299,7 +303,9 @@ export default function InteractiveCanvas({ imageBase64 }: InteractiveCanvasProp
         <div className="glass-card result-panel">
           <div className="result-header">
             <span className="enhanced-badge">✦ Qwen2.5-VL Visual Explanation</span>
-            <span className="enhanced-model-tag">SAM 2 + Qwen2.5-VL-7B</span>
+            <span className="enhanced-model-tag">
+              SAM 2 + Qwen2.5-VL-7B &middot; {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}
+            </span>
           </div>
           <p className="result-text">{analysisResult}</p>
         </div>

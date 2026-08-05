@@ -6,8 +6,8 @@ Interactive Image Agent
     - SAM 2 (facebook/sam2.1-hiera-large via HuggingFace Transformers)
     - Qwen2.5-VL-7B (Qwen/Qwen2.5-VL-7B-Instruct via HuggingFace Transformers)
   GPUs:
-    - SAM2Agent: T4 GPU
-    - VLMAgent: A10G GPU (24 GB VRAM)
+    - SAM2Agent: A10G GPU (24 GB VRAM)
+    - VLMAgent: A100 GPU (40 GB VRAM)
 """
 
 from __future__ import annotations
@@ -94,14 +94,8 @@ def setup_models() -> None:
 
 # ── SAM 2 Agent Class ─────────────────────────────────────────────────────────
 
-@app.cls(
-    gpu="T4",
-    volumes={"/model-cache": vlm_vol},
-    secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=120,
-)
-class SAM2Agent:
-    """SAM 2 segmentation agent using Hugging Face Transformers."""
+class _SAM2AgentBase:
+    """SAM 2 segmentation agent on A10G (Normal / Pro modes)."""
 
     @modal.enter()
     def load_model(self) -> None:
@@ -201,16 +195,31 @@ class SAM2Agent:
             return {"mask_bytes": None, "bbox": None, "error": f"SAM2SegmentationFailed: {exc}"}
 
 
-# ── Qwen2.5-VL Agent Class ───────────────────────────────────────────────────
+# ── SAM2 A100 variant (Pro Max mode) ──────────────────────────────────────────
 
 @app.cls(
     gpu="A10G",
     volumes={"/model-cache": vlm_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=300,
+    timeout=120,
 )
-class VLMAgent:
-    """Qwen2.5-VL-7B visual understanding agent."""
+class SAM2AgentA10G(_SAM2AgentBase):
+    """SAM 2 segmentation agent on A10G (Normal / Pro modes)."""
+
+@app.cls(
+    gpu="A100",
+    volumes={"/model-cache": vlm_vol},
+    secrets=[modal.Secret.from_name("hf-secret")],
+    timeout=60,
+)
+class SAM2AgentA100(_SAM2AgentBase):
+    """Same SAM 2 model but on A100 for faster segmentation (Pro Max mode)."""
+
+
+# ── Qwen2.5-VL Agent Class ───────────────────────────────────────────────────
+
+class _VLMAgentBase:
+    """Qwen2.5-VL-7B visual understanding agent on A100 (Pro / Pro Max modes)."""
 
     @modal.enter()
     def load_model(self) -> None:
@@ -311,6 +320,40 @@ class VLMAgent:
             return {"response_text": None, "error": f"VLMAnalysisFailed: {exc}"}
 
 
+# ── VLM A10G variant (Normal mode) ───────────────────────────────────────────────
+
+@app.cls(
+    gpu="A100",
+    volumes={"/model-cache": vlm_vol},
+    secrets=[modal.Secret.from_name("hf-secret")],
+    timeout=300,
+)
+class VLMAgentA100(_VLMAgentBase):
+    """Qwen2.5-VL-7B visual understanding agent on A100 (Pro / Pro Max modes)."""
+
+@app.cls(
+    gpu="A10G",
+    volumes={"/model-cache": vlm_vol},
+    secrets=[modal.Secret.from_name("hf-secret")],
+    timeout=300,
+)
+class VLMAgentA10G(_VLMAgentBase):
+    """Same Qwen2.5-VL-7B model but on A10G (Normal mode, lower cost)."""
+
+# ── VLM H100 variant (Pro Max mode) ──────────────────────────────────────────────
+# H100 memory bandwidth (3.35 TB/s vs 2 TB/s on A100) directly accelerates the
+# memory-bandwidth-bound decode phase of Qwen2.5-VL-7B inference.
+
+@app.cls(
+    gpu="H100",
+    volumes={"/model-cache": vlm_vol},
+    secrets=[modal.Secret.from_name("hf-secret")],
+    timeout=120,
+)
+class VLMAgentH100(_VLMAgentBase):
+    """Qwen2.5-VL-7B on H100 — fastest VLM inference (Pro Max mode)."""
+
+
 # ── Helper: Overlay Mask on Image ─────────────────────────────────────────────
 
 def create_highlighted_image(image_bytes: bytes, mask_bytes: bytes) -> bytes:
@@ -375,6 +418,7 @@ class AnalyzeRequest(BaseModel):
     interaction: InteractionData
     mode: Literal["identify", "explain", "ask"] = "identify"
     question: Optional[str] = None
+    speed_mode: str = "pro"  # "normal" | "pro" | "promax"
 
 
 @web_app.get("/health")
@@ -392,8 +436,11 @@ def analyze(req: AnalyzeRequest) -> dict:
         # 1. Decode base64 image
         image_bytes = base64.b64decode(req.image_base64)
 
-        # 2. Call SAM2Agent
-        sam_agent = SAM2Agent()
+        # 2. Call SAM2 agent — A100 for Pro Max, A10G for Normal/Pro
+        if req.speed_mode == "promax":
+            sam_agent = SAM2AgentA100()
+        else:
+            sam_agent = SAM2AgentA10G()
         sam_res = sam_agent.segment.remote(
             image_bytes=image_bytes,
             interaction_type=req.interaction.type,
@@ -412,8 +459,13 @@ def analyze(req: AnalyzeRequest) -> dict:
         # 3. Create composite highlighted image
         highlighted_bytes = create_highlighted_image(image_bytes, mask_bytes)
 
-        # 4. Call VLMAgent
-        vlm_agent = VLMAgent()
+        # 4. Call VLM agent — A10G for Normal, A100 for Pro, H100 for Pro Max
+        if req.speed_mode == "normal":
+            vlm_agent = VLMAgentA10G()
+        elif req.speed_mode == "promax":
+            vlm_agent = VLMAgentH100()
+        else:  # "pro"
+            vlm_agent = VLMAgentA100()
         vlm_res = vlm_agent.analyze.remote(
             image_bytes=image_bytes,
             highlighted_image_bytes=highlighted_bytes,

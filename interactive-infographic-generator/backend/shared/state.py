@@ -39,6 +39,7 @@ class PipelineState(TypedDict):
     vlm_feedback: Optional[str]
     db_record_id: Optional[str]
     error: Optional[str]
+    speed_mode: str  # "normal" | "pro" | "promax" — controls GPU tier routing
 
 
 def initial_state(raw_prompt: str) -> PipelineState:
@@ -53,4 +54,5 @@ def initial_state(raw_prompt: str) -> PipelineState:
         vlm_feedback=None,
         db_record_id=None,
         error=None,
+        speed_mode="pro",
     )

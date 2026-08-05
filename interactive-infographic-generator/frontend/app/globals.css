@@ -776,4 +776,293 @@ body::before {
   white-space: pre-wrap;
 }
 
+/* ── Speed Mode Selector ──────────────────────────────────────────────────── */
+.speed-mode-section {
+  margin-bottom: 24px;
+  text-align: center;
+}
 
+.speed-mode-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.speed-mode-picker {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── Base Speed Pill ──────────────────────────────────────────────────────── */
+.speed-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 22px;
+  min-width: 120px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--glass-border);
+  background: var(--glass-bg);
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-family: var(--font-inter);
+  color: var(--text-secondary);
+  position: relative;
+  overflow: hidden;
+}
+
+.speed-pill:hover:not(:disabled) {
+  transform: translateY(-2px);
+  color: var(--text-primary);
+}
+
+.speed-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.speed-pill-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.speed-pill-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.speed-pill-gpus {
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  font-family: monospace;
+}
+
+/* ── Normal pill — green accent ───────────────────────────────────────────── */
+.speed-pill-normal:hover:not(:disabled) {
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: 0 4px 20px rgba(52, 211, 153, 0.12);
+}
+
+.speed-pill-normal.active {
+  border-color: rgba(52, 211, 153, 0.6);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--accent-green);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.2), 0 4px 20px rgba(52, 211, 153, 0.18);
+}
+
+.speed-pill-normal.active .speed-pill-name {
+  color: var(--accent-green);
+}
+
+/* ── Pro pill — indigo accent ─────────────────────────────────────────────── */
+.speed-pill-pro:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.12);
+}
+
+.speed-pill-pro.active {
+  border-color: rgba(99, 102, 241, 0.65);
+  background: rgba(99, 102, 241, 0.10);
+  color: var(--accent-blue);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25), 0 4px 20px rgba(99, 102, 241, 0.22);
+}
+
+.speed-pill-pro.active .speed-pill-name {
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Pro Max pill — gold/amber accent with glow animation ─────────────────── */
+.speed-pill-promax:hover:not(:disabled) {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.12);
+}
+
+.speed-pill-promax.active {
+  border-color: rgba(245, 158, 11, 0.65);
+  background: rgba(245, 158, 11, 0.07);
+  color: #fbbf24;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 4px 24px rgba(245, 158, 11, 0.25);
+  animation: proMaxPulse 2.5s ease-in-out infinite;
+}
+
+.speed-pill-promax.active .speed-pill-name {
+  color: #fbbf24;
+}
+
+@keyframes proMaxPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 4px 24px rgba(245, 158, 11, 0.25); }
+  50%       { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.40), 0 4px 32px rgba(245, 158, 11, 0.45); }
+}
+
+/* ── Speed mode hint text ─────────────────────────────────────────────────── */
+.speed-mode-hint {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  transition: color 0.2s;
+}
+
+/* ── Loading GPU badge ────────────────────────────────────────────────────── */
+.loading-gpu-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  margin-top: 4px;
+}
+
+.loading-gpu-text {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+/* Inline speed mode badge (used inside loading card) */
+.speed-badge-inline {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.speed-badge-normal { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+.speed-badge-pro    { background: rgba(99, 102, 241, 0.15); color: var(--accent-blue); }
+.speed-badge-promax { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 2D → 3D Section ─────────────────────────────────────────────────────── */
+.threed-section {
+  margin-top: 16px;
+}
+
+/* ── Convert to 3D button ────────────────────────────────────────────────── */
+.btn-threed {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #0d9488, #0891b2);
+  color: #fff;
+  font-family: var(--font-inter);
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.4);
+  letter-spacing: 0.01em;
+}
+
+.btn-threed:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(13, 148, 136, 0.5);
+}
+
+.btn-threed:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-threed-gpu {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 100px;
+  font-family: monospace;
+}
+
+/* ── 3D Viewer Card ──────────────────────────────────────────────────────── */
+.threed-viewer-card {
+  overflow: hidden;
+  margin-top: 20px;
+  animation: fadeSlideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  border-color: rgba(13, 148, 136, 0.3);
+  background: rgba(13, 148, 136, 0.04);
+}
+
+.threed-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Three.js canvas container */
+.threed-canvas-wrap {
+  width: 100%;
+  height: 480px;
+  background: radial-gradient(ellipse at center, #0a0f1a 0%, #060810 100%);
+}
+
+/* Download GLB link */
+.threed-download-btn {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 100px;
+  padding: 3px 10px;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+  cursor: pointer;
+}
+
+.threed-download-btn:hover {
+  background: rgba(52, 211, 153, 0.2);
+  color: #6ee7b7;
+}
+
+/* Hint text below the canvas */
+.threed-hint {
+  padding: 10px 20px 14px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Loading state inside viewer card */
+.threed-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 56px 28px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}

@@ -72,13 +72,7 @@ app = modal.App("prompt-agent", image=image)
 
 # ── Agent class (GPU-bound, one container load per lifetime) ──────────────────
 
-@app.cls(
-    gpu="T4",
-    secrets=[modal.Secret.from_name("hf-secret")],
-    volumes={"/root/skills": skills_vol},
-    timeout=120,
-)
-class PromptAgent:
+class _PromptAgentBase:
     """
     Qwen2.5-3B-Instruct prompt enhancement agent.
     Model is loaded once per container in @modal.enter(); subsequent
@@ -209,6 +203,27 @@ class PromptAgent:
         }
 
 
+# ── A10G variant (Pro / Pro Max modes) ───────────────────────────────────────
+
+@app.cls(
+    gpu="T4",
+    secrets=[modal.Secret.from_name("hf-secret")],
+    volumes={"/root/skills": skills_vol},
+    timeout=120,
+)
+class PromptAgentT4(_PromptAgentBase):
+    """Qwen2.5-3B-Instruct on T4 (Normal mode)."""
+
+@app.cls(
+    gpu="A10G",
+    secrets=[modal.Secret.from_name("hf-secret")],
+    volumes={"/root/skills": skills_vol},
+    timeout=60,
+)
+class PromptAgentA10G(_PromptAgentBase):
+    """Same model as PromptAgentT4 but on A10G for faster inference (Pro / Pro Max modes)."""
+
+
 # ── FastAPI web app (CPU-only ASGI endpoint, calls GPU class remotely) ────────
 
 from fastapi import FastAPI, HTTPException
@@ -232,6 +247,7 @@ web_app.add_middleware(
 
 class EnhanceRequest(BaseModel):
     raw_prompt: str
+    speed_mode: str = "pro"  # "normal" | "pro" | "promax"
 
 
 @web_app.get("/health")
@@ -242,7 +258,11 @@ def health() -> dict:
 @web_app.post("/enhance")
 def enhance(req: EnhanceRequest) -> dict:
     try:
-        agent = PromptAgent()
+        # Route to the correct GPU tier based on speed_mode
+        if req.speed_mode == "normal":
+            agent = PromptAgentT4()
+        else:  # "pro" or "promax" → A10G
+            agent = PromptAgentA10G()
         result = agent.enhance.remote({"raw_prompt": req.raw_prompt})
         return result
     except Exception as exc:
