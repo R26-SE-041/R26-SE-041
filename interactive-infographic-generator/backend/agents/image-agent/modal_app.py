@@ -105,9 +105,14 @@ class _ImageAgentBase:
             FLUX_CACHE_PATH,
             torch_dtype=torch.bfloat16,
         )
-        # Sequential offload: only ONE pipeline component lives in VRAM at a time.
-        # Slower than model_cpu_offload but fits FLUX.1-dev on A10G (22 GB).
-        self.pipe.enable_sequential_cpu_offload()
+        # Optimize based on GPU
+        if getattr(self, "USE_SEQUENTIAL_OFFLOAD", False):
+            # Sequential offload: only ONE pipeline component lives in VRAM at a time.
+            # Slower than model_cpu_offload but fits FLUX.1-dev on A10G (22 GB).
+            self.pipe.enable_sequential_cpu_offload()
+        else:
+            # A100 and H100 have 40GB/80GB VRAM, enough to hold the model fully in memory.
+            self.pipe.to("cuda")
 
     @modal.method()
     def generate(self, state_dict: dict[str, Any]) -> dict[str, Any]:
@@ -152,6 +157,7 @@ class _ImageAgentBase:
 )
 class ImageAgentA10G(_ImageAgentBase):
     """FLUX.1-dev image generation on A10G. Pipeline loaded once per container."""
+    USE_SEQUENTIAL_OFFLOAD = True
 
 @app.cls(
     gpu="A100",
