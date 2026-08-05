@@ -24,7 +24,7 @@ const INTERACTIVE_AGENT_URL =
 
 const THREED_AGENT_URL =
   process.env.NEXT_PUBLIC_THREED_AGENT_URL ??
-  "https://kojithan-y--threed-agent-api-dev.modal.run";
+  "https://kojithan-y--threed-agent-api.modal.run";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ const SPEED_MODES: {
     id: "pro",
     label: "Pro",
     icon: "🚀",
-    desc: "A10G · A100 · A100",
+    desc: "A10G · A100 · A100 · A100",
     promptGpu: "A10G",
     imageGpu: "A100",
     interactiveGpu: "A100",
@@ -406,7 +406,7 @@ export default function HomePage() {
                   >
                     🧊 Convert to 3D
                     <span className="btn-threed-gpu">
-                      {speedMode === "promax" ? "H100" : "A10G"}
+                      {speedMode === "promax" ? "H100" : speedMode === "pro" ? "A100" : "A10G"}
                     </span>
                   </button>
                   <p className="speed-mode-hint" style={{ marginTop: 8 }}>
@@ -431,7 +431,7 @@ export default function HomePage() {
                       {currentSpeedCfg.icon} {currentSpeedCfg.label}
                     </span>
                     <span className="loading-gpu-text">
-                      GPU: {speedMode === "promax" ? "H100" : "A10G"}
+                      GPU: {speedMode === "promax" ? "H100" : speedMode === "pro" ? "A100" : "A10G"}
                     </span>
                   </div>
                 </div>

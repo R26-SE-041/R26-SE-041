@@ -70,7 +70,7 @@ image = (
         # Step 2: Compile the custom CUDA rasterizer (needed for texture synthesis)
         "bash -c 'git clone https://github.com/tencent/Hunyuan3D-2.git /tmp/hunyuan3d "
         "&& cd /tmp/hunyuan3d/hy3dgen/texgen/custom_rasterizer "
-        "&& python setup.py install || echo \"CUDA ext compile failed — shape-only mode\"'",
+        "&& pip install . || echo \"CUDA ext compile failed — shape-only mode\"'",
     )
 )
 
@@ -154,8 +154,15 @@ class _ThreeDAgentBase:
         self.shape_pipe.to("cuda")
 
         print("Loading Hunyuan3D-2 texture pipeline…")
-        self.tex_pipe = Hunyuan3DPaintPipeline.from_pretrained(model_path)
-        print("Hunyuan3D-2 loaded successfully.")
+        try:
+            self.tex_pipe = Hunyuan3DPaintPipeline.from_pretrained(model_path)
+            print("Hunyuan3D-2 loaded successfully.")
+        except ModuleNotFoundError as e:
+            if "custom_rasterizer" in str(e):
+                print("Warning: custom_rasterizer not found. Texture pipeline disabled.")
+                self.tex_pipe = None
+            else:
+                raise
 
     @modal.method()
     def convert(
@@ -186,8 +193,11 @@ class _ThreeDAgentBase:
 
             # Stage 2: Texture synthesis (optional but default)
             if texture:
-                print("Stage 2 — synthesizing texture…")
-                mesh = self.tex_pipe(mesh, image=pil_img)
+                if getattr(self, "tex_pipe", None) is not None:
+                    print("Stage 2 — synthesizing texture…")
+                    mesh = self.tex_pipe(mesh, image=pil_img)
+                else:
+                    print("Stage 2 — texture skipped (custom_rasterizer not installed)")
 
             # Export to GLB bytes
             buf = io.BytesIO()
@@ -209,9 +219,20 @@ class _ThreeDAgentBase:
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=600,   # shape+texture can take up to 5 min on A10G
+    scaledown_window=300,
 )
 class ThreeDAgentA10G(_ThreeDAgentBase):
-    """Hunyuan3D-2 on A10G (24 GB VRAM) — Normal and Pro modes."""
+    """Hunyuan3D-2 on A10G (24 GB VRAM) — Normal mode."""
+
+@app.cls(
+    gpu="A100",
+    volumes={"/model-cache": threed_vol},
+    secrets=[modal.Secret.from_name("hf-secret")],
+    timeout=400,
+    scaledown_window=300,
+)
+class ThreeDAgentA100(_ThreeDAgentBase):
+    """Hunyuan3D-2 on A100 (40 GB VRAM) — Pro mode."""
 
 
 # ── H100 variant (Pro Max mode) ───────────────────────────────────────────────
@@ -221,7 +242,8 @@ class ThreeDAgentA10G(_ThreeDAgentBase):
     gpu="H100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=300,   # ~2-3× faster than A10G on H100
+    timeout=300,
+    scaledown_window=300,   # ~2-3× faster than A10G on H100
 )
 class ThreeDAgentH100(_ThreeDAgentBase):
     """Hunyuan3D-2 on H100 (80 GB VRAM) — Pro Max mode. Fastest 3D conversion."""
@@ -257,7 +279,7 @@ def health() -> dict:
         "model": HUNYUAN_MODEL_ID,
         "modes": {
             "normal": "A10G",
-            "pro": "A10G",
+            "pro": "A100",
             "promax": "H100",
         },
     }
@@ -282,7 +304,9 @@ def convert(req: ConvertRequest) -> dict:
         # 3. Route to correct GPU tier
         if req.speed_mode == "promax":
             agent = ThreeDAgentH100()
-        else:  # "normal" or "pro" → A10G
+        elif req.speed_mode == "pro":
+            agent = ThreeDAgentA100()
+        else:  # "normal"
             agent = ThreeDAgentA10G()
 
         result = agent.convert.remote(
@@ -310,7 +334,7 @@ def convert(req: ConvertRequest) -> dict:
         return {"glb_base64": None, "error": f"ConversionFailed: {exc}"}
 
 
-@app.function(image=image)
+@app.function(image=image, timeout=900)
 @modal.asgi_app()
 def api() -> FastAPI:
     return web_app
