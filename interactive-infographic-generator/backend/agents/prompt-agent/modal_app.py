@@ -210,6 +210,7 @@ class _PromptAgentBase:
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/root/skills": skills_vol},
     timeout=120,
+    container_idle_timeout=300,
 )
 class PromptAgentT4(_PromptAgentBase):
     """Qwen2.5-3B-Instruct on T4 (Normal mode)."""
@@ -219,6 +220,7 @@ class PromptAgentT4(_PromptAgentBase):
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/root/skills": skills_vol},
     timeout=60,
+    container_idle_timeout=300,
 )
 class PromptAgentA10G(_PromptAgentBase):
     """Same model as PromptAgentT4 but on A10G for faster inference (Pro / Pro Max modes)."""
