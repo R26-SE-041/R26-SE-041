@@ -53,8 +53,10 @@ image = (
         "build-essential", "ninja-build",     # needed to compile custom CUDA extensions
     )
     .pip_install(
-        "torch>=2.4.0",
-        "torchvision>=0.19.0",
+        "torch==2.4.1",
+        "torchvision==0.19.1",
+        "setuptools",
+        "wheel",
         "huggingface_hub>=0.26.0",
         "fastapi[standard]>=0.115.0",
         "pydantic>=2.9.0",
@@ -70,7 +72,7 @@ image = (
         # Step 2: Compile the custom CUDA rasterizer (needed for texture synthesis)
         "bash -c 'git clone https://github.com/tencent/Hunyuan3D-2.git /tmp/hunyuan3d "
         "&& cd /tmp/hunyuan3d/hy3dgen/texgen/custom_rasterizer "
-        "&& pip install . || echo \"CUDA ext compile failed — shape-only mode\"'",
+        "&& CC=gcc CXX=g++ pip install --no-build-isolation . || echo \"CUDA ext compile failed — shape-only mode\"'",
     )
 )
 
