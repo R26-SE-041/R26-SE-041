@@ -32,6 +32,7 @@ from typing import Optional
 import modal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -55,6 +56,12 @@ image = (
     .pip_install(
         "torch==2.4.1",
         "torchvision==0.19.1",
+        # Hunyuan 2.0.2 requires transformers>=4.48.  Keep it below the newer
+        # releases that import torch.distributed.tensor.DTensor, which is not
+        # exported by our pinned torch 2.4.1 and crashes every GPU container.
+        "transformers==4.48.3",
+        "diffusers==0.30.0",
+        "accelerate==1.1.1",
         "setuptools",
         "wheel",
         "huggingface_hub>=0.26.0",
@@ -65,6 +72,9 @@ image = (
         "trimesh>=4.5.0",
         "rembg>=2.0.57",    # background removal for cleaner 3D inputs
     )
+    # Modal builds images without a visible GPU, so torch cannot infer which
+    # CUDA architectures to compile.  Cover all three deployment GPU tiers.
+    .env({"TORCH_CUDA_ARCH_LIST": "8.0;8.6;9.0"})
     # Install hy3dgen from GitHub source (pip package alone lacks CUDA extensions)
     .run_commands(
         # Step 1: Install the Python package
@@ -72,8 +82,20 @@ image = (
         # Step 2: Compile the custom CUDA rasterizer (needed for texture synthesis)
         "bash -c 'git clone https://github.com/tencent/Hunyuan3D-2.git /tmp/hunyuan3d "
         "&& cd /tmp/hunyuan3d/hy3dgen/texgen/custom_rasterizer "
-        "&& CC=gcc CXX=g++ pip install --no-build-isolation . || echo \"CUDA ext compile failed — shape-only mode\"'",
+        "&& CC=gcc CXX=g++ pip install --no-build-isolation .'",
     )
+    # Upstream's paint pipeline also requires this second native extension.
+    .run_commands(
+        "bash -c 'cd /tmp/hunyuan3d/hy3dgen/texgen/differentiable_renderer "
+        "&& CC=gcc CXX=g++ pip install --no-build-isolation .'",
+        # Fail the image build if either paint extension is unavailable. A
+        # textured request must never degrade silently to an untextured mesh.
+        # Loading torch first makes its shared libraries (including libc10.so)
+        # available to the native rasterizer, matching Hunyuan's runtime order.
+        "python -c \"import torch; import custom_rasterizer; import mesh_processor\"",
+    )
+    # PyMeshLab's texture/mesh plugins dynamically load libOpenGL.so.0.
+    .apt_install("libopengl0")
 )
 
 app = modal.App("threed-agent", image=image)
@@ -156,15 +178,8 @@ class _ThreeDAgentBase:
         self.shape_pipe.to("cuda")
 
         print("Loading Hunyuan3D-2 texture pipeline…")
-        try:
-            self.tex_pipe = Hunyuan3DPaintPipeline.from_pretrained(model_path)
-            print("Hunyuan3D-2 loaded successfully.")
-        except ModuleNotFoundError as e:
-            if "custom_rasterizer" in str(e):
-                print("Warning: custom_rasterizer not found. Texture pipeline disabled.")
-                self.tex_pipe = None
-            else:
-                raise
+        self.tex_pipe = Hunyuan3DPaintPipeline.from_pretrained(model_path)
+        print("Hunyuan3D-2 shape and texture pipelines loaded successfully.")
 
     @modal.method()
     def convert(
@@ -183,7 +198,14 @@ class _ThreeDAgentBase:
         try:
             torch.cuda.empty_cache()
 
-            # Prepare image — ensure RGBA (BG removed upstream)
+            # Keep all expensive preprocessing inside the spawned GPU job so
+            # the browser-facing endpoint can return before Modal's 150 s
+            # Web Function timeout.
+            try:
+                image_bytes = remove_background(image_bytes)
+            except Exception as exc:
+                print(f"Background removal unavailable; using original image: {exc}")
+
             pil_img = PILImage.open(io.BytesIO(image_bytes)).convert("RGBA")
 
             # Stage 1: Shape generation
@@ -195,11 +217,8 @@ class _ThreeDAgentBase:
 
             # Stage 2: Texture synthesis (optional but default)
             if texture:
-                if getattr(self, "tex_pipe", None) is not None:
-                    print("Stage 2 — synthesizing texture…")
-                    mesh = self.tex_pipe(mesh, image=pil_img)
-                else:
-                    print("Stage 2 — texture skipped (custom_rasterizer not installed)")
+                print("Stage 2 — synthesizing texture…")
+                mesh = self.tex_pipe(mesh, image=pil_img)
 
             # Export to GLB bytes
             buf = io.BytesIO()
@@ -220,7 +239,7 @@ class _ThreeDAgentBase:
     gpu="A10G",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=600,   # shape+texture can take up to 5 min on A10G
+    timeout=900,   # texture synthesis can exceed 5 min on a cold container
     scaledown_window=300,
 )
 class ThreeDAgentA10G(_ThreeDAgentBase):
@@ -230,7 +249,7 @@ class ThreeDAgentA10G(_ThreeDAgentBase):
     gpu="A100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=400,
+    timeout=900,
     scaledown_window=300,
 )
 class ThreeDAgentA100(_ThreeDAgentBase):
@@ -244,7 +263,7 @@ class ThreeDAgentA100(_ThreeDAgentBase):
     gpu="H100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=300,
+    timeout=900,
     scaledown_window=300,   # ~2-3× faster than A10G on H100
 )
 class ThreeDAgentH100(_ThreeDAgentBase):
@@ -274,6 +293,31 @@ class ConvertRequest(BaseModel):
     num_inference_steps: int = 50  # 50 default; reduce to 30 for speed
 
 
+def _agent_for_mode(speed_mode: str):
+    if speed_mode == "promax":
+        return ThreeDAgentH100()
+    if speed_mode == "pro":
+        return ThreeDAgentA100()
+    if speed_mode == "normal":
+        return ThreeDAgentA10G()
+    raise HTTPException(status_code=422, detail=f"Unknown speed_mode: {speed_mode}")
+
+
+def _encode_result(result: dict) -> dict:
+    if result.get("error"):
+        return {"glb_base64": None, "error": result["error"]}
+
+    glb_bytes: bytes | None = result.get("glb_bytes")
+    if not glb_bytes:
+        return {"glb_base64": None, "error": "Empty GLB output"}
+
+    return {
+        "glb_base64": base64.b64encode(glb_bytes).decode("utf-8"),
+        "size_kb": round(len(glb_bytes) / 1024, 1),
+        "error": None,
+    }
+
+
 @web_app.get("/health")
 def health() -> dict:
     return {
@@ -297,19 +341,8 @@ def convert(req: ConvertRequest) -> dict:
         # 1. Decode image
         image_bytes = base64.b64decode(req.image_base64)
 
-        # 2. Remove background for cleaner 3D reconstruction
-        try:
-            image_bytes = remove_background(image_bytes)
-        except Exception:
-            pass  # Skip bg removal on failure — still proceed
-
-        # 3. Route to correct GPU tier
-        if req.speed_mode == "promax":
-            agent = ThreeDAgentH100()
-        elif req.speed_mode == "pro":
-            agent = ThreeDAgentA100()
-        else:  # "normal"
-            agent = ThreeDAgentA10G()
+        # 2. Route to correct GPU tier
+        agent = _agent_for_mode(req.speed_mode)
 
         result = agent.convert.remote(
             image_bytes=image_bytes,
@@ -317,18 +350,7 @@ def convert(req: ConvertRequest) -> dict:
             texture=req.texture,
         )
 
-        if result.get("error"):
-            return {"glb_base64": None, "error": result["error"]}
-
-        glb_bytes: bytes | None = result.get("glb_bytes")
-        if not glb_bytes:
-            return {"glb_base64": None, "error": "Empty GLB output"}
-
-        return {
-            "glb_base64": base64.b64encode(glb_bytes).decode("utf-8"),
-            "size_kb": round(len(glb_bytes) / 1024, 1),
-            "error": None,
-        }
+        return _encode_result(result)
 
     except HTTPException:
         raise
@@ -336,7 +358,44 @@ def convert(req: ConvertRequest) -> dict:
         return {"glb_base64": None, "error": f"ConversionFailed: {exc}"}
 
 
-@app.function(image=image, timeout=900)
+@web_app.post("/convert/start", status_code=202)
+def start_convert(req: ConvertRequest) -> dict:
+    """Start a conversion without holding a CORS request open for >150 s."""
+    try:
+        image_bytes = base64.b64decode(req.image_base64, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64 image") from exc
+
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Image is empty")
+
+    agent = _agent_for_mode(req.speed_mode)
+    call = agent.convert.spawn(
+        image_bytes=image_bytes,
+        num_inference_steps=req.num_inference_steps,
+        texture=req.texture,
+    )
+    return {"call_id": call.object_id, "status": "processing"}
+
+
+@web_app.get("/convert/result/{call_id}")
+def conversion_result(call_id: str):
+    """Poll a spawned conversion; 202 means it is still running."""
+    try:
+        call = modal.FunctionCall.from_id(call_id)
+        result = call.get(timeout=0)
+    except TimeoutError:
+        return JSONResponse(status_code=202, content={"status": "processing"})
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "failed", "error": f"ConversionFailed: {exc}"},
+        )
+
+    return {"status": "done", **_encode_result(result)}
+
+
+@app.function(image=image, timeout=1200)
 @modal.asgi_app()
 def api() -> FastAPI:
     return web_app

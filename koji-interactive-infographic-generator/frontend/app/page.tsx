@@ -33,6 +33,13 @@ type Mode       = "direct" | "enhance";
 type SpeedMode  = "normal" | "pro" | "promax";
 type ThreeDStage = "idle" | "converting" | "done";
 
+const THREED_POLL_INTERVAL_MS = 3_000;
+const THREED_MAX_WAIT_MS = 20 * 60 * 1_000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
 // ── Speed mode config ──────────────────────────────────────────────────────────
 
 const SPEED_MODES: {
@@ -195,7 +202,7 @@ export default function HomePage() {
     setGlbBase64(null);
 
     try {
-      const res = await fetch(`${THREED_AGENT_URL}/convert`, {
+      const startRes = await fetch(`${THREED_AGENT_URL}/convert/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,16 +212,35 @@ export default function HomePage() {
           num_inference_steps: speedMode === "promax" ? 50 : 30,
         }),
       });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e?.detail ?? `3D Convert HTTP ${res.status}`);
+      if (!startRes.ok) {
+        const e = await startRes.json().catch(() => ({}));
+        throw new Error(e?.detail ?? `3D Convert HTTP ${startRes.status}`);
       }
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      if (!data.glb_base64) throw new Error("Empty GLB response");
-      setGlbBase64(data.glb_base64);
-      setGlbSizeKb(data.size_kb);
-      setThreedStage("done");
+      const started = await startRes.json();
+      if (!started.call_id) throw new Error("3D agent did not return a job ID");
+
+      const deadline = Date.now() + THREED_MAX_WAIT_MS;
+      while (Date.now() < deadline) {
+        await delay(THREED_POLL_INTERVAL_MS);
+        const resultRes = await fetch(
+          `${THREED_AGENT_URL}/convert/result/${encodeURIComponent(started.call_id)}`,
+        );
+
+        if (resultRes.status === 202) continue;
+
+        const data = await resultRes.json().catch(() => ({}));
+        if (!resultRes.ok) {
+          throw new Error(data?.error ?? data?.detail ?? `3D Result HTTP ${resultRes.status}`);
+        }
+        if (data.error) throw new Error(data.error);
+        if (!data.glb_base64) throw new Error("Empty GLB response");
+        setGlbBase64(data.glb_base64);
+        setGlbSizeKb(data.size_kb);
+        setThreedStage("done");
+        return;
+      }
+
+      throw new Error("3D conversion timed out after 20 minutes");
     } catch (err: unknown) {
       setThreedError(err instanceof Error ? err.message : "3D conversion failed");
       setThreedStage("idle");

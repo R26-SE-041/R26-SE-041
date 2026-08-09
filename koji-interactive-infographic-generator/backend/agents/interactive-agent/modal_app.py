@@ -203,8 +203,6 @@ class _SAM2AgentBase:
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=120,
     scaledown_window=300,
-    container_idle_timeout=300,
-    scaledown_window=300,
 )
 class SAM2AgentA10G(_SAM2AgentBase):
     """SAM 2 segmentation agent on A10G (Normal / Pro modes)."""
@@ -214,8 +212,6 @@ class SAM2AgentA10G(_SAM2AgentBase):
     volumes={"/model-cache": vlm_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=60,
-    scaledown_window=300,
-    container_idle_timeout=300,
     scaledown_window=300,
 )
 class SAM2AgentA100(_SAM2AgentBase):
@@ -334,8 +330,6 @@ class _VLMAgentBase:
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=300,
     scaledown_window=300,
-    container_idle_timeout=300,
-    scaledown_window=300,
 )
 class VLMAgentA100(_VLMAgentBase):
     """Qwen2.5-VL-7B visual understanding agent on A100 (Pro / Pro Max modes)."""
@@ -345,8 +339,6 @@ class VLMAgentA100(_VLMAgentBase):
     volumes={"/model-cache": vlm_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=300,
-    scaledown_window=300,
-    container_idle_timeout=300,
     scaledown_window=300,
 )
 class VLMAgentA10G(_VLMAgentBase):
@@ -361,8 +353,6 @@ class VLMAgentA10G(_VLMAgentBase):
     volumes={"/model-cache": vlm_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=120,
-    scaledown_window=300,
-    container_idle_timeout=300,
     scaledown_window=300,
 )
 class VLMAgentH100(_VLMAgentBase):

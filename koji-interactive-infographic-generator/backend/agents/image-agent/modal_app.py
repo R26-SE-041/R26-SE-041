@@ -155,8 +155,6 @@ class _ImageAgentBase:
     volumes={"/model-cache": model_weights_vol},
     timeout=600,
     scaledown_window=300,
-    container_idle_timeout=300,
-    scaledown_window=300,
 )
 class ImageAgentA10G(_ImageAgentBase):
     """FLUX.1-dev image generation on A10G. Pipeline loaded once per container."""
@@ -168,8 +166,6 @@ class ImageAgentA10G(_ImageAgentBase):
     volumes={"/model-cache": model_weights_vol},
     timeout=300,
     scaledown_window=300,
-    container_idle_timeout=300,
-    scaledown_window=300,
 )
 class ImageAgentA100(_ImageAgentBase):
     """FLUX.1-dev on A100 — (Pro mode)."""
@@ -179,8 +175,6 @@ class ImageAgentA100(_ImageAgentBase):
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/model-cache": model_weights_vol},
     timeout=180,
-    scaledown_window=300,
-    container_idle_timeout=300,
     scaledown_window=300,
 )
 class ImageAgentH100(_ImageAgentBase):
