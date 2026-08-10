@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "EduVision",
+    "slug": "eduvision",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.koji.eduvision",
+      "permissions": ["INTERNET"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "EduVision"
+    }
+  }
+}

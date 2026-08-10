@@ -1,48 +1,114 @@
-// frontend/components/InteractiveCanvas.tsx
-// Interactive Canvas for generated image segmentation & Qwen2.5-VL visual analysis
-
-"use client";
-
-import React, { useState, useRef, useEffect, MouseEvent } from "react";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  GestureResponderEvent,
+  Image,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
 
 const INTERACTIVE_AGENT_URL =
-  process.env.NEXT_PUBLIC_INTERACTIVE_AGENT_URL ??
+  process.env.EXPO_PUBLIC_INTERACTIVE_AGENT_URL ??
   "https://kojithan-y--interactive-agent-api-dev.modal.run";
 
 type SelectionType = "point" | "box";
 type AnalysisMode = "identify" | "explain" | "ask";
+type SpeedMode = "normal" | "pro" | "promax";
 
 interface InteractionCoords {
   type: SelectionType;
-  coords: number[]; // [x, y] or [x1, y1, x2, y2] normalized 0..1
+  coords: number[];
 }
 
-type SpeedMode = "normal" | "pro" | "promax";
+interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
-  imageBase64: string; // Base64 PNG
+  imageBase64: string;
   speedMode?: SpeedMode;
 }
 
+function apiError(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const value = payload as { detail?: unknown; error?: unknown };
+  if (typeof value.error === "string") return value.error;
+  if (typeof value.detail === "string") return value.detail;
+  if (value.detail && typeof value.detail === "object" && "error" in value.detail) {
+    const nested = (value.detail as { error?: unknown }).error;
+    if (typeof nested === "string") return nested;
+  }
+  return fallback;
+}
+
 export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: InteractiveCanvasProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const shared = useMemo(() => makeSharedStyles(colors), [colors]);
   const [selectionType, setSelectionType] = useState<SelectionType>("point");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("identify");
   const [customQuestion, setCustomQuestion] = useState("");
-
   const [currentSelection, setCurrentSelection] = useState<InteractionCoords | null>(null);
+  const [boxStart, setBoxStart] = useState<Point | null>(null);
+  const [boxCurrent, setBoxCurrent] = useState<Point | null>(null);
   const [isDrawingBox, setIsDrawingBox] = useState(false);
-  const [boxStart, setBoxStart] = useState<{ x: number; y: number } | null>(null);
-  const [boxCurrent, setBoxCurrent] = useState<{ x: number; y: number } | null>(null);
-
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedImage, setHighlightedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
+  const [aspectRatio, setAspectRatio] = useState(1);
+  const dragStartRef = useRef<Point | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const normalizeEvent = (event: GestureResponderEvent): Point => ({
+    x: Math.max(0, Math.min(1, event.nativeEvent.locationX / canvasSize.width)),
+    y: Math.max(0, Math.min(1, event.nativeEvent.locationY / canvasSize.height)),
+  });
 
-  // Clear analysis when selection mode changes
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => !isLoading,
+    onMoveShouldSetPanResponder: () => !isLoading && selectionType === "box",
+    onPanResponderGrant: (event) => {
+      const point = normalizeEvent(event);
+      if (selectionType === "point") {
+        setCurrentSelection({ type: "point", coords: [point.x, point.y] });
+        return;
+      }
+      dragStartRef.current = point;
+      setBoxStart(point);
+      setBoxCurrent(point);
+      setIsDrawingBox(true);
+    },
+    onPanResponderMove: (event) => {
+      if (selectionType === "box" && dragStartRef.current) setBoxCurrent(normalizeEvent(event));
+    },
+    onPanResponderRelease: (event) => finishBox(normalizeEvent(event)),
+    onPanResponderTerminate: (event) => finishBox(normalizeEvent(event)),
+  }), [canvasSize, isLoading, selectionType]);
+
+  function finishBox(end: Point) {
+    const start = dragStartRef.current;
+    if (!start || selectionType !== "box") return;
+    setIsDrawingBox(false);
+    dragStartRef.current = null;
+    let x1 = Math.min(start.x, end.x);
+    let y1 = Math.min(start.y, end.y);
+    let x2 = Math.max(start.x, end.x);
+    let y2 = Math.max(start.y, end.y);
+    if (x2 - x1 < 0.02 || y2 - y1 < 0.02) {
+      const margin = 0.08;
+      x1 = Math.max(0, start.x - margin);
+      y1 = Math.max(0, start.y - margin);
+      x2 = Math.min(1, start.x + margin);
+      y2 = Math.min(1, start.y + margin);
+    }
+    setBoxCurrent(end);
+    setCurrentSelection({ type: "box", coords: [x1, y1, x2, y2] });
+  }
+
   const handleTypeChange = (type: SelectionType) => {
     setSelectionType(type);
     setCurrentSelection(null);
@@ -53,69 +119,13 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
     setError(null);
   };
 
-  // Helper to calculate normalized coords (0..1) relative to image
-  const getNormalizedCoords = (e: MouseEvent<HTMLDivElement>) => {
-    if (!imageRef.current) return { x: 0, y: 0 };
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    return { x, y };
-  };
-
-  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (isLoading) return;
-    const { x, y } = getNormalizedCoords(e);
-
-    if (selectionType === "point") {
-      setCurrentSelection({ type: "point", coords: [x, y] });
-    } else {
-      setIsDrawingBox(true);
-      setBoxStart({ x, y });
-      setBoxCurrent({ x, y });
-    }
-  };
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!isDrawingBox || selectionType !== "box") return;
-    const { x, y } = getNormalizedCoords(e);
-    setBoxCurrent({ x, y });
-  };
-
-  const handleMouseUp = () => {
-    if (!isDrawingBox || !boxStart || !boxCurrent) return;
-    setIsDrawingBox(false);
-
-    const x1 = Math.min(boxStart.x, boxCurrent.x);
-    const y1 = Math.min(boxStart.y, boxCurrent.y);
-    const x2 = Math.max(boxStart.x, boxCurrent.x);
-    const y2 = Math.max(boxStart.y, boxCurrent.y);
-
-    // If tiny click without dragging, default to a box centered around click point
-    if (Math.abs(x2 - x1) < 0.02 || Math.abs(y2 - y1) < 0.02) {
-      const cx = boxStart.x;
-      const cy = boxStart.y;
-      const margin = 0.08;
-      const px1 = Math.max(0, cx - margin);
-      const py1 = Math.max(0, cy - margin);
-      const px2 = Math.min(1, cx + margin);
-      const py2 = Math.min(1, cy + margin);
-      setCurrentSelection({ type: "box", coords: [px1, py1, px2, py2] });
-      return;
-    }
-
-    setCurrentSelection({ type: "box", coords: [x1, y1, x2, y2] });
-  };
-
-  // Run analysis API request
   const runAnalysis = async () => {
     if (!currentSelection || isLoading) return;
-
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
-
     try {
-      const res = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
+      const response = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -126,190 +136,140 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
           speed_mode: speedMode,
         }),
       });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.detail?.error ?? errData?.detail ?? `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      if (data.highlighted_base64) {
-        setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
-      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiError(data, `HTTP ${response.status}`));
+      if (data.error) throw new Error(String(data.error));
+      if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
       setAnalysisResult(data.response_text || "No analysis provided.");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Analysis failed");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const imageUri = highlightedImage ?? `data:image/png;base64,${imageBase64}`;
+  const previewBox = isDrawingBox && boxStart && boxCurrent
+    ? [Math.min(boxStart.x, boxCurrent.x), Math.min(boxStart.y, boxCurrent.y), Math.max(boxStart.x, boxCurrent.x), Math.max(boxStart.y, boxCurrent.y)]
+    : null;
+
   return (
-    <div className="interactive-container">
-      {/* Control Toolbar */}
-      <div className="interactive-toolbar">
-        <div className="toolbar-group">
-          <span className="toolbar-label">Interaction Mode:</span>
-          <button
-            type="button"
-            className={`toolbar-btn ${selectionType === "point" ? "active" : ""}`}
-            onClick={() => handleTypeChange("point")}
-          >
-            🎯 Tap Object
-          </button>
-          <button
-            type="button"
-            className={`toolbar-btn ${selectionType === "box" ? "active" : ""}`}
-            onClick={() => handleTypeChange("box")}
-          >
-            🔲 Circle / Box Region
-          </button>
-        </div>
+    <View style={styles.container}>
+      <View style={styles.toolbar}>
+        <View style={styles.toolbarModes}>
+          <Text style={styles.toolbarLabel}>Interaction Mode:</Text>
+          <ModeButton active={selectionType === "point"} label="🎯 Tap Object" onPress={() => handleTypeChange("point")} />
+          <ModeButton active={selectionType === "box"} label="🔲 Circle / Box Region" onPress={() => handleTypeChange("box")} />
+        </View>
+        <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
+      </View>
 
-        <span className="toolbar-hint">
-          {selectionType === "point"
-            ? "Click any object in the diagram to segment & analyze"
-            : "Click and drag a box around a region"}
-        </span>
-      </div>
-
-      {/* Interactive Image Container */}
-      <div
-        ref={containerRef}
-        className="canvas-wrap"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+      <View
+        {...panResponder.panHandlers}
+        onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
+        style={[styles.canvas, { aspectRatio }]}
       >
-        {/* Base / Highlighted Image */}
-        <img
-          ref={imageRef}
-          src={highlightedImage || `data:image/png;base64,${imageBase64}`}
-          alt="Interactive Educational Image"
-          className="interactive-image"
-          draggable={false}
+        <Image
+          accessibilityLabel="Interactive educational image"
+          onLoad={(event) => {
+            const source = event.nativeEvent.source;
+            if (source?.width && source?.height) setAspectRatio(source.width / source.height);
+          }}
+          resizeMode="contain"
+          source={{ uri: imageUri }}
+          style={StyleSheet.absoluteFill}
         />
-
-        {/* Selection Indicator Overlays */}
-        {selectionType === "point" && currentSelection && (
-          <div
-            className="point-marker"
-            style={{
-              left: `${currentSelection.coords[0] * 100}%`,
-              top: `${currentSelection.coords[1] * 100}%`,
-            }}
-          />
+        {selectionType === "point" && currentSelection?.type === "point" && (
+          <View pointerEvents="none" style={[styles.pointMarker, { left: `${currentSelection.coords[0] * 100}%`, top: `${currentSelection.coords[1] * 100}%` }]} />
         )}
+        {previewBox && <SelectionBox coords={previewBox} drawing />}
+        {selectionType === "box" && currentSelection?.type === "box" && !isDrawingBox && <SelectionBox coords={currentSelection.coords} />}
+      </View>
 
-        {/* Box Drawing Preview */}
-        {isDrawingBox && boxStart && boxCurrent && (
-          <div
-            className="box-marker drawing"
-            style={{
-              left: `${Math.min(boxStart.x, boxCurrent.x) * 100}%`,
-              top: `${Math.min(boxStart.y, boxCurrent.y) * 100}%`,
-              width: `${Math.abs(boxCurrent.x - boxStart.x) * 100}%`,
-              height: `${Math.abs(boxCurrent.y - boxStart.y) * 100}%`,
-            }}
-          />
-        )}
-
-        {/* Completed Box Selection */}
-        {selectionType === "box" && currentSelection && !isDrawingBox && (
-          <div
-            className="box-marker"
-            style={{
-              left: `${currentSelection.coords[0] * 100}%`,
-              top: `${currentSelection.coords[1] * 100}%`,
-              width: `${(currentSelection.coords[2] - currentSelection.coords[0]) * 100}%`,
-              height: `${(currentSelection.coords[3] - currentSelection.coords[1]) * 100}%`,
-            }}
-          />
-        )}
-      </div>
-
-      {/* Action Options (shown after selection) */}
       {currentSelection && (
-        <div className="glass-card action-panel">
-          <div className="action-mode-selector">
-            <button
-              type="button"
-              className={`mode-btn ${analysisMode === "identify" ? "active" : ""}`}
-              onClick={() => setAnalysisMode("identify")}
-            >
-              🏷️ Identify Object
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${analysisMode === "explain" ? "active" : ""}`}
-              onClick={() => setAnalysisMode("explain")}
-            >
-              📖 Explain Region
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${analysisMode === "ask" ? "active" : ""}`}
-              onClick={() => setAnalysisMode("ask")}
-            >
-              ❓ Ask Question
-            </button>
-          </div>
-
+        <View style={[shared.card, styles.actionPanel]}>
+          <View style={styles.modeSelector}>
+            <ModeButton active={analysisMode === "identify"} label="🏷️ Identify Object" onPress={() => setAnalysisMode("identify")} />
+            <ModeButton active={analysisMode === "explain"} label="📖 Explain Region" onPress={() => setAnalysisMode("explain")} />
+            <ModeButton active={analysisMode === "ask"} label="❓ Ask Question" onPress={() => setAnalysisMode("ask")} />
+          </View>
           {analysisMode === "ask" && (
-            <div className="ask-input-wrap">
-              <input
-                type="text"
-                className="ask-input"
-                value={customQuestion}
-                onChange={(e) => setCustomQuestion(e.target.value)}
-                placeholder="e.g. What is the role of this organelle in cellular respiration?"
-                onKeyDown={(e) => e.key === "Enter" && runAnalysis()}
-              />
-            </div>
+            <TextInput
+              onChangeText={setCustomQuestion}
+              onSubmitEditing={runAnalysis}
+              placeholder="e.g. What is the role of this organelle?"
+              placeholderTextColor={colors.textDim}
+              returnKeyType="send"
+              style={styles.questionInput}
+              value={customQuestion}
+            />
           )}
-
-          <div className="action-footer">
-            <button
-              type="button"
-              className="btn-generate"
-              onClick={runAnalysis}
-              disabled={isLoading || (analysisMode === "ask" && !customQuestion.trim())}
-            >
-              {isLoading ? (
-                <>
-                  <span className="btn-spinner" />
-                  SAM 2 &amp; Qwen2.5-VL analyzing…
-                </>
-              ) : (
-                <>✦ Analyze Selected Region</>
-              )}
-            </button>
-          </div>
-        </div>
+          <Pressable
+            disabled={isLoading || (analysisMode === "ask" && !customQuestion.trim())}
+            onPress={runAnalysis}
+            style={({ pressed }) => [shared.button, shared.primaryButton, pressed && styles.pressed, (isLoading || (analysisMode === "ask" && !customQuestion.trim())) && shared.disabled]}
+          >
+            {isLoading && <ActivityIndicator color="#fff" size="small" style={styles.spinner} />}
+            <Text style={shared.buttonText}>{isLoading ? "SAM 2 & Qwen2.5-VL analyzing…" : "✦ Analyze Selected Region"}</Text>
+          </Pressable>
+        </View>
       )}
 
-      {/* Error display */}
-      {error && (
-        <div className="error-banner" style={{ marginTop: 16 }}>
-          <strong>Interactive analysis failed</strong>
-          {error}
-        </div>
-      )}
+      {error && <View style={shared.error}><Text style={styles.errorTitle}>Interactive analysis failed</Text><Text style={styles.errorText}>{error}</Text></View>}
 
-      {/* Result Display */}
       {analysisResult && (
-        <div className="glass-card result-panel">
-          <div className="result-header">
-            <span className="enhanced-badge">✦ Qwen2.5-VL Visual Explanation</span>
-            <span className="enhanced-model-tag">
-              SAM 2 + Qwen2.5-VL-7B &middot; {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}
-            </span>
-          </div>
-          <p className="result-text">{analysisResult}</p>
-        </div>
+        <View style={[shared.card, styles.resultPanel]}>
+          <View style={styles.resultHeader}>
+            <Text style={styles.badge}>✦ Qwen2.5-VL Visual Explanation</Text>
+            <Text style={styles.modelTag}>SAM 2 + Qwen2.5-VL-7B · {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}</Text>
+          </View>
+          <Text style={styles.resultText}>{analysisResult}</Text>
+        </View>
       )}
-    </div>
+    </View>
   );
 }
+
+function SelectionBox({ coords, drawing = false }: { coords: number[]; drawing?: boolean }) {
+  const { colors } = useAppTheme();
+  const styles = makeStyles(colors);
+  return <View pointerEvents="none" style={[styles.boxMarker, drawing && styles.boxDrawing, { left: `${coords[0] * 100}%`, top: `${coords[1] * 100}%`, width: `${(coords[2] - coords[0]) * 100}%`, height: `${(coords[3] - coords[1]) * 100}%` }]} />;
+}
+
+function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+  const { colors } = useAppTheme();
+  const styles = makeStyles(colors);
+  return (
+    <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.modeButton, active && styles.modeButtonActive, pressed && styles.pressed]}>
+      <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
+  container: { gap: 16 },
+  toolbar: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 13, gap: 10 },
+  toolbarModes: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  toolbarLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginRight: 2 },
+  toolbarHint: { color: colors.textDim, fontSize: 11 },
+  modeButton: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.22)" },
+  modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
+  modeButtonTextActive: { color: colors.text },
+  canvas: { width: "100%", maxHeight: 720, backgroundColor: colors.canvas, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  pointMarker: { position: "absolute", width: 24, height: 24, borderRadius: 12, marginLeft: -12, marginTop: -12, backgroundColor: "rgba(139,92,246,0.42)", borderWidth: 3, borderColor: "#fff" },
+  boxMarker: { position: "absolute", borderWidth: 3, borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.15)" },
+  boxDrawing: { borderColor: colors.cyan, borderStyle: "dashed", backgroundColor: "rgba(34,211,238,0.12)" },
+  actionPanel: { gap: 14 },
+  modeSelector: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  questionInput: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surfaceSoft, color: colors.text, paddingHorizontal: 13, fontSize: 14 },
+  pressed: { opacity: 0.76 },
+  spinner: { marginRight: 8 },
+  errorTitle: { color: colors.danger, fontWeight: "800", marginBottom: 4 },
+  errorText: { color: colors.textMuted, lineHeight: 20 },
+  resultPanel: { gap: 14 },
+  resultHeader: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
+  modelTag: { color: colors.textDim, fontSize: 10 },
+  resultText: { color: colors.textMuted, lineHeight: 23, fontSize: 14 },
+});
