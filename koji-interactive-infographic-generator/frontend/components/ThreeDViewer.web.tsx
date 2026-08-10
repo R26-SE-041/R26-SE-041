@@ -5,6 +5,7 @@ import { OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
+import Icon from "./Icon";
 
 interface Props { glbBase64: string; sizeKb?: number }
 
@@ -52,15 +53,15 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
   return (
     <View style={[shared.card, styles.card]}>
       <View style={styles.header}>
-        <Text style={styles.badge}>🧊 3D Model — Hunyuan3D-2</Text>
+        <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="cube" size={16} /><Text style={styles.badge}>3D Model - Hunyuan3D-2</Text></View>
         <View style={styles.headerActions}>
           {!!sizeKb && <Text style={styles.tag}>{sizeKb} KB GLB</Text>}
-          <Pressable onPress={download} style={styles.download}><Text style={styles.downloadText}>⬇ Download</Text></Pressable>
+          <Pressable onPress={download} style={styles.download}><Icon color="#ffffff" name="download" size={15} /><Text style={styles.downloadText}>Download</Text></Pressable>
         </View>
       </View>
       <View style={styles.canvas}>
         {!objectUrl ? (
-          <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} /><Text style={styles.hint}>Preparing 3D viewer…</Text></View>
+          <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} /><Text style={styles.hint}>Preparing 3D viewer...</Text></View>
         ) : (
           <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={styles.canvasFill}>
             <ambientLight intensity={0.8} />
@@ -71,7 +72,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
           </Canvas>
         )}
       </View>
-      <Text style={styles.hint}>Drag to orbit · Scroll to zoom · Model auto-rotates</Text>
+      <Text style={styles.hint}>Drag to orbit. Scroll to zoom. Model auto-rotates.</Text>
     </View>
   );
 }
@@ -80,9 +81,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   card: { padding: 12, gap: 12 },
   header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 5 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
   tag: { color: colors.textDim, fontSize: 10 },
-  download: { backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
+  download: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
   downloadText: { color: "white", fontSize: 11, fontWeight: "800" },
   canvas: { width: "100%", height: 480, borderRadius: 14, overflow: "hidden", backgroundColor: colors.canvas },
   canvasFill: { width: "100%", height: "100%" },

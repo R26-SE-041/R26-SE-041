@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
+import Icon, { IconName } from "./Icon";
 
 const INTERACTIVE_AGENT_URL =
   process.env.EXPO_PUBLIC_INTERACTIVE_AGENT_URL ??
@@ -29,6 +30,7 @@ interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
   imageBase64: string;
+  onOperationComplete?: (durationMs: number) => void;
   speedMode?: SpeedMode;
 }
 
@@ -44,7 +46,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ imageBase64, onOperationComplete, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -58,6 +60,7 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedImage, setHighlightedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisDuration, setAnalysisDuration] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
   const [aspectRatio, setAspectRatio] = useState(1);
@@ -116,14 +119,17 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
     setBoxCurrent(null);
     setHighlightedImage(null);
     setAnalysisResult(null);
+    setAnalysisDuration(null);
     setError(null);
   };
 
   const runAnalysis = async () => {
     if (!currentSelection || isLoading) return;
+    const startedAt = Date.now();
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
+    setAnalysisDuration(null);
     try {
       const response = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
         method: "POST",
@@ -141,8 +147,12 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
       if (data.error) throw new Error(String(data.error));
       if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
       setAnalysisResult(data.response_text || "No analysis provided.");
+      const duration = Date.now() - startedAt;
+      setAnalysisDuration(duration);
+      onOperationComplete?.(duration);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Analysis failed");
+      setAnalysisDuration(Date.now() - startedAt);
     } finally {
       setIsLoading(false);
     }
@@ -158,8 +168,8 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
       <View style={styles.toolbar}>
         <View style={styles.toolbarModes}>
           <Text style={styles.toolbarLabel}>Interaction Mode:</Text>
-          <ModeButton active={selectionType === "point"} label="🎯 Tap Object" onPress={() => handleTypeChange("point")} />
-          <ModeButton active={selectionType === "box"} label="🔲 Circle / Box Region" onPress={() => handleTypeChange("box")} />
+          <ModeButton active={selectionType === "point"} icon="target" label="Tap Object" onPress={() => handleTypeChange("point")} />
+          <ModeButton active={selectionType === "box"} icon="box-select" label="Select Region" onPress={() => handleTypeChange("box")} />
         </View>
         <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
       </View>
@@ -189,9 +199,9 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
       {currentSelection && (
         <View style={[shared.card, styles.actionPanel]}>
           <View style={styles.modeSelector}>
-            <ModeButton active={analysisMode === "identify"} label="🏷️ Identify Object" onPress={() => setAnalysisMode("identify")} />
-            <ModeButton active={analysisMode === "explain"} label="📖 Explain Region" onPress={() => setAnalysisMode("explain")} />
-            <ModeButton active={analysisMode === "ask"} label="❓ Ask Question" onPress={() => setAnalysisMode("ask")} />
+            <ModeButton active={analysisMode === "identify"} icon="tag" label="Identify Object" onPress={() => setAnalysisMode("identify")} />
+            <ModeButton active={analysisMode === "explain"} icon="book" label="Explain Region" onPress={() => setAnalysisMode("explain")} />
+            <ModeButton active={analysisMode === "ask"} icon="help" label="Ask Question" onPress={() => setAnalysisMode("ask")} />
           </View>
           {analysisMode === "ask" && (
             <TextInput
@@ -210,20 +220,23 @@ export default function InteractiveCanvas({ imageBase64, speedMode = "pro" }: In
             style={({ pressed }) => [shared.button, shared.primaryButton, pressed && styles.pressed, (isLoading || (analysisMode === "ask" && !customQuestion.trim())) && shared.disabled]}
           >
             {isLoading && <ActivityIndicator color="#fff" size="small" style={styles.spinner} />}
-            <Text style={shared.buttonText}>{isLoading ? "SAM 2 & Qwen2.5-VL analyzing…" : "✦ Analyze Selected Region"}</Text>
+            {!isLoading && <Icon color="#ffffff" name="search" size={17} />}
+            <Text style={shared.buttonText}>{isLoading ? "SAM 2 and Qwen2.5-VL analyzing..." : "Analyze Selected Region"}</Text>
           </Pressable>
         </View>
       )}
 
       {error && <View style={shared.error}><Text style={styles.errorTitle}>Interactive analysis failed</Text><Text style={styles.errorText}>{error}</Text></View>}
+      {error && analysisDuration !== null && <Text style={styles.durationText}>Attempt duration: {formatDuration(analysisDuration)}</Text>}
 
       {analysisResult && (
         <View style={[shared.card, styles.resultPanel]}>
           <View style={styles.resultHeader}>
-            <Text style={styles.badge}>✦ Qwen2.5-VL Visual Explanation</Text>
-            <Text style={styles.modelTag}>SAM 2 + Qwen2.5-VL-7B · {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}</Text>
+            <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="search" size={15} /><Text style={styles.badge}>Qwen2.5-VL Visual Explanation</Text></View>
+            <Text style={styles.modelTag}>SAM 2 + Qwen2.5-VL-7B. {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}</Text>
           </View>
           <Text style={styles.resultText}>{analysisResult}</Text>
+          {analysisDuration !== null && <View style={styles.inlineInfo}><Icon color={colors.textDim} name="clock" size={14} /><Text style={styles.durationText}>Completed in {formatDuration(analysisDuration)}</Text></View>}
         </View>
       )}
     </View>
@@ -236,11 +249,12 @@ function SelectionBox({ coords, drawing = false }: { coords: number[]; drawing?:
   return <View pointerEvents="none" style={[styles.boxMarker, drawing && styles.boxDrawing, { left: `${coords[0] * 100}%`, top: `${coords[1] * 100}%`, width: `${(coords[2] - coords[0]) * 100}%`, height: `${(coords[3] - coords[1]) * 100}%` }]} />;
 }
 
-function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+function ModeButton({ active, icon, label, onPress }: { active: boolean; icon: IconName; label: string; onPress: () => void }) {
   const { colors } = useAppTheme();
   const styles = makeStyles(colors);
   return (
     <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.modeButton, active && styles.modeButtonActive, pressed && styles.pressed]}>
+      <Icon color={active ? colors.primaryBright : colors.textMuted} name={icon} size={15} />
       <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -252,7 +266,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   toolbarModes: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   toolbarLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginRight: 2 },
   toolbarHint: { color: colors.textDim, fontSize: 11 },
-  modeButton: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  modeButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
   modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.22)" },
   modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   modeButtonTextActive: { color: colors.text },
@@ -272,4 +286,14 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
   modelTag: { color: colors.textDim, fontSize: 10 },
   resultText: { color: colors.textMuted, lineHeight: 23, fontSize: 14 },
+  inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
+  durationText: { color: colors.textDim, fontSize: 11 },
 });
+
+function formatDuration(milliseconds: number): string {
+  if (milliseconds < 1_000) return `${Math.max(1, Math.round(milliseconds))} ms`;
+  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`;
+  const minutes = Math.floor(milliseconds / 60_000);
+  const seconds = Math.round((milliseconds % 60_000) / 1_000);
+  return `${minutes} min ${seconds} s`;
+}

@@ -93,6 +93,7 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
+    gap: 8,
   },
   primaryButton: { backgroundColor: colors.primary },
   secondaryButton: {
