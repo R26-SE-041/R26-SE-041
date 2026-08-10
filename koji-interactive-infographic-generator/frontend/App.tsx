@@ -497,9 +497,9 @@ function ActionButton({ disabled = false, icon, label, loading = false, onPress,
   const shared = makeSharedStyles(colors);
   return (
     <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
-      {loading && <ActivityIndicator color="#fff" size="small" style={styles.buttonSpinner} />}
+      {loading && <ActivityIndicator color={secondary ? colors.primary : "#fff"} size="small" style={styles.buttonSpinner} />}
       {!loading && icon && <Icon color={secondary ? colors.text : "#ffffff"} name={icon} size={17} />}
-      <Text style={shared.buttonText}>{label}</Text>
+      <Text style={secondary ? shared.secondaryButtonText : shared.buttonText}>{label}</Text>
     </Pressable>
   );
 }
@@ -528,7 +528,12 @@ function HealthPill({ label, now, status, warmUntil }: { label: string; now: num
 function StagePill({ active = false, done = false, label }: { active?: boolean; done?: boolean; label: string }) {
   const { colors } = useAppTheme();
   const styles = makeStyles(colors);
-  return <View style={[styles.stagePill, active && styles.stagePillActive]}>{done && <Icon color={colors.success} name="check" size={13} />}<Text style={[styles.stagePillText, done && styles.stagePillDone]}>{label}</Text></View>;
+  return (
+    <View style={[styles.stagePill, active && styles.stagePillActive]}>
+      {done && <Icon color={colors.success} name="check" size={13} />}
+      <Text style={[styles.stagePillText, active && styles.stagePillActiveText, done && styles.stagePillDone]}>{label}</Text>
+    </View>
+  );
 }
 
 function SectionTitle({ icon, title, subtitle }: { icon?: IconName; title: string; subtitle: string }) {
@@ -576,36 +581,36 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 28 },
-  container: { width: "100%", maxWidth: 980, alignSelf: "center", gap: 20 },
-  header: { alignItems: "center", paddingVertical: 24 },
-  themeToggle: { alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surfaceSoft, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 13, paddingVertical: 8, marginBottom: 4 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
+  container: { width: "100%", maxWidth: 980, alignSelf: "center", gap: 16 },
+  header: { alignItems: "center", paddingVertical: 12, gap: 0 },
+  themeToggle: { alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surfaceSoft, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 13, paddingVertical: 11, marginBottom: 4, minHeight: 44 },
   themeToggleText: { color: colors.text, fontSize: 12, fontWeight: "800" },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 22 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   brand: { color: colors.text, fontSize: 18, fontWeight: "800", letterSpacing: 0.4 },
-  title: { color: colors.text, fontSize: 38, lineHeight: 45, fontWeight: "900", textAlign: "center", letterSpacing: -1.2 },
+  title: { color: colors.text, fontSize: 32, lineHeight: 40, fontWeight: "900", textAlign: "center", letterSpacing: -0.8 },
   titleAccent: { color: colors.primaryBright },
-  subtitle: { color: colors.textMuted, textAlign: "center", fontSize: 15, lineHeight: 23, maxWidth: 680, marginTop: 14 },
-  healthWrap: { justifyContent: "center", gap: 8, marginTop: 18 },
+  subtitle: { color: colors.textMuted, textAlign: "center", fontSize: 15, lineHeight: 23, maxWidth: 680, marginTop: 10 },
+  healthWrap: { justifyContent: "center", gap: 8, marginTop: 12 },
   healthPill: { gap: 7, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   agentSignals: { flexDirection: "row", alignItems: "center", gap: 10 },
   signal: { flexDirection: "row", alignItems: "center", gap: 5 },
-  healthLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "600" },
-  healthState: { color: colors.textDim, fontSize: 10 },
-  warmNote: { color: colors.textDim, fontSize: 10, textAlign: "center", marginTop: 9 },
+  healthLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
+  healthState: { color: colors.textDim, fontSize: 12 },
+  warmNote: { color: colors.textDim, fontSize: 12, textAlign: "center", marginTop: 9 },
   speedSection: { gap: 12, alignItems: "center" },
   centerText: { textAlign: "center" },
   speedPicker: { justifyContent: "center", gap: 10 },
-  speedPill: { minWidth: 160, flexGrow: 1, maxWidth: 250, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
   speedPillActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.17)" },
   speedName: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
   speedNameActive: { color: colors.text },
-  speedDesc: { color: colors.textDim, fontSize: 10, marginTop: 4 },
+  speedDesc: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   hint: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
-  promptCard: { gap: 12 },
+  promptCard: { gap: 14 },
   promptInput: { minHeight: 112, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 14, fontSize: 15, lineHeight: 22 },
   promptFooter: { gap: 14 },
-  actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 10 },
+  actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 10 },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   buttonSpinner: { marginRight: 8 },
@@ -614,17 +619,18 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   stageRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   stagePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.surfaceSoft, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 50, overflow: "hidden" },
   stagePillText: { color: colors.textDim, fontSize: 11 },
-  stagePillActive: { color: colors.text, backgroundColor: "rgba(139,92,246,0.27)" },
+  stagePillActive: { backgroundColor: "rgba(139,92,246,0.27)" },
+  stagePillActiveText: { color: colors.text },
   stagePillDone: { color: colors.success },
   gpuText: { color: colors.textMuted, fontSize: 11 },
   errorTitle: { color: colors.danger, fontWeight: "800", marginBottom: 4 },
   errorMessage: { color: colors.textMuted, lineHeight: 20 },
   cardHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 },
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
-  modelTag: { color: colors.textDim, fontSize: 10, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, overflow: "hidden" },
+  modelTag: { color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, overflow: "hidden" },
   enhancedPrompt: { color: colors.textMuted, fontStyle: "italic", lineHeight: 22, marginTop: 14 },
-  resultSection: { gap: 20 },
-  sectionTitle: { alignItems: "center", gap: 6, marginTop: 8 },
+  resultSection: { gap: 16 },
+  sectionTitle: { alignItems: "center", gap: 5, marginTop: 4 },
   sectionHeading: { color: colors.text, fontWeight: "900", fontSize: 22, textAlign: "center" },
   sectionSubtitle: { color: colors.textMuted, textAlign: "center", lineHeight: 20, fontSize: 13 },
   threeDSection: { gap: 16, marginTop: 10 },
@@ -635,7 +641,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   insightsHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightsTitle: { color: colors.text, fontWeight: "800", fontSize: 14 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricItem: { flexGrow: 1, flexBasis: 180, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12, gap: 5 },
+  metricItem: { flexGrow: 1, flexBasis: 180, maxWidth: "50%" as unknown as number, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12, gap: 5 },
   metricLabel: { color: colors.textDim, fontSize: 11 },
   metricValue: { color: colors.text, fontSize: 14, fontWeight: "800" },
 });
