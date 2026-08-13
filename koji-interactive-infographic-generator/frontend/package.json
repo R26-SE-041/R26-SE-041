@@ -1,0 +1,36 @@
+{
+  "name": "eduvision-hybrid",
+  "version": "2.0.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.2",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "base64-arraybuffer": "^1.0.2",
+    "expo": "~57.0.11",
+    "expo-asset": "~57.0.2",
+    "expo-file-system": "~57.0.2",
+    "expo-gl": "~57.0.2",
+    "expo-sharing": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "~0.21.2",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "@types/three": "^0.183.1",
+    "typescript": "~6.0.3"
+  }
+}
