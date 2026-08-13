@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Loader2, Sparkles, Type, Upload } from "lucide-react";
+import { CheckCircle, Loader2, ScanText, ImageUp, Upload } from "lucide-react";
 
 export type Step = "idle" | "uploading" | "enhancing" | "extracting" | "done" | "error";
 
@@ -13,24 +13,22 @@ const STEPS = [
   {
     id: "uploading",
     label: "Uploading image",
-    icon: Upload,
+    Icon: Upload,
     doneLabel: "Image received",
   },
   {
     id: "enhancing",
     label: "Enhancing with SRCNN",
-    icon: Sparkles,
-    doneLabel: "Image enhanced (4×)",
+    Icon: ImageUp,
+    doneLabel: "Image enhanced (4x)",
   },
   {
     id: "extracting",
-    label: "Extracting text with TrOCR",
-    icon: Type,
-    doneLabel: "Text extracted",
+    label: "Extracting Sinhala text with TrOCR",
+    Icon: ScanText,
+    doneLabel: "Sinhala text extracted",
   },
 ] as const;
-
-type StepId = (typeof STEPS)[number]["id"];
 
 const ORDER: Step[] = ["idle", "uploading", "enhancing", "extracting", "done", "error"];
 
@@ -41,65 +39,141 @@ function stepIndex(s: Step) {
 export default function ProcessingStatus({ step, errorMessage }: Props) {
   if (step === "idle") return null;
 
+  const currentIdx = stepIndex(step);
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-      <h3 className="mb-5 text-sm font-semibold uppercase tracking-widest text-white/50">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Processing pipeline status"
+      style={{
+        borderRadius: "1.5rem",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.03)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        padding: "1.5rem",
+      }}
+    >
+      <h3
+        style={{
+          marginBottom: "1.25rem",
+          fontSize: "0.6875rem",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.35)",
+        }}
+      >
         Processing Pipeline
       </h3>
 
-      <div className="flex flex-col gap-4">
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {STEPS.map((s) => {
-          const currentIdx = stepIndex(step);
           const sIdx = stepIndex(s.id as Step);
           const isActive = step === s.id;
           const isDone = currentIdx > sIdx && step !== "error";
           const isPending = currentIdx < sIdx;
-          const Icon = s.icon;
+          const { Icon } = s;
+
+          let iconBg = "rgba(255,255,255,0.05)";
+          let iconColor = "rgba(255,255,255,0.2)";
+          if (isDone) { iconBg = "rgba(52,211,153,0.12)"; iconColor = "#34d399"; }
+          if (isActive) { iconBg = "rgba(139,92,246,0.15)"; iconColor = "#a78bfa"; }
+
+          let labelColor = "rgba(255,255,255,0.25)";
+          if (isDone) labelColor = "#34d399";
+          if (isActive) labelColor = "#c4b5fd";
 
           return (
-            <div key={s.id} className="flex items-center gap-4">
-              {/* Icon */}
+            <div
+              key={s.id}
+              id={`pipeline-step-${s.id}`}
+              style={{ display: "flex", alignItems: "center", gap: "1rem" }}
+            >
+              {/* Icon container */}
               <div
-                className={`
-                  flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-300
-                  ${isDone ? "bg-emerald-500/20" : ""}
-                  ${isActive ? "bg-violet-500/20 ring-2 ring-violet-500/40" : ""}
-                  ${isPending ? "bg-white/5" : ""}
-                `}
+                style={{
+                  flexShrink: 0,
+                  width: "2.25rem",
+                  height: "2.25rem",
+                  borderRadius: "9999px",
+                  background: iconBg,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: isActive ? "0 0 0 2px rgba(139,92,246,0.35)" : "none",
+                  transition: "background 300ms ease, box-shadow 300ms ease",
+                }}
+                aria-hidden="true"
               >
                 {isDone ? (
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
+                  <CheckCircle
+                    style={{ width: "1.125rem", height: "1.125rem", color: "#34d399" }}
+                    strokeWidth={1.75}
+                  />
                 ) : isActive ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+                  <Loader2
+                    className="animate-spin"
+                    style={{ width: "1.125rem", height: "1.125rem", color: "#a78bfa" }}
+                    strokeWidth={1.75}
+                  />
                 ) : (
                   <Icon
-                    className={`h-5 w-5 ${isPending ? "text-white/20" : "text-white/60"}`}
+                    style={{ width: "1.125rem", height: "1.125rem", color: iconColor }}
+                    strokeWidth={1.75}
                   />
                 )}
               </div>
 
               {/* Label */}
-              <div className="flex-1">
+              <div style={{ flex: 1 }}>
                 <p
-                  className={`text-sm font-medium transition-colors duration-200
-                    ${isDone ? "text-emerald-400" : ""}
-                    ${isActive ? "text-violet-300" : ""}
-                    ${isPending ? "text-white/30" : ""}
-                  `}
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    color: labelColor,
+                    transition: "color 200ms ease",
+                  }}
                 >
                   {isDone ? s.doneLabel : s.label}
                 </p>
               </div>
 
-              {/* Active pulse badge */}
+              {/* Status badge */}
               {isActive && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-medium text-violet-300">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    borderRadius: "9999px",
+                    background: "rgba(139,92,246,0.15)",
+                    padding: "0.125rem 0.625rem",
+                    fontSize: "0.6875rem",
+                    fontWeight: 500,
+                    color: "#c4b5fd",
+                  }}
+                >
+                  <span
+                    className="animate-pulse-ring"
+                    style={{
+                      width: "0.375rem",
+                      height: "0.375rem",
+                      borderRadius: "9999px",
+                      background: "#a78bfa",
+                      display: "inline-block",
+                    }}
+                  />
                   Running
                 </span>
               )}
-              {isDone && (
-                <span className="text-xs text-emerald-500">✓</span>
+              {isDone && !isPending && (
+                <CheckCircle
+                  aria-label="Step complete"
+                  style={{ width: "1rem", height: "1rem", color: "#34d399", flexShrink: 0 }}
+                  strokeWidth={1.75}
+                />
               )}
             </div>
           );
@@ -108,9 +182,29 @@ export default function ProcessingStatus({ step, errorMessage }: Props) {
 
       {/* Error state */}
       {step === "error" && errorMessage && (
-        <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
-          <p className="text-sm font-medium text-red-400">Error</p>
-          <p className="mt-1 text-sm text-red-300/80">{errorMessage}</p>
+        <div
+          role="alert"
+          style={{
+            marginTop: "1.25rem",
+            borderRadius: "0.75rem",
+            border: "1px solid rgba(248,113,113,0.2)",
+            background: "rgba(248,113,113,0.08)",
+            padding: "1rem",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#f87171",
+              marginBottom: "0.25rem",
+            }}
+          >
+            Error
+          </p>
+          <p style={{ fontSize: "0.875rem", color: "rgba(252,165,165,0.75)" }}>
+            {errorMessage}
+          </p>
         </div>
       )}
     </div>

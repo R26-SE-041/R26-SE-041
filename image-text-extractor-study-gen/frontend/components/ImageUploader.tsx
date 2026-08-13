@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, Image as ImageIcon } from "lucide-react";
+import { Upload, ImageIcon } from "lucide-react";
 
 interface Props {
   onFileSelected: (file: File) => void;
@@ -40,58 +40,136 @@ export default function ImageUploader({ onFileSelected, disabled }: Props) {
     if (file) handleFile(file);
   };
 
+  const borderColor = dragOver
+    ? "rgba(139,92,246,0.7)"
+    : "rgba(255,255,255,0.12)";
+
+  const bgColor = dragOver
+    ? "rgba(139,92,246,0.08)"
+    : "rgba(255,255,255,0.03)";
+
   return (
     <div
+      id="image-drop-zone"
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-label="Upload image by clicking or dragging"
       onClick={() => !disabled && inputRef.current?.click()}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !disabled) {
+          inputRef.current?.click();
+        }
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
-      className={`
-        relative flex flex-col items-center justify-center
-        min-h-64 rounded-2xl border-2 border-dashed
-        transition-all duration-300 cursor-pointer select-none
-        ${dragOver
-          ? "border-violet-400 bg-violet-500/10 scale-[1.01]"
-          : "border-white/20 bg-white/5 hover:border-violet-400/60 hover:bg-violet-500/5"
-        }
-        ${disabled ? "pointer-events-none opacity-50" : ""}
-      `}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "16rem",
+        borderRadius: "1rem",
+        border: `2px dashed ${borderColor}`,
+        background: bgColor,
+        transition: "border-color 200ms ease, background 200ms ease",
+        cursor: disabled ? "default" : "pointer",
+        userSelect: "none",
+        opacity: disabled ? 0.5 : 1,
+        pointerEvents: disabled ? "none" : "auto",
+      }}
     >
       <input
         ref={inputRef}
+        id="image-file-input"
         type="file"
         accept={ACCEPTED.join(",")}
-        className="hidden"
+        style={{ display: "none" }}
         onChange={onInputChange}
         disabled={disabled}
+        aria-label="Image file input"
       />
 
       {preview ? (
-        <div className="w-full p-4">
+        <div style={{ width: "100%", padding: "1rem" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={preview}
-            alt="Selected"
-            className="mx-auto max-h-56 rounded-xl object-contain shadow-lg"
+            alt="Selected image preview"
+            style={{
+              display: "block",
+              margin: "0 auto",
+              maxHeight: "14rem",
+              borderRadius: "0.75rem",
+              objectFit: "contain",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            }}
           />
-          <p className="mt-3 text-center text-sm text-white/50">
+          <p
+            style={{
+              marginTop: "0.75rem",
+              textAlign: "center",
+              fontSize: "0.8125rem",
+              color: "rgba(255,255,255,0.4)",
+            }}
+          >
             Click or drop to replace
           </p>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-4 p-8 text-center">
-          <div className="rounded-full bg-violet-500/20 p-5">
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "1rem",
+            padding: "2rem",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              borderRadius: "9999px",
+              background: "rgba(139,92,246,0.15)",
+              padding: "1.25rem",
+              transition: "background 200ms ease",
+            }}
+          >
             {dragOver ? (
-              <ImageIcon className="h-8 w-8 text-violet-300" />
+              <ImageIcon
+                className="h-8 w-8"
+                style={{ color: "#c4b5fd" }}
+                strokeWidth={1.5}
+              />
             ) : (
-              <Upload className="h-8 w-8 text-violet-400" />
+              <Upload
+                className="h-8 w-8"
+                style={{ color: "#a78bfa" }}
+                strokeWidth={1.5}
+              />
             )}
           </div>
           <div>
-            <p className="text-base font-medium text-white">
-              Drop your image here
+            <p
+              style={{
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.85)",
+              }}
+            >
+              Drop your Sinhala handwritten image here
             </p>
-            <p className="mt-1 text-sm text-white/50">
+            <p
+              style={{
+                marginTop: "0.25rem",
+                fontSize: "0.8125rem",
+                color: "rgba(255,255,255,0.4)",
+              }}
+            >
               or click to browse &mdash; JPG, PNG, WEBP, BMP
             </p>
           </div>

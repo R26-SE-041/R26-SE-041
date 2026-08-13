@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Noto_Sans_Sinhala } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -8,11 +8,17 @@ const inter = Inter({
   display: "swap",
 });
 
+const sinhala = Noto_Sans_Sinhala({
+  subsets: ["sinhala"],
+  variable: "--font-sinhala",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Image Enhancement & OCR — SRCNN + TrOCR",
+  title: "Sinhala Handwritten OCR — SRCNN + TrOCR",
   description:
-    "Upload a low-quality image to enhance it 4× with SRCNN super-resolution and extract text with Microsoft TrOCR — powered by Modal serverless GPU inference.",
-  keywords: ["SRCNN", "TrOCR", "OCR", "image enhancement", "super resolution"],
+    "Upload a low-quality Sinhala handwritten image to enhance it 4x with SRCNN super-resolution and extract Sinhala text with a fine-tuned TrOCR model — powered by Modal serverless GPU inference.",
+  keywords: ["SRCNN", "TrOCR", "OCR", "Sinhala OCR", "image enhancement", "super resolution", "handwritten"],
 };
 
 export default function RootLayout({
@@ -21,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="si" className={`${inter.variable} ${sinhala.variable}`}>
       <body className="antialiased">{children}</body>
     </html>
   );
