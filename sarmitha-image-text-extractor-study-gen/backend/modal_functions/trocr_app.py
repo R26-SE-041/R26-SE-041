@@ -29,7 +29,7 @@ image = (
     .pip_install(
         "torch==2.3.1",
         "torchvision==0.18.1",
-        "transformers==4.30.2",  # pinned: >=4.38 rejects early_stopping:null in config.json
+        "transformers==4.46.3",
         "pillow==10.3.0",
         "sentencepiece==0.2.0",
         "accelerate==0.30.1",
@@ -44,7 +44,7 @@ image = (
         gpu="T4"
     )
     .run_commands(
-        "python -c \"import base64; exec(base64.b64decode('aW1wb3J0IGpzb24sIG9zCmRlZiBmZChkKToKICAgIGlmIGlzaW5zdGFuY2UoZCwgZGljdCk6CiAgICAgICAgaWYgZC5nZXQoImVhcmx5X3N0b3BwaW5nIikgaXMgTm9uZSBhbmQgImVhcmx5X3N0b3BwaW5nIiBpbiBkOiBkWyJlYXJseV9zdG9wcGluZyJdID0gRmFsc2UKICAgICAgICBbZmQodikgZm9yIHYgaW4gZC52YWx1ZXMoKV0KICAgIGVsaWYgaXNpbnN0YW5jZShkLCBsaXN0KTogW2ZkKGkpIGZvciBpIGluIGRdCmZvciBjIGluIFsiL2hmX2NhY2hlIiwgIi9yb290Ly5jYWNoZS9odWdnaW5nZmFjZSJdOgogICAgZm9yIHIsIF8sIGZzIGluIG9zLndhbGsoYyk6CiAgICAgICAgZm9yIGYgaW4gZnM6CiAgICAgICAgICAgIGlmIGYuZW5kc3dpdGgoIi5qc29uIik6CiAgICAgICAgICAgICAgICBwID0gb3MucGF0aC5qb2luKHIsIGYpCiAgICAgICAgICAgICAgICB0cnk6CiAgICAgICAgICAgICAgICAgICAgZCA9IGpzb24ubG9hZChvcGVuKHApKQogICAgICAgICAgICAgICAgICAgIGZkKGQpCiAgICAgICAgICAgICAgICAgICAgb3BlbihwLCAidyIpLndyaXRlKGpzb24uZHVtcHMoZCkpCiAgICAgICAgICAgICAgICAgICAgcHJpbnQoInBhdGNoZWQiLCBwKQogICAgICAgICAgICAgICAgZXhjZXB0OiBwYXNzCg==').decode('utf-8'))\""
+        "python -c \"import base64; exec(base64.b64decode('aW1wb3J0IGpzb24sIG9zLCBzaHV0aWwKZGVmIGZkKGQpOgogICAgaWYgaXNpbnN0YW5jZShkLCBkaWN0KToKICAgICAgICBpZiBkLmdldCgnZWFybHlfc3RvcHBpbmcnKSBpcyBOb25lIGFuZCAnZWFybHlfc3RvcHBpbmcnIGluIGQ6IGRbJ2Vhcmx5X3N0b3BwaW5nJ10gPSBGYWxzZQogICAgICAgIFtmZCh2KSBmb3IgdiBpbiBkLnZhbHVlcygpXQogICAgZWxpZiBpc2luc3RhbmNlKGQsIGxpc3QpOiBbZmQoaSkgZm9yIGkgaW4gZF0KZm9yIGMgaW4gWycvaGZfY2FjaGUnLCAnL3Jvb3QvLmNhY2hlL2h1Z2dpbmdmYWNlJ106CiAgICBmb3IgciwgXywgZnMgaW4gb3Mud2FsayhjKToKICAgICAgICBmb3IgZiBpbiBmczoKICAgICAgICAgICAgaWYgZiA9PSAncHJvY2Vzc29yX2NvbmZpZy5qc29uJzoKICAgICAgICAgICAgICAgIHAgPSBvcy5wYXRoLmpvaW4ociwgZikKICAgICAgICAgICAgICAgIGRlc3QgPSBvcy5wYXRoLmpvaW4ociwgJ3ByZXByb2Nlc3Nvcl9jb25maWcuanNvbicpCiAgICAgICAgICAgICAgICBpZiBub3Qgb3MucGF0aC5leGlzdHMoZGVzdCk6CiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICBkID0ganNvbi5sb2FkKG9wZW4ocCkpCiAgICAgICAgICAgICAgICAgICAgICAgIGlmICdpbWFnZV9wcm9jZXNzb3InIGluIGQ6CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBvcGVuKGRlc3QsICd3Jykud3JpdGUoanNvbi5kdW1wcyhkWydpbWFnZV9wcm9jZXNzb3InXSkpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBwcmludCgnZXh0cmFjdGVkIGltYWdlX3Byb2Nlc3NvciB0bycsIGRlc3QpCiAgICAgICAgICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBzaHV0aWwuY29weShwLCBkZXN0KQogICAgICAgICAgICAgICAgICAgIGV4Y2VwdDogcGFzcwogICAgICAgICAgICBpZiBmLmVuZHN3aXRoKCcuanNvbicpOgogICAgICAgICAgICAgICAgcCA9IG9zLnBhdGguam9pbihyLCBmKQogICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgIGQgPSBqc29uLmxvYWQob3BlbihwKSkKICAgICAgICAgICAgICAgICAgICBmZChkKQogICAgICAgICAgICAgICAgICAgIG9wZW4ocCwgJ3cnKS53cml0ZShqc29uLmR1bXBzKGQpKQogICAgICAgICAgICAgICAgICAgIHByaW50KCdwYXRjaGVkJywgcCkKICAgICAgICAgICAgICAgIGV4Y2VwdDogcGFzcw==').decode('utf-8'))\""
     )
     .run_commands(
         "python -c 'import os; os.environ[\"HF_HOME\"] = \"/hf_cache\"; from transformers import ViTImageProcessor, AutoTokenizer, VisionEncoderDecoderModel; "
@@ -67,10 +67,13 @@ class SinhalaTrOCRExtractor:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Explicit class loading — avoids AutoProcessor's image_processor_type requirement
-        self.feature_extractor = ViTImageProcessor.from_pretrained(
-            HF_MODEL, local_files_only=True
-        )
+        # Use torchvision instead of ViTImageProcessor due to transformers 4.x shape inferencing bugs on tiny images
+        from torchvision import transforms
+        self.transform = transforms.Compose([
+            transforms.Resize((384, 384), interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])
         self.tokenizer = AutoTokenizer.from_pretrained(
             HF_MODEL, local_files_only=True
         )
@@ -185,11 +188,8 @@ class SinhalaTrOCRExtractor:
         # Fallback: if segmentation filtered out everything (e.g. single small word), just read the whole image
         if len(lines) == 0:
             lines = [img_processed]
-            
-        # Process all lines simultaneously as a GPU batch
-        pixel_values = self.feature_extractor(
-            images=lines, return_tensors="pt"
-        ).pixel_values.to(self.device)
+        # Process all lines simultaneously as a GPU batch using torchvision
+        pixel_values = torch.stack([self.transform(img.convert("RGB")) for img in lines]).to(self.device)
 
         with torch.no_grad():
             generated_ids = self.model.generate(
