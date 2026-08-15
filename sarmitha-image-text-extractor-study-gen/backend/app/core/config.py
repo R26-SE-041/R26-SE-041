@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     qwen_modal_url: str = ""
     sinhalm_modal_url: str = ""
     visual_ocr_modal_url: str = ""
+    translate_modal_url: str = ""
 
     allowed_origins: str = "http://localhost:3000"
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB

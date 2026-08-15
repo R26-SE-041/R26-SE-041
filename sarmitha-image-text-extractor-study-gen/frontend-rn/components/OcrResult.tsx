@@ -18,9 +18,18 @@ interface Props {
 
 export default function OcrResult({ result }: Props) {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"si" | "ta" | "en">("si");
   
-  const text = result.extracted_text || "";
-  const isEmpty = !text.trim();
+  const getText = () => {
+    switch (activeTab) {
+      case "ta": return result.extracted_text_ta || "Translation not available";
+      case "en": return result.extracted_text_en || "Translation not available";
+      default: return result.extracted_text || "";
+    }
+  };
+
+  const text = getText();
+  const isEmpty = activeTab === "si" ? !text.trim() : false;
   const wordCount = text.split(/\s+/).filter(Boolean).length;
 
   const handleCopy = async () => {
@@ -35,8 +44,8 @@ export default function OcrResult({ result }: Props) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <FileText size={16} color="#a78bfa" strokeWidth={1.75} />
-          <Text style={styles.title}>Extracted Sinhala Text</Text>
-          {!isEmpty && (
+          <Text style={styles.title}>Extracted Text</Text>
+          {activeTab === "si" && !isEmpty && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
                 {wordCount} {wordCount === 1 ? "word" : "words"}
@@ -60,6 +69,28 @@ export default function OcrResult({ result }: Props) {
             )}
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "si" && styles.activeTab]}
+          onPress={() => setActiveTab("si")}
+        >
+          <Text style={[styles.tabText, activeTab === "si" && styles.activeTabText]}>Sinhala</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "ta" && styles.activeTab]}
+          onPress={() => setActiveTab("ta")}
+        >
+          <Text style={[styles.tabText, activeTab === "ta" && styles.activeTabText]}>Tamil</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "en" && styles.activeTab]}
+          onPress={() => setActiveTab("en")}
+        >
+          <Text style={[styles.tabText, activeTab === "en" && styles.activeTabText]}>English</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Body */}
@@ -141,6 +172,30 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: "rgba(255,255,255,0.25)",
+  },
+  tabsContainer: {
+    flexDirection: "row",
+    backgroundColor: "rgba(0,0,0,0.2)",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 6,
+  },
+  activeTab: {
+    backgroundColor: "rgba(139,92,246,0.2)",
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.4)",
+  },
+  activeTabText: {
+    color: "#c4b5fd",
   },
   textBox: {
     maxHeight: 400,

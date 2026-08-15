@@ -18,7 +18,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.services import srcnn_client, trocr_client, sinhalm_client, visual_client
+from app.services import srcnn_client, trocr_client, sinhalm_client, visual_client, translate_client
 
 router = APIRouter(prefix="/api")
 
@@ -58,6 +58,8 @@ async def process_image(file: UploadFile = File(...)):
         "original_b64":  "<base64 PNG of original>",
         "enhanced_b64":  "<base64 PNG of SRCNN output>",
         "extracted_text": "...",
+        "extracted_text_ta": "...",
+        "extracted_text_en": "...",
         "lines": [
             {
                "crop_b64": "...",
@@ -105,11 +107,31 @@ async def process_image(file: UploadFile = File(...)):
     # We skip SinhaLM/Qwen2-VL context improvement to ensure fast processing
     final_full_text = raw_full_text
 
+    # Step 4 — Translate to Tamil and English
+    import asyncio
+    try:
+        translated_ta, translated_en = await asyncio.gather(
+            translate_client.translate_text(final_full_text, "ta"),
+            translate_client.translate_text(final_full_text, "en"),
+            return_exceptions=True
+        )
+        if isinstance(translated_ta, Exception):
+            print(f"Tamil translation failed: {translated_ta}")
+            translated_ta = ""
+        if isinstance(translated_en, Exception):
+            print(f"English translation failed: {translated_en}")
+            translated_en = ""
+    except Exception as exc:
+        print(f"Translation error: {exc}")
+        translated_ta, translated_en = "", ""
+
     return JSONResponse(
         {
             "original_b64":    base64.b64encode(raw_bytes).decode(),
             "enhanced_b64":    base64.b64encode(enhanced_bytes).decode(),
             "extracted_text":  final_full_text,
+            "extracted_text_ta": translated_ta,
+            "extracted_text_en": translated_en,
             "lines":           processed_lines,
             "context_improved": False,
         }
