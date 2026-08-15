@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  Image,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { FileText, Copy, Check } from "lucide-react-native";
 
-import type { ProcessResult, OcrLine } from "@/lib/api";
+import type { ProcessResult } from "@/lib/api";
 
 interface Props {
   result: ProcessResult;
@@ -74,26 +73,9 @@ export default function OcrResult({ result }: Props) {
           nestedScrollEnabled
           showsVerticalScrollIndicator={Platform.OS !== "web"}
         >
-          {result.lines && result.lines.length > 0 ? (
-            result.lines.map((line, idx) => (
-              <View key={idx} style={styles.lineRow}>
-                <Image 
-                  source={{ uri: `data:image/png;base64,${line.crop_b64}` }} 
-                  style={styles.lineImage} 
-                  resizeMode="contain" 
-                />
-                <View style={styles.lineDetails}>
-                  <Text style={styles.ocrText} selectable>
-                    {line.final_text || line.raw_text}
-                  </Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.ocrText} selectable>
-              {text}
-            </Text>
-          )}
+          <Text style={styles.ocrText} selectable>
+            {text}
+          </Text>
         </ScrollView>
       )}
     </View>
@@ -161,7 +143,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.25)",
   },
   textBox: {
-    maxHeight: 280,
+    maxHeight: 400,
     borderRadius: 12,
     backgroundColor: "rgba(0,0,0,0.35)",
     padding: 16,
@@ -173,3 +155,4 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "web" ? "system-ui, sans-serif" : undefined,
   },
 });
+

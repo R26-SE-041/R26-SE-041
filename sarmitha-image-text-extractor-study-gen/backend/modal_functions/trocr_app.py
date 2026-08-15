@@ -92,26 +92,13 @@ app = modal.App("sinhala-trocr-ocr-service", image=image)  # App name unchanged 
 
 
 def _light_preprocess(cv_img):
-    import cv2
-    import numpy as np
     from PIL import Image
-
-    # 1. Grayscale
-    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    import cv2
     
-    # 2. Apply CLAHE
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    cl = clahe.apply(gray)
-    
-    # 3. Denoise
-    denoised = cv2.fastNlMeansDenoising(cl, None, h=15, templateWindowSize=7, searchWindowSize=21)
-    
-    # 4. Unsharp Masking
-    gaussian = cv2.GaussianBlur(denoised, (0, 0), 2.0)
-    sharpened = cv2.addWeighted(denoised, 1.5, gaussian, -0.5, 0)
-    
-    # Convert back to PIL RGB
-    img_rgb = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2RGB)
+    # The image is already enhanced by SRCNN (shadow removal + super resolution).
+    # We just need to ensure it's in the correct format for the segmentation/OCR pipeline.
+    # The OCR model expects RGB.
+    img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
     return Image.fromarray(img_rgb)
 
 

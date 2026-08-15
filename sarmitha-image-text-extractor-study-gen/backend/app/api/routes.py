@@ -72,7 +72,7 @@ async def process_image(file: UploadFile = File(...)):
     raw_bytes = await file.read()
     _validate_upload(file, raw_bytes)
 
-    # Step 1 — SRCNN enhancement
+    # Step 1 — SRCNN enhancement (with new shadow removal logic)
     try:
         enhanced_bytes = await srcnn_client.enhance_image(raw_bytes)
     except ValueError as exc:
@@ -93,35 +93,17 @@ async def process_image(file: UploadFile = File(...)):
         {
             "crop_b64":   line["crop_b64"],
             "raw_text":   line["text"],
-            "visual_text": line["text"],   # kept for frontend compatibility
-            "final_text":  line["text"],   # will be overwritten in Step 4
+            "visual_text": line["text"],
+            "final_text":  line["text"],
             "confidence":  line["confidence"],
         }
         for line in lines_data
     ]
 
     raw_full_text = "\n".join(line["raw_text"] for line in processed_lines)
-
-    # Step 4 — SinhaLM full-page context improvement (optional)
-    # If SINHALM_MODAL_URL is not set, sinhalm_client.validate_text returns
-    # raw_text unchanged, so this step is safely skipped.
-    context_improved = False
-    try:
-        improved_text = await sinhalm_client.validate_text(raw_full_text)
-        if improved_text and improved_text.strip() and improved_text != raw_full_text:
-            context_improved = True
-            # Distribute the improved lines back to the per-line results
-            improved_lines = improved_text.split("\n")
-            for i, pline in enumerate(processed_lines):
-                pline["final_text"] = improved_lines[i] if i < len(improved_lines) else pline["raw_text"]
-            final_full_text = improved_text
-        else:
-            final_full_text = raw_full_text
-    except Exception as exc:
-        # Log but never crash — OCR result is still valuable even without LLM pass
-        import logging
-        logging.getLogger(__name__).warning("SinhaLM context improvement failed: %s", exc)
-        final_full_text = raw_full_text
+    
+    # We skip SinhaLM/Qwen2-VL context improvement to ensure fast processing
+    final_full_text = raw_full_text
 
     return JSONResponse(
         {
@@ -129,7 +111,7 @@ async def process_image(file: UploadFile = File(...)):
             "enhanced_b64":    base64.b64encode(enhanced_bytes).decode(),
             "extracted_text":  final_full_text,
             "lines":           processed_lines,
-            "context_improved": context_improved,
+            "context_improved": False,
         }
     )
 

@@ -10,7 +10,10 @@ image = (
         "fastapi",
         "pillow"
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": "/hf_cache"})
+    .run_commands(
+        "hf download Qwen/Qwen2-VL-7B-Instruct"
+    )
 )
 
 app = modal.App("sinhala-visual-ocr-verification-service", image=image)
@@ -48,6 +51,10 @@ class VisualOCRVerifier:
         )
 
         # Qwen2-VL specific prompt formatting
+        prompt = "Extract the handwritten Sinhala text from this image exactly as written. Return ONLY the correct Sinhala text without any translation, formatting, or conversational filler."
+        if raw_text:
+             prompt = f"Extract the handwritten Sinhala text from this image exactly as written. The initial OCR extraction was '{raw_text}'. Fix any visible structural errors and return ONLY the correct Sinhala text."
+             
         messages = [
             {
                 "role": "user",
@@ -58,7 +65,7 @@ class VisualOCRVerifier:
                     },
                     {
                         "type": "text",
-                        "text": f"Extract the handwritten Sinhala text from this image exactly as written. The initial OCR extraction was '{raw_text}', but it has low confidence. Fix any visible structural errors and return only the correct Sinhala text."
+                        "text": prompt
                     }
                 ]
             }

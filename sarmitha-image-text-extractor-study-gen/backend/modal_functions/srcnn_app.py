@@ -83,25 +83,23 @@ class Swin2SREnhancer:
         nparr = np.frombuffer(image_bytes, np.uint8)
         cv_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # OpenCV Preprocessing Pipeline for Noisy/Dark Handwriting
-        # 1. Convert to LAB color space for luminance equalization
-        lab = cv2.cvtColor(cv_img, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        # OpenCV Preprocessing Pipeline for Dark/Shadowy Images
+        # 1. Illumination correction (Shadow removal)
+        # Dilate to erase dark ink, median blur to smooth out the paper background
+        dilated = cv2.dilate(cv_img, np.ones((11, 11), np.uint8))
+        bg = cv2.medianBlur(dilated, 21)
         
-        # 2. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        cl = clahe.apply(l)
+        # Divide original image by background to remove shadows/gradients
+        bg_float = bg.astype(np.float32) + 1e-5
+        img_float = cv_img.astype(np.float32)
+        flat_illumination = np.clip(255.0 * (img_float / bg_float), 0, 255).astype(np.uint8)
         
-        # 3. Merge channels back and convert to BGR
-        limg = cv2.merge((cl,a,b))
-        enhanced_bgr = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        # 2. Gentle denoising to remove paper grain
+        denoised = cv2.fastNlMeansDenoisingColored(flat_illumination, None, h=5, hColor=5, templateWindowSize=7, searchWindowSize=21)
         
-        # 4. Soft Denoising (removes grain without destroying strokes or aliasing edges)
-        denoised = cv2.fastNlMeansDenoisingColored(enhanced_bgr, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
-        
-        # 5. Unsharp Masking (Sharpen blurry/unclear images)
-        gaussian = cv2.GaussianBlur(denoised, (0, 0), 2.0)
-        sharpened = cv2.addWeighted(denoised, 1.5, gaussian, -0.5, 0)
+        # 3. Gentle Unsharp Mask for blur reduction (much lighter than before)
+        gaussian = cv2.GaussianBlur(denoised, (0, 0), 1.0)
+        sharpened = cv2.addWeighted(denoised, 1.2, gaussian, -0.2, 0)
         
         # Convert to PIL RGB
         img_rgb = cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)

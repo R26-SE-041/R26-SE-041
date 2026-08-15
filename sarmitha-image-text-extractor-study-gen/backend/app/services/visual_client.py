@@ -6,10 +6,10 @@ Sends base64 cropped image + raw extracted text, receives verified text.
 import httpx
 from app.core.config import settings
 
-TIMEOUT = 300.0
+TIMEOUT = 600.0
 
-async def verify_text(image_b64: str, raw_text: str) -> str:
-    if not image_b64 or not raw_text.strip():
+async def verify_text(image_b64: str, raw_text: str = "") -> str:
+    if not image_b64:
         return raw_text
 
     url = settings.visual_ocr_modal_url
