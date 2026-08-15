@@ -1,5 +1,4 @@
 import modal
-import torch
 
 MODEL_ID = "facebook/nllb-200-distilled-600M"
 
@@ -28,11 +27,12 @@ app = modal.App("sinhala-translation-service", image=image)
     image=image,
     gpu="T4", # T4 is plenty for 600M model
     timeout=600,
-    scaledown_window=600, # scales to 0 after 10 mins idle
+    scaledown_window=300, # scales to 0 after 5 mins idle
 )
 class TranslateNLLBService:
     @modal.enter()
     def load_model(self):
+        import torch
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
@@ -58,6 +58,7 @@ class TranslateNLLBService:
         tgt_lang = "tam_Taml" if target_code == "ta" else "eng_Latn"
 
         # Tokenize the input text
+        import torch
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
 
         # Generate translation

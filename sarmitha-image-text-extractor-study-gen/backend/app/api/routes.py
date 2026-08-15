@@ -107,23 +107,16 @@ async def process_image(file: UploadFile = File(...)):
     # We skip SinhaLM/Qwen2-VL context improvement to ensure fast processing
     final_full_text = raw_full_text
 
-    # Step 4 — Translate to Tamil and English
-    import asyncio
+    # Step 4 — Translate to Tamil and English (sequential to avoid 2 warm containers)
+    translated_ta, translated_en = "", ""
     try:
-        translated_ta, translated_en = await asyncio.gather(
-            translate_client.translate_text(final_full_text, "ta"),
-            translate_client.translate_text(final_full_text, "en"),
-            return_exceptions=True
-        )
-        if isinstance(translated_ta, Exception):
-            print(f"Tamil translation failed: {translated_ta}")
-            translated_ta = ""
-        if isinstance(translated_en, Exception):
-            print(f"English translation failed: {translated_en}")
-            translated_en = ""
+        translated_ta = await translate_client.translate_text(final_full_text, "ta")
     except Exception as exc:
-        print(f"Translation error: {exc}")
-        translated_ta, translated_en = "", ""
+        print(f"Tamil translation failed: {exc}")
+    try:
+        translated_en = await translate_client.translate_text(final_full_text, "en")
+    except Exception as exc:
+        print(f"English translation failed: {exc}")
 
     return JSONResponse(
         {
