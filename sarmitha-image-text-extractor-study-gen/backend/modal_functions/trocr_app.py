@@ -12,7 +12,7 @@ Model: hasindu-k/sinhala-handwritten-notes-v3
 Loader strategy: use ViTImageProcessor (reads processor_config.json) +
 AutoTokenizer to avoid compatibility issues with AutoProcessor.
 
-Warm state: 1 hour (scaledown_window=3600)
+Warm state: 10 mins (scaledown_window=600)
 
 Deploy:
   modal deploy modal_functions/trocr_app.py
@@ -232,7 +232,7 @@ def _compute_confidence(outputs, generated_ids, line_idx: int) -> float:
 # Modal class
 # ---------------------------------------------------------------------------
 
-@app.cls(gpu="T4", scaledown_window=3600, min_containers=1)  # 1 hour warm state
+@app.cls(gpu="T4", scaledown_window=600, min_containers=1)  # 10 mins warm state
 class SinhalaTrOCRExtractor:
     @modal.enter()
     def load_model(self):

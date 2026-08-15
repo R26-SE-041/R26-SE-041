@@ -61,7 +61,7 @@ Do not add any prefix, suffix, or wrapper.
     image=image,
     gpu="A10G",
     timeout=600,
-    scaledown_window=3600,
+    scaledown_window=600,
     min_containers=1,
 )
 class SinhaLMOCRValidator:

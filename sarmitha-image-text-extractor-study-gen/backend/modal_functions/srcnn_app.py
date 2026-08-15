@@ -48,7 +48,7 @@ image = (
 app = modal.App("swin2sr-super-resolution", image=image)
 
 
-@app.cls(gpu="T4", scaledown_window=3600)  # 1 hour warm state — matches TrOCR app
+@app.cls(gpu="A10G", scaledown_window=600)  # 10 mins warm state — matches TrOCR app
 class Swin2SREnhancer:
     @modal.enter()
     def load_model(self):
@@ -82,6 +82,15 @@ class Swin2SREnhancer:
         image_bytes = base64.b64decode(request["image_b64"])
         nparr = np.frombuffer(image_bytes, np.uint8)
         cv_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        # Scale down image if it's too large to prevent CUDA OOM
+        max_dim = 800
+        h, w = cv_img.shape[:2]
+        if max(h, w) > max_dim:
+            scale = max_dim / float(max(h, w))
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            cv_img = cv2.resize(cv_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # OpenCV Preprocessing Pipeline for Dark/Shadowy Images
         # 1. Illumination correction (Shadow removal)
