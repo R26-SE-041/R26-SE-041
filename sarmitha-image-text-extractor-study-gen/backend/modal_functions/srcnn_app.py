@@ -48,7 +48,7 @@ image = (
 app = modal.App("swin2sr-super-resolution", image=image)
 
 
-@app.cls(gpu="T4", scaledown_window=60)
+@app.cls(gpu="T4", scaledown_window=3600)  # 1 hour warm state — matches TrOCR app
 class Swin2SREnhancer:
     @modal.enter()
     def load_model(self):

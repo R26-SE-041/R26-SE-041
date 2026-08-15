@@ -1,8 +1,13 @@
 """
 API routes for the image enhancement + OCR pipeline.
 
-Endpoints:
-  POST /api/process  — full pipeline (enhance + OCR), returns both results
+Pipeline (POST /api/process):
+  1. SRCNN enhancement (Modal)     — 4× super-resolution
+  2. TrOCR line extraction (Modal) — per-line crop + text + confidence
+  3. SinhaLM context improvement   — full-page contextual correction (optional,
+                                     skipped if SINHALM_MODAL_URL not set)
+
+Other endpoints:
   POST /api/enhance  — enhancement only
   POST /api/ocr      — OCR only (pass an already-good image)
 """
@@ -13,7 +18,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.services import srcnn_client, trocr_client
+from app.services import srcnn_client, trocr_client, sinhalm_client, visual_client
 
 router = APIRouter(prefix="/api")
 
@@ -43,13 +48,25 @@ async def process_image(file: UploadFile = File(...)):
     """
     Full pipeline:
       1. Enhance with SRCNN (Modal)
-      2. Extract text with TrOCR (Modal)
-
+      2. Extract lines with TrOCR (Modal) -> gets crops & text per line
+      3. For each line:
+         a. If low confidence: Visual OCR Agent (Qwen2-VL) -> SinhaLM
+         b. If high confidence: SinhaLM Validation Agent
+         
     Returns:
       {
         "original_b64":  "<base64 PNG of original>",
         "enhanced_b64":  "<base64 PNG of SRCNN output>",
-        "extracted_text": "..."
+        "extracted_text": "...",
+        "lines": [
+            {
+               "crop_b64": "...",
+               "raw_text": "...",
+               "visual_text": "...", # optional
+               "final_text": "...",
+               "confidence": 0.99
+            }
+        ]
       }
     """
     raw_bytes = await file.read()
@@ -61,21 +78,58 @@ async def process_image(file: UploadFile = File(...)):
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"SRCNN service error: {exc}")
+        raise HTTPException(status_code=502, detail=f"SRCNN service error: {exc.__class__.__name__} - {exc}")
 
-    # Step 2 — TrOCR OCR on the enhanced image
+    # Step 2 — TrOCR OCR (line-by-line)
     try:
-        text = await trocr_client.extract_text(enhanced_bytes)
+        lines_data = await trocr_client.extract_lines(enhanced_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"TrOCR service error: {exc}")
+        raise HTTPException(status_code=502, detail=f"TrOCR service error: {exc.__class__.__name__} - {exc}")
+
+    # Step 3 — Normalise line data from TrOCR into the response shape
+    processed_lines = [
+        {
+            "crop_b64":   line["crop_b64"],
+            "raw_text":   line["text"],
+            "visual_text": line["text"],   # kept for frontend compatibility
+            "final_text":  line["text"],   # will be overwritten in Step 4
+            "confidence":  line["confidence"],
+        }
+        for line in lines_data
+    ]
+
+    raw_full_text = "\n".join(line["raw_text"] for line in processed_lines)
+
+    # Step 4 — SinhaLM full-page context improvement (optional)
+    # If SINHALM_MODAL_URL is not set, sinhalm_client.validate_text returns
+    # raw_text unchanged, so this step is safely skipped.
+    context_improved = False
+    try:
+        improved_text = await sinhalm_client.validate_text(raw_full_text)
+        if improved_text and improved_text.strip() and improved_text != raw_full_text:
+            context_improved = True
+            # Distribute the improved lines back to the per-line results
+            improved_lines = improved_text.split("\n")
+            for i, pline in enumerate(processed_lines):
+                pline["final_text"] = improved_lines[i] if i < len(improved_lines) else pline["raw_text"]
+            final_full_text = improved_text
+        else:
+            final_full_text = raw_full_text
+    except Exception as exc:
+        # Log but never crash — OCR result is still valuable even without LLM pass
+        import logging
+        logging.getLogger(__name__).warning("SinhaLM context improvement failed: %s", exc)
+        final_full_text = raw_full_text
 
     return JSONResponse(
         {
-            "original_b64": base64.b64encode(raw_bytes).decode(),
-            "enhanced_b64": base64.b64encode(enhanced_bytes).decode(),
-            "extracted_text": text,
+            "original_b64":    base64.b64encode(raw_bytes).decode(),
+            "enhanced_b64":    base64.b64encode(enhanced_bytes).decode(),
+            "extracted_text":  final_full_text,
+            "lines":           processed_lines,
+            "context_improved": context_improved,
         }
     )
 

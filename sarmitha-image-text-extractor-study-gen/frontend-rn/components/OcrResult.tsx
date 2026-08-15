@@ -6,25 +6,29 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
+  Image,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { FileText, Copy, Check } from "lucide-react-native";
 
+import type { ProcessResult, OcrLine } from "@/lib/api";
+
 interface Props {
-  text: string;
+  result: ProcessResult;
 }
 
-export default function OcrResult({ text }: Props) {
+export default function OcrResult({ result }: Props) {
   const [copied, setCopied] = useState(false);
+  
+  const text = result.extracted_text || "";
+  const isEmpty = !text.trim();
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const isEmpty = !text.trim();
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
 
   return (
     <View style={styles.card}>
@@ -70,9 +74,26 @@ export default function OcrResult({ text }: Props) {
           nestedScrollEnabled
           showsVerticalScrollIndicator={Platform.OS !== "web"}
         >
-          <Text style={styles.ocrText} selectable>
-            {text}
-          </Text>
+          {result.lines && result.lines.length > 0 ? (
+            result.lines.map((line, idx) => (
+              <View key={idx} style={styles.lineRow}>
+                <Image 
+                  source={{ uri: `data:image/png;base64,${line.crop_b64}` }} 
+                  style={styles.lineImage} 
+                  resizeMode="contain" 
+                />
+                <View style={styles.lineDetails}>
+                  <Text style={styles.ocrText} selectable>
+                    {line.final_text || line.raw_text}
+                  </Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.ocrText} selectable>
+              {text}
+            </Text>
+          )}
         </ScrollView>
       )}
     </View>

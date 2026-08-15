@@ -172,7 +172,7 @@ export default function HomeScreen() {
               />
             </View>
 
-            <OcrResult text={result.extracted_text} />
+            <OcrResult result={result} />
           </View>
         )}
       </ScrollView>
