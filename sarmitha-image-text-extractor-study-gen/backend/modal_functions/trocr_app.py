@@ -232,7 +232,7 @@ def _compute_confidence(outputs, generated_ids, line_idx: int) -> float:
 # Modal class
 # ---------------------------------------------------------------------------
 
-@app.cls(gpu="T4", scaledown_window=600, min_containers=1)  # 10 mins warm state
+@app.cls(gpu="T4", scaledown_window=600)  # scales to 0 after 10 mins idle
 class SinhalaTrOCRExtractor:
     @modal.enter()
     def load_model(self):

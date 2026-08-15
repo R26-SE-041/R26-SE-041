@@ -61,8 +61,7 @@ Do not add any prefix, suffix, or wrapper.
     image=image,
     gpu="A10G",
     timeout=600,
-    scaledown_window=600,
-    min_containers=1,
+    scaledown_window=600,  # scales to 0 after 10 mins idle
 )
 class SinhaLMOCRValidator:
     @modal.enter()

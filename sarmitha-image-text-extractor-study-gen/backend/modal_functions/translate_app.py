@@ -28,8 +28,7 @@ app = modal.App("sinhala-translation-service", image=image)
     image=image,
     gpu="T4", # T4 is plenty for 600M model
     timeout=600,
-    scaledown_window=600, # 10 minutes warm state
-    min_containers=1,
+    scaledown_window=600, # scales to 0 after 10 mins idle
 )
 class TranslateNLLBService:
     @modal.enter()
