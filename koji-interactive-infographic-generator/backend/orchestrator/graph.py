@@ -27,6 +27,9 @@ from __future__ import annotations
 
 import base64
 import os
+import time
+import uuid
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -40,10 +43,30 @@ from shared.state import PipelineState
 def prompt_node(state: PipelineState) -> dict[str, Any]:
     """Call prompt-agent /enhance and merge results into state."""
     url = os.environ["PROMPT_AGENT_URL"].rstrip("/") + "/enhance"
+    config = state.get("experiment_config") or {}
+    examples = state.get("memento_examples") or []
+    if config.get("enable_memento", True) and not examples and state.get("retry_count", 0) == 0:
+        try:
+            from shared.memory import MemoryManager
+            examples = MemoryManager().recall(state["raw_prompt"], limit=3)
+        except Exception:
+            examples = []
     try:
         resp = requests.post(
             url,
-            json={"raw_prompt": state["raw_prompt"]},
+            json={
+                "raw_prompt": state["raw_prompt"],
+                "speed_mode": state.get("speed_mode", "pro"),
+                "retry_feedback": state.get("retry_feedback"),
+                "memento_examples": examples,
+                "use_memento": config.get("enable_memento", True),
+                "use_skill_rules": config.get("enable_skill_rules", True),
+                "skill_rules_override": config.get("skill_rules_override"),
+                "seed": config.get("seed"),
+                "skill_compression_mode": state.get("skill_compression_mode", "auto"),
+                "skill_token_budget": state.get("skill_token_budget", 150),
+                "available_context_tokens": state.get("available_context_tokens"),
+            },
             timeout=90,
         )
         resp.raise_for_status()
@@ -52,6 +75,9 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
         return {
             "enhanced_prompt": data.get("enhanced_prompt"),
             "prompt_parse_error": data.get("prompt_parse_error", False),
+            "memento_examples": examples,
+            "skill_compression": data.get("skill_compression") or {},
+            "safety": data.get("safety") or {},
             # Carry forward agent-level error without aborting pipeline
             "error": data.get("error"),
         }
@@ -66,6 +92,13 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
 def image_node(state: PipelineState) -> dict[str, Any]:
     """Call image-agent /generate and merge raw image bytes into state."""
     url = os.environ["IMAGE_AGENT_URL"].rstrip("/") + "/generate"
+    config = state.get("experiment_config") or {}
+    safety = state.get("safety") or {}
+    if safety.get("allowed") is False or str(state.get("error") or "").startswith("CONTENT_POLICY_BLOCKED"):
+        return {
+            "image_bytes": None,
+            "error": state.get("error") or "CONTENT_POLICY_BLOCKED: prompt failed safety review",
+        }
     try:
         # image-agent expects a single "prompt" key — use enhanced if available
         best_prompt = (
@@ -78,6 +111,7 @@ def image_node(state: PipelineState) -> dict[str, Any]:
             json={
                 "prompt": best_prompt,
                 "speed_mode": state.get("speed_mode", "pro"),
+                "seed": config.get("seed"),
             },
             timeout=360,
         )
@@ -85,7 +119,11 @@ def image_node(state: PipelineState) -> dict[str, Any]:
         data = resp.json()
 
         if data.get("error"):
-            return {"image_bytes": None, "error": data["error"]}
+            return {
+                "image_bytes": None,
+                "safety": data.get("safety") or state.get("safety") or {},
+                "error": data["error"],
+            }
 
         # Decode base64 → bytes for in-process handoff to eval_node
         # (eval agent re-encodes for its VLM call — this is intentional)
@@ -115,6 +153,8 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
         return {
             "clip_score": None,
             "vlm_score": None,
+            "visual_score": None,
+            "pedagogical_score": None,
             "vlm_feedback": None,
             "error": (state.get("error") or "Image generation failed — eval skipped"),
         }
@@ -132,9 +172,18 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
         resp.raise_for_status()
         data = resp.json()
 
+        config = state.get("experiment_config") or {}
+        visual_score = data.get("visual_score", data.get("vlm_score"))
+        pedagogical_score = data.get("pedagogical_score", data.get("vlm_score"))
+        if not config.get("enable_dual_critic", True):
+            visual_score = data.get("vlm_score")
+            pedagogical_score = data.get("vlm_score")
+
         return {
             "clip_score": data.get("clip_score"),
             "vlm_score": data.get("vlm_score"),
+            "visual_score": visual_score,
+            "pedagogical_score": pedagogical_score,
             "vlm_feedback": data.get("vlm_feedback"),
             "error": data.get("error") or state.get("error"),
         }
@@ -143,6 +192,8 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
         return {
             "clip_score": None,
             "vlm_score": None,
+            "visual_score": None,
+            "pedagogical_score": None,
             "vlm_feedback": None,
             "error": "eval-agent timed out after 150s",
         }
@@ -150,6 +201,8 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
         return {
             "clip_score": None,
             "vlm_score": None,
+            "visual_score": None,
+            "pedagogical_score": None,
             "vlm_feedback": None,
             "error": f"eval-agent call failed: {exc}",
         }
@@ -165,6 +218,10 @@ def db_node(state: PipelineState) -> dict[str, Any]:
     """
     from shared.db import insert_pipeline_record, update_pipeline_record
 
+    config = state.get("experiment_config") or {}
+    if not config.get("persist_run", True):
+        return {"db_record_id": None}
+
     existing_err = state.get("error")
     try:
         record_id = insert_pipeline_record(
@@ -179,9 +236,25 @@ def db_node(state: PipelineState) -> dict[str, Any]:
             image_data=state.get("image_bytes"),
             clip_score=state.get("clip_score"),
             vlm_score=state.get("vlm_score"),
+            visual_score=state.get("visual_score"),
+            pedagogical_score=state.get("pedagogical_score"),
             vlm_feedback=state.get("vlm_feedback"),
             error=existing_err,
         )
+
+        try:
+            from shared.memory import MemoryManager
+            if config.get("enable_memento", True) and state.get("enhanced_prompt"):
+                MemoryManager().promote(
+                    raw_prompt=state["raw_prompt"],
+                    enhanced_prompt=state["enhanced_prompt"],
+                    visual_score=float(state.get("visual_score") or 0),
+                    pedagogical_score=float(state.get("pedagogical_score") or 0),
+                    clip_score=state.get("clip_score"),
+                    vlm_feedback=state.get("vlm_feedback"),
+                )
+        except Exception:
+            pass
 
         return {"db_record_id": record_id}
 
@@ -193,6 +266,87 @@ def db_node(state: PipelineState) -> dict[str, Any]:
 
 # ── Graph assembly ────────────────────────────────────────────────────────────
 
+def generate_retry_feedback(visual: float, pedagogical: float, notes: str | None) -> str:
+    parts: list[str] = []
+    if visual < 7.0:
+        parts.append("VISUAL: Improve composition, legibility, colors, and layout.")
+    if pedagogical < 7.0:
+        parts.append("PEDAGOGICAL: Correct facts, add useful labels, and match the learner's level.")
+    if notes:
+        parts.append(f"Evaluator notes: {notes}")
+    return " | ".join(parts)
+
+
+def reflection_node(state: PipelineState) -> dict[str, Any]:
+    """Store the best attempt and prepare feedback for at most two retries."""
+    visual = float(state.get("visual_score") or 0)
+    pedagogical = float(state.get("pedagogical_score") or 0)
+    current = {
+        "visual_score": visual,
+        "pedagogical_score": pedagogical,
+        "clip_score": state.get("clip_score"),
+        "vlm_score": state.get("vlm_score"),
+        "vlm_feedback": state.get("vlm_feedback"),
+        "enhanced_prompt": state.get("enhanced_prompt"),
+        "image_bytes": state.get("image_bytes"),
+    }
+    best = state.get("best_attempt")
+    best_total = float(best.get("visual_score", 0)) + float(best.get("pedagogical_score", 0)) if best else -1
+    if visual + pedagogical > best_total:
+        best = current
+
+    retries = state.get("retry_count", 0)
+    config = state.get("experiment_config") or {}
+    accepted = (
+        not config.get("enable_reflexion", True)
+        or (visual >= 7.0 and pedagogical >= 7.0)
+    )
+    if accepted or retries >= 2 or not state.get("image_bytes"):
+        assert best is not None
+        return {
+            "best_attempt": best,
+            "enhanced_prompt": best.get("enhanced_prompt"),
+            "image_bytes": best.get("image_bytes"),
+            "clip_score": best.get("clip_score"),
+            "vlm_score": best.get("vlm_score"),
+            "visual_score": best.get("visual_score"),
+            "pedagogical_score": best.get("pedagogical_score"),
+            "vlm_feedback": best.get("vlm_feedback"),
+            "retry_feedback": None,
+        }
+    return {
+        "best_attempt": best,
+        "retry_count": retries + 1,
+        "retry_feedback": generate_retry_feedback(visual, pedagogical, state.get("vlm_feedback")),
+        "error": None,
+    }
+
+
+def should_retry(state: PipelineState) -> str:
+    config = state.get("experiment_config") or {}
+    if not config.get("enable_reflexion", True):
+        return "accept"
+    return "retry" if state.get("retry_feedback") else "accept"
+
+
+def traced_node(name: str, node: Callable[[PipelineState], dict[str, Any]]) -> Callable[[PipelineState], dict[str, Any]]:
+    """Wrap a graph node with structured latency and status telemetry."""
+    def wrapped(state: PipelineState) -> dict[str, Any]:
+        from shared.trace_logger import TraceLogger
+        trace_id = state.get("trace_id") or str(uuid.uuid4())
+        started = time.perf_counter()
+        result = node(state)
+        TraceLogger(trace_id=trace_id).event(
+            name,
+            status="error" if result.get("error") else "ok",
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            retry_count=state.get("retry_count", 0),
+        )
+        result.setdefault("trace_id", trace_id)
+        return result
+    return wrapped
+
+
 def build_graph() -> Any:
     """
     Compile and return the LangGraph pipeline.
@@ -200,15 +354,19 @@ def build_graph() -> Any:
     """
     g = StateGraph(PipelineState)
 
-    g.add_node("prompt", prompt_node)
-    g.add_node("image", image_node)
-    g.add_node("eval", eval_node)
-    g.add_node("db", db_node)
+    g.add_node("prompt", traced_node("prompt", prompt_node))
+    g.add_node("image", traced_node("image", image_node))
+    g.add_node("eval", traced_node("eval", eval_node))
+    g.add_node("reflect", traced_node("reflect", reflection_node))
+    g.add_node("db", traced_node("db", db_node))
 
     g.add_edge(START, "prompt")
     g.add_edge("prompt", "image")
     g.add_edge("image", "eval")
-    g.add_edge("eval", "db")
+    g.add_edge("eval", "reflect")
+    g.add_conditional_edges(
+        "reflect", should_retry, {"retry": "prompt", "accept": "db"}
+    )
     g.add_edge("db", END)
 
     return g.compile()

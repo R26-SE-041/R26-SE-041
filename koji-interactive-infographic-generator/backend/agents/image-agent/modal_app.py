@@ -57,6 +57,7 @@ image = (
         "pydantic>=2.9.0",
         "Pillow>=10.4.0",
     )
+    .add_local_python_source("shared")
 )
 
 app = modal.App("image-agent", image=image)
@@ -126,20 +127,34 @@ class _ImageAgentBase:
         if not prompt:
             return {"image_bytes": None, "error": "prompt is empty"}
 
+        from shared.safety import assess_prompt, blocked_error
+        safety = assess_prompt(prompt)
+        if not safety.allowed:
+            return {
+                "image_bytes": None,
+                "safety": safety.to_dict(),
+                "error": blocked_error(safety),
+            }
+
         try:
             import torch
             torch.cuda.empty_cache()  # free any fragmented allocations before inference
+            seed = state_dict.get("seed")
+            generator = None
+            if seed is not None:
+                generator = torch.Generator(device="cuda").manual_seed(int(seed))
             result = self.pipe(
                 prompt=prompt,
                 height=IMAGE_HEIGHT,
                 width=IMAGE_WIDTH,
                 num_inference_steps=NUM_INFERENCE_STEPS,
                 guidance_scale=GUIDANCE_SCALE,
+                generator=generator,
             )
             buf = io.BytesIO()
             result.images[0].save(buf, format="PNG")
             buf.seek(0)
-            return {"image_bytes": buf.read(), "error": None}
+            return {"image_bytes": buf.read(), "safety": safety.to_dict(), "error": None}
 
         except Exception as exc:
             return {"image_bytes": None, "error": f"ImageGenerationFailed: {exc}"}
@@ -200,6 +215,7 @@ web_app.add_middleware(
 class GenerateRequest(BaseModel):
     prompt: str
     speed_mode: str = "pro"  # "normal" | "pro" | "promax"
+    seed: int | None = None
 
 
 @web_app.get("/health")
@@ -211,6 +227,16 @@ def health() -> dict:
 def generate(req: GenerateRequest) -> dict:
     """Returns base64-encoded PNG. Routes to A10G (Normal/Pro) or A100 (Pro Max)."""
     try:
+        # CPU-side preflight avoids allocating an expensive GPU container for a
+        # prompt that the generation method will reject again.
+        from shared.safety import assess_prompt, blocked_error
+        safety = assess_prompt(req.prompt)
+        if not safety.allowed:
+            return {
+                "image_base64": None,
+                "safety": safety.to_dict(),
+                "error": blocked_error(safety),
+            }
         # Pro Max gets H100 for fastest FLUX.1-dev inference
         if req.speed_mode == "promax":
             agent = ImageAgentH100()
@@ -218,10 +244,14 @@ def generate(req: GenerateRequest) -> dict:
             agent = ImageAgentA100()
         else:  # "normal" → A10G (same as original)
             agent = ImageAgentA10G()
-        result = agent.generate.remote({"prompt": req.prompt})
+        result = agent.generate.remote({"prompt": req.prompt, "seed": req.seed})
 
         if result.get("error"):
-            return {"image_base64": None, "error": result["error"]}
+            return {
+                "image_base64": None,
+                "safety": result.get("safety"),
+                "error": result["error"],
+            }
 
         image_bytes: bytes | None = result.get("image_bytes")
         if not image_bytes:
@@ -229,6 +259,7 @@ def generate(req: GenerateRequest) -> dict:
 
         return {
             "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
+            "safety": result.get("safety"),
             "error": None,
         }
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+from pathlib import Path
 from typing import Any
 
 import modal
@@ -36,6 +37,7 @@ VLM_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"   # exact string — do NOT substit
 VLM_CACHE_PATH = "/root/models/qwen-vl-7b"
 CLIP_MODEL_ID = "openai/clip-vit-base-patch16"
 MAX_JSON_RETRIES = 2
+AGENT_CONFIG_PATH = "/root/agent-config/eval-agent"
 
 
 # ── Image build ───────────────────────────────────────────────────────────────
@@ -76,6 +78,8 @@ image = (
     )
     # Add shared/ package — run `modal deploy` from backend/ so this path resolves
     .add_local_python_source("shared")
+    .add_local_file("agents/eval-agent/SKILL.md", f"{AGENT_CONFIG_PATH}/SKILL.md")
+    .add_local_file("agents/eval-agent/MEMENTO.md", f"{AGENT_CONFIG_PATH}/MEMENTO.md")
 )
 
 app = modal.App("eval-agent", image=image)
@@ -120,6 +124,15 @@ class EvalAgent:
             trust_remote_code=True,
         )
         self.vlm_model.eval()
+
+        from shared.memory import MemoryManager
+
+        memory = MemoryManager(
+            agent_name="eval-agent",
+            skill_path=Path(AGENT_CONFIG_PATH) / "SKILL.md",
+            memento_path=Path(AGENT_CONFIG_PATH) / "MEMENTO.md",
+        )
+        self.agent_context = memory.load_static_context()
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
@@ -201,6 +214,19 @@ class EvalAgent:
         b64 = base64.b64encode(image_bytes).decode("utf-8")
         data_uri = f"data:image/png;base64,{b64}"
 
+        from shared.token_budget import TokenBudgetController
+
+        instructions = TokenBudgetController().assemble("eval_agent", {
+            "system": "You are evaluating an AI-generated educational image.",
+            "skill_rules": self.agent_context["skill_rules"],
+            "memento": self.agent_context["memento"],
+            "generation_prompt": f'The image was generated from this prompt:\n"{prompt}"',
+            "output_schema": (
+                "Return prompt_alignment and educational_usefulness scores from 0 to 10, "
+                "plus one sentence of actionable feedback."
+            ),
+        })
+
         messages = [
             {
                 "role": "user",
@@ -212,8 +238,7 @@ class EvalAgent:
                     {
                         "type": "text",
                         "text": (
-                            "You are evaluating an AI-generated educational image.\n\n"
-                            f"The image was generated from this prompt:\n\"{prompt}\"\n\n"
+                            f"{instructions}\n\n"
                             "Evaluate the image on two dimensions and respond with ONLY a JSON object:\n"
                             "{\n"
                             '  "prompt_alignment": <float 0-10>,\n'
@@ -262,6 +287,8 @@ class EvalAgent:
                  "raw_prompt": str}
         Output: {"clip_score": float | None,
                  "vlm_score": float | None,
+                 "visual_score": float | None,
+                 "pedagogical_score": float | None,
                  "vlm_feedback": str | None,
                  "error": str | None}
 
@@ -280,6 +307,8 @@ class EvalAgent:
             return {
                 "clip_score": None,
                 "vlm_score": None,
+                "visual_score": None,
+                "pedagogical_score": None,
                 "vlm_feedback": None,
                 "error": (
                     "EvalAgent received empty or non-bytes image_bytes. "
@@ -304,6 +333,8 @@ class EvalAgent:
 
         # ── VLM evaluation ────────────────────────────────────────────────────
         vlm_score: float | None = None
+        visual_score: float | None = None
+        pedagogical_score: float | None = None
         vlm_feedback: str | None = None
         try:
             raw_vlm_output = self._vlm_eval_with_image(image_bytes, prompt)
@@ -322,9 +353,11 @@ class EvalAgent:
             else:
                 pa = parsed.get("prompt_alignment")
                 eu = parsed.get("educational_usefulness")
-                # Average the two sub-scores into a single vlm_score
                 if pa is not None and eu is not None:
-                    vlm_score = round((float(pa) + float(eu)) / 2, 2)
+                    visual_score = round(max(0.0, min(10.0, float(pa))), 2)
+                    pedagogical_score = round(max(0.0, min(10.0, float(eu))), 2)
+                    # Keep the legacy aggregate during the API transition.
+                    vlm_score = round((visual_score + pedagogical_score) / 2, 2)
                 vlm_feedback = parsed.get("feedback") or "No feedback returned"
 
         except Exception as exc:
@@ -333,6 +366,8 @@ class EvalAgent:
         return {
             "clip_score": clip_score,
             "vlm_score": vlm_score,
+            "visual_score": visual_score,
+            "pedagogical_score": pedagogical_score,
             "vlm_feedback": vlm_feedback,
             "error": "; ".join(errors) if errors else None,
         }

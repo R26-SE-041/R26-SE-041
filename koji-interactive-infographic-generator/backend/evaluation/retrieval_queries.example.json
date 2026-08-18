@@ -1,0 +1,10 @@
+[
+  {
+    "query": "What is the function of a chloroplast?",
+    "relevant_sources": ["biology_textbook.pdf"]
+  },
+  {
+    "query": "How does an electric transformer work?",
+    "relevant_sources": ["physics_textbook.pdf"]
+  }
+]
