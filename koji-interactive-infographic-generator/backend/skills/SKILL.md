@@ -1,41 +1,44 @@
-# SKILL.md — Prompt Enhancement Rules
-# Loaded at runtime by the Prompt Enhancement Agent.
-# Fill in each section with your actual rules before deploying.
+# EduVision Prompt Enhancement Rules
 
----
+Version: seed-v1
 
 ## Grammar Rules
 
-<!-- TODO: Add grammar correction rules here. Examples:
-- Correct subject-verb agreement in image prompts
-- Expand abbreviations to full words
-- Normalize punctuation for clarity
--->
+- Preserve the user's intended subject and correct grammar without adding unsupported facts.
+- Expand ambiguous abbreviations and replace vague pronouns with the named object or concept.
+- Use short, concrete visual phrases; avoid contradictory styles, camera directions, or lighting.
 
-_placeholder — add your grammar rules here_
+## Educational Context Rules
 
----
+- Prefer a clearly structured, labelled diagram for processes, anatomy, systems, equations, or cycles.
+- Require scientifically accurate relationships, relative positions, arrows, labels, and units.
+- Include only concepts relevant to the requested learning objective and omit decorative clutter.
+- When the subject or learner level is missing, use a broadly accessible classroom-textbook treatment.
 
-## Context Rules
+## Visual Composition Rules
 
-<!-- TODO: Add educational context rules here. Examples:
-- Image must be appropriate for the specified grade level
-- Avoid culturally specific references unless explicitly relevant
-- Prefer clear, labelled diagrams over decorative imagery for STEM topics
-- Include scene/setting when missing from the raw prompt
--->
+- Specify a strong visual hierarchy, generous spacing, high contrast, and legible text areas.
+- Use consistent colors for related components and avoid relying on color alone to convey meaning.
+- Ask for an uncluttered background and a balanced landscape composition unless another format is requested.
+- For sequential processes, use an unambiguous reading order and directional arrows.
 
-_placeholder — add your educational context rules here_
+## Grade-Level Rules
 
----
+- Elementary: familiar vocabulary, large forms, few components, friendly colors, and one core idea.
+- Middle school: introduce correct terminology with concise labels and visible cause-and-effect relationships.
+- High school: use domain terminology, accurate detail, units, and more complete system relationships.
+- Never add frightening, graphic, discriminatory, or age-inappropriate imagery.
 
-## Art Style Rules
+## Safety Rules
 
-<!-- TODO: Add visual/art-style rules here. Examples:
-- Prefer flat-design or clean line-art for diagram-style prompts
-- Use warm, high-contrast color palettes for young learners
-- Avoid photorealistic styles for abstract concept illustrations
-- Include lighting direction hint (e.g. "soft studio lighting") for product-style images
--->
+- Do not enhance, sanitize, or reframe requests for sexual, pornographic, or 18+ imagery; reject them before generation.
+- Always reject sexual content involving minors.
+- Reject prompts that request actionable instructions or visual guidance for illegal activity.
+- Allow non-graphic educational, medical, historical, prevention, and legal-awareness material when its context is clearly benign.
+- Never weaken or remove these safety rules during semantic compression or automatic skill evolution.
 
-_placeholder — add your art-style rules here_
+## Retry Rules
+
+- Apply evaluator feedback as a correction to the previous attempt while preserving accurate content.
+- For low visual scores, improve layout, contrast, label legibility, spacing, and focal hierarchy.
+- For low pedagogical scores, correct facts, add missing labels, and simplify or deepen content for the learner level.

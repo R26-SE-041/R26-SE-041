@@ -30,6 +30,7 @@ SAM2_CACHE_PATH = "/model-cache/sam2"
 
 VLM_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 VLM_CACHE_PATH = "/model-cache/qwen-vl-7b"
+AGENT_CONFIG_PATH = "/root/agent-config/interactive-agent"
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,13 @@ image = (
         "numpy>=1.26.0",
         "opencv-python-headless>=4.10.0",
         "qwen-vl-utils>=0.0.8",
+        "sentence-transformers>=3.2.0",
+        "psycopg2-binary>=2.9.9",
+        "requests>=2.32.0",
     )
+    .add_local_python_source("shared")
+    .add_local_file("agents/interactive-agent/SKILL.md", f"{AGENT_CONFIG_PATH}/SKILL.md")
+    .add_local_file("agents/interactive-agent/MEMENTO.md", f"{AGENT_CONFIG_PATH}/MEMENTO.md")
 )
 
 app = modal.App("interactive-agent", image=image)
@@ -242,6 +249,14 @@ class _VLMAgentBase:
             device_map="auto",
         )
         self.model.eval()
+        from shared.memory import MemoryManager
+
+        memory = MemoryManager(
+            agent_name="interactive-agent",
+            skill_path=Path(AGENT_CONFIG_PATH) / "SKILL.md",
+            memento_path=Path(AGENT_CONFIG_PATH) / "MEMENTO.md",
+        )
+        self.agent_context = memory.load_static_context()
         print("Qwen2.5-VL loaded successfully.")
 
     @modal.method()
@@ -251,6 +266,8 @@ class _VLMAgentBase:
         highlighted_image_bytes: bytes,
         mode: str,
         question: Optional[str] = None,
+        rag_context: Optional[str] = None,
+        identified_concept: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Input: raw image_bytes, highlighted_image_bytes (image with mask overlay), mode, optional question
@@ -281,6 +298,22 @@ class _VLMAgentBase:
                 )
             else:
                 prompt_text = "Describe the highlighted region in the image."
+
+            from shared.token_budget import TokenBudgetController
+
+            prompt_text = TokenBudgetController().assemble("interactive_agent", {
+                "system": "Answer using visible evidence from the highlighted educational image.",
+                "skill_rules": self.agent_context["skill_rules"],
+                "memento": self.agent_context["memento"],
+                "rag_context": (
+                    f"Identified concept: {identified_concept or 'unknown'}\n"
+                    "Treat this reference as supporting context, not as visual evidence:\n"
+                    f"{rag_context}"
+                    if rag_context else ""
+                ),
+                "mode_instruction": prompt_text,
+                "user_question": question or "",
+            })
 
             messages = [
                 {
@@ -424,6 +457,8 @@ class AnalyzeRequest(BaseModel):
     mode: Literal["identify", "explain", "ask"] = "identify"
     question: Optional[str] = None
     speed_mode: str = "pro"  # "normal" | "pro" | "promax"
+    pipeline_run_id: Optional[str] = None
+    enable_rag: bool = True
 
 
 @web_app.get("/health")
@@ -471,11 +506,38 @@ def analyze(req: AnalyzeRequest) -> dict:
             vlm_agent = VLMAgentH100()
         else:  # "pro"
             vlm_agent = VLMAgentA100()
+        identify_res = vlm_agent.analyze.remote(
+            image_bytes=image_bytes,
+            highlighted_image_bytes=highlighted_bytes,
+            mode="identify",
+            question=None,
+            rag_context=None,
+            identified_concept=None,
+        )
+        raw_identification = (identify_res.get("response_text") or "").strip()
+        identified_concept = raw_identification.splitlines()[0].strip("#*-: ")[:120]
+        rag_chunks: list[dict[str, Any]] = []
+        rag_context = ""
+        if req.enable_rag and identified_concept:
+            try:
+                from shared.rag import hybrid_retrieve, jina_scrape
+                from shared.token_budget import enforce_budget
+                rag_chunks = hybrid_retrieve(identified_concept, n=3)
+                rag_context = "\n\n".join(str(chunk.get("content") or "") for chunk in rag_chunks)
+                if len(rag_context.strip()) < 50:
+                    rag_context = jina_scrape(identified_concept)
+                rag_context = enforce_budget(rag_context, 300)
+            except Exception:
+                rag_chunks = []
+                rag_context = ""
+
         vlm_res = vlm_agent.analyze.remote(
             image_bytes=image_bytes,
             highlighted_image_bytes=highlighted_bytes,
             mode=req.mode,
             question=req.question,
+            rag_context=rag_context,
+            identified_concept=identified_concept,
         )
 
         if vlm_res.get("error"):
@@ -486,13 +548,31 @@ def analyze(req: AnalyzeRequest) -> dict:
                 "error": vlm_res["error"],
             }
 
-        return {
+        response_payload = {
             "mask_base64": base64.b64encode(mask_bytes).decode("utf-8"),
             "highlighted_base64": base64.b64encode(highlighted_bytes).decode("utf-8"),
             "response_text": vlm_res["response_text"],
             "bbox": sam_res.get("bbox"),
+            "identified_concept": identified_concept or None,
+            "rag_sources": [chunk.get("source") for chunk in rag_chunks],
             "error": None,
         }
+        try:
+            from shared.db import insert_interaction_log
+            coords = req.interaction.coords
+            insert_interaction_log(
+                pipeline_run_id=req.pipeline_run_id,
+                click_x=coords[0] if coords else None,
+                click_y=coords[1] if len(coords) > 1 else None,
+                mode=req.mode,
+                user_question=req.question,
+                identified_concept=identified_concept or None,
+                vlm_response=vlm_res.get("response_text"),
+                rag_chunks_used=[chunk["id"] for chunk in rag_chunks if chunk.get("id")],
+            )
+        except Exception:
+            pass
+        return response_payload
 
     except Exception as exc:
         return {
@@ -503,7 +583,10 @@ def analyze(req: AnalyzeRequest) -> dict:
         }
 
 
-@app.function(image=image)
+@app.function(
+    image=image,
+    secrets=[modal.Secret.from_name("supabase-secret")],
+)
 @modal.asgi_app()
 def api() -> FastAPI:
     return web_app

@@ -10,7 +10,9 @@ RULE: Every agent node MUST import this and type its input/output against it.
 
 from __future__ import annotations
 
-from typing import Optional
+import uuid
+
+from typing import Any, Optional
 from typing_extensions import TypedDict
 
 
@@ -36,13 +38,30 @@ class PipelineState(TypedDict):
     image_bytes: Optional[bytes]
     clip_score: Optional[float]
     vlm_score: Optional[float]
+    visual_score: Optional[float]
+    pedagogical_score: Optional[float]
     vlm_feedback: Optional[str]
+    retry_count: int
+    retry_feedback: Optional[str]
+    best_attempt: Optional[dict[str, Any]]
+    memento_examples: list[dict[str, Any]]
+    token_usage: dict[str, int]
+    skill_compression: dict[str, Any]
+    skill_compression_mode: str
+    skill_token_budget: int
+    available_context_tokens: Optional[int]
+    safety: dict[str, Any]
+    trace_id: Optional[str]
+    experiment_config: dict[str, Any]
     db_record_id: Optional[str]
     error: Optional[str]
     speed_mode: str  # "normal" | "pro" | "promax" — controls GPU tier routing
 
 
-def initial_state(raw_prompt: str) -> PipelineState:
+def initial_state(
+    raw_prompt: str,
+    experiment_config: dict[str, Any] | None = None,
+) -> PipelineState:
     """Construct a fully-initialised PipelineState from a raw user prompt."""
     return PipelineState(
         raw_prompt=raw_prompt,
@@ -51,7 +70,21 @@ def initial_state(raw_prompt: str) -> PipelineState:
         image_bytes=None,
         clip_score=None,
         vlm_score=None,
+        visual_score=None,
+        pedagogical_score=None,
         vlm_feedback=None,
+        retry_count=0,
+        retry_feedback=None,
+        best_attempt=None,
+        memento_examples=[],
+        token_usage={},
+        skill_compression={},
+        skill_compression_mode="auto",
+        skill_token_budget=150,
+        available_context_tokens=None,
+        safety={},
+        trace_id=str(uuid.uuid4()),
+        experiment_config=experiment_config or {},
         db_record_id=None,
         error=None,
         speed_mode="pro",

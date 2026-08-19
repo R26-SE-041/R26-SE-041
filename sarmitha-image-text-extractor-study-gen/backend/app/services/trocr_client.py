@@ -8,7 +8,7 @@ import httpx
 
 from app.core.config import settings
 
-TIMEOUT = 120.0  # TrOCR large model inference
+TIMEOUT = 300.0  # TrOCR large model inference
 
 
 async def extract_text(image_bytes: bytes) -> str:
@@ -34,3 +34,16 @@ async def extract_text(image_bytes: bytes) -> str:
         response.raise_for_status()
 
     return response.json().get("text", "")
+
+async def extract_lines(image_bytes: bytes) -> list:
+    url = settings.trocr_lines_modal_url
+    if not url:
+        raise ValueError("TROCR_LINES_MODAL_URL is not set.")
+
+    payload = {"image_b64": base64.b64encode(image_bytes).decode("utf-8")}
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+
+    return response.json().get("lines", [])

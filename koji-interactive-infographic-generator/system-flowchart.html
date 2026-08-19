@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Interactive system flowchart for the EduVision AI infographic generator.">
+  <title>EduVision System Flowchart</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071019;
+      --surface: #0d1925;
+      --surface-2: #122333;
+      --line: #294157;
+      --text: #edf7ff;
+      --muted: #91a8ba;
+      --cyan: #28d7e5;
+      --cyan-soft: rgba(40, 215, 229, .12);
+      --violet: #9b87f5;
+      --violet-soft: rgba(155, 135, 245, .12);
+      --amber: #f8bd62;
+      --amber-soft: rgba(248, 189, 98, .12);
+      --green: #54d68b;
+      --green-soft: rgba(84, 214, 139, .12);
+      --danger: #ff7b83;
+      --shadow: 0 20px 50px rgba(0, 0, 0, .26);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(40, 215, 229, .08), transparent 28rem),
+        radial-gradient(circle at 90% 12%, rgba(155, 135, 245, .09), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button { font: inherit; }
+
+    .shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 38px clamp(18px, 4vw, 64px) 56px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(30px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: -.045em;
+    }
+
+    .lede {
+      max-width: 800px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: clamp(14px, 1.7vw, 18px);
+      line-height: 1.65;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--cyan); }
+    .legend span:nth-child(2) i { background: var(--violet); }
+    .legend span:nth-child(3) i { background: var(--amber); }
+    .legend span:nth-child(4) i { background: var(--green); }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin: 32px 0 18px;
+      padding: 6px;
+      width: fit-content;
+      max-width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(13, 25, 37, .72);
+    }
+
+    .tab {
+      flex: none;
+      border: 0;
+      border-radius: 9px;
+      padding: 10px 15px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tab:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+    .tab[aria-selected="true"] { color: #061116; background: var(--cyan); }
+    .tab:focus-visible, .node:focus-visible { outline: 3px solid rgba(40, 215, 229, .42); outline-offset: 3px; }
+
+    .diagram-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(9, 20, 30, .9);
+      box-shadow: var(--shadow);
+    }
+
+    .diagram-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .diagram-title { margin: 0; font-size: 17px; }
+    .diagram-subtitle { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .live-key { flex: none; align-self: center; color: var(--green); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .live-key::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(84, 214, 139, .1); }
+
+    .viewport {
+      position: relative;
+      min-height: 630px;
+      padding: 34px;
+      overflow: auto;
+      background-image:
+        linear-gradient(rgba(41, 65, 87, .14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(41, 65, 87, .14) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .canvas {
+      position: relative;
+      width: 1280px;
+      min-height: 560px;
+      margin: 0 auto;
+    }
+
+    .connectors {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .edge {
+      fill: none;
+      stroke: var(--line);
+      stroke-width: 2;
+      marker-end: url(#arrow);
+      transition: opacity .2s, stroke .2s, stroke-width .2s;
+    }
+
+    .edge[data-kind="optional"] { stroke-dasharray: 7 6; }
+    .edge.is-active { stroke: var(--cyan); stroke-width: 2.6; }
+    .edge.is-muted { opacity: .12; }
+    .edge-label {
+      fill: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: var(--bg);
+      stroke-width: 5px;
+      stroke-linejoin: round;
+    }
+
+    .node {
+      position: absolute;
+      width: 184px;
+      min-height: 86px;
+      padding: 14px 14px 13px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 12px 26px rgba(0, 0, 0, .18);
+      transition: transform .18s, border-color .18s, opacity .2s, box-shadow .18s;
+    }
+
+    .node:hover { transform: translateY(-3px); border-color: var(--cyan); }
+    .node.is-active { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-soft), 0 14px 30px rgba(0, 0, 0, .22); }
+    .node.is-muted { opacity: .2; }
+    .node[data-group="client"] { border-top: 3px solid var(--cyan); }
+    .node[data-group="agent"] { border-top: 3px solid var(--violet); }
+    .node[data-group="decision"] { border-top: 3px solid var(--amber); }
+    .node[data-group="data"] { border-top: 3px solid var(--green); }
+
+    .node-kicker { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .node strong { display: block; font-size: 14px; line-height: 1.2; }
+    .node small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+
+    .lane-label {
+      position: absolute;
+      left: 0;
+      color: #60788d;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr;
+      gap: 1px;
+      border-top: 1px solid var(--line);
+      background: var(--line);
+    }
+
+    .detail-block { min-height: 134px; padding: 20px 22px; background: var(--surface); }
+    .detail-label { display: block; margin-bottom: 8px; color: var(--cyan); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .detail-block h3 { margin: 0 0 7px; font-size: 15px; }
+    .detail-block p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .detail-block code { color: var(--text); font-family: "SFMono-Regular", Consolas, monospace; }
+
+    .architecture-note {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 16px 18px;
+      border: 1px solid rgba(248, 189, 98, .28);
+      border-radius: 14px;
+      background: var(--amber-soft);
+      color: #ecd8b4;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .architecture-note strong { flex: none; color: var(--amber); }
+
+    @media (max-width: 760px) {
+      .shell { padding-top: 24px; }
+      .diagram-header { align-items: flex-start; padding: 18px; }
+      .viewport { min-height: 580px; padding: 20px; }
+      .details { grid-template-columns: 1fr; }
+      .detail-block { min-height: 0; }
+      .live-key { display: none; }
+      .architecture-note { flex-direction: column; gap: 5px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">System architecture · actual code paths</p>
+    <h1>EduVision AI system flow</h1>
+    <p class="lede">Follow the production user journey or isolate a single workflow. Select any component to see its responsibility, interface, and runtime.</p>
+
+    <div class="legend" aria-label="Component legend">
+      <span><i></i>Client</span>
+      <span><i></i>AI agent</span>
+      <span><i></i>Decision or control</span>
+      <span><i></i>Data or output</span>
+    </div>
+
+    <nav class="tabs" aria-label="Flow views" role="tablist">
+      <button class="tab" type="button" role="tab" aria-selected="true" data-flow="all">Complete system</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-flow="generate">Generate</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-flow="interact">Interact</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-flow="threed">2D → 3D</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-flow="quality">Quality loop</button>
+    </nav>
+
+    <section class="diagram-card" aria-labelledby="diagram-title">
+      <header class="diagram-header">
+        <div>
+          <h2 class="diagram-title" id="diagram-title">Complete system</h2>
+          <p class="diagram-subtitle" id="diagram-subtitle">Frontend runtime plus the independent LangGraph quality pipeline.</p>
+        </div>
+        <span class="live-key">Interactive map</span>
+      </header>
+
+      <div class="viewport" id="viewport">
+        <div class="canvas" id="canvas" aria-label="EduVision architecture flowchart">
+          <span class="lane-label" style="top: 45px">USER EXPERIENCE</span>
+          <span class="lane-label" style="top: 338px">QUALITY PIPELINE</span>
+
+          <svg class="connectors" id="connectors" aria-hidden="true">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+              </marker>
+            </defs>
+          </svg>
+
+          <button class="node" style="left:42px;top:72px" data-id="user" data-group="client" data-flows="generate interact threed">
+            <span class="node-kicker">Input</span><strong>Learner / Educator</strong><small>Prompt, region selection, question</small>
+          </button>
+          <button class="node" style="left:274px;top:72px" data-id="app" data-group="client" data-flows="generate interact threed">
+            <span class="node-kicker">Expo · React Native</span><strong>EduVision Frontend</strong><small>Web / Android interface</small>
+          </button>
+          <button class="node" style="left:506px;top:72px" data-id="mode" data-group="decision" data-flows="generate">
+            <span class="node-kicker">Generation route</span><strong>Direct or Enhance?</strong><small>Speed tier: Normal / Pro / Pro Max</small>
+          </button>
+          <button class="node" style="left:738px;top:14px" data-id="prompt" data-group="agent" data-flows="generate quality">
+            <span class="node-kicker">Qwen 2.5-3B</span><strong>Prompt Agent</strong><small><code>POST /enhance</code> · safety + skill rules</small>
+          </button>
+          <button class="node" style="left:738px;top:130px" data-id="image" data-group="agent" data-flows="generate quality">
+            <span class="node-kicker">FLUX.1-dev</span><strong>Image Agent</strong><small><code>POST /generate</code> · GPU routed</small>
+          </button>
+          <button class="node" style="left:970px;top:72px" data-id="output" data-group="data" data-flows="generate interact threed">
+            <span class="node-kicker">Result</span><strong>Educational Image</strong><small>Base64 PNG rendered in app</small>
+          </button>
+
+          <button class="node" style="left:970px;top:218px" data-id="choice" data-group="decision" data-flows="interact threed">
+            <span class="node-kicker">Post-generation</span><strong>Explore Output</strong><small>Analyze a region or convert to 3D</small>
+          </button>
+          <button class="node" style="left:738px;top:264px" data-id="interactive" data-group="agent" data-flows="interact">
+            <span class="node-kicker">SAM 2 + Qwen2.5-VL</span><strong>Interactive Agent</strong><small><code>POST /analyze</code> · point / box</small>
+          </button>
+          <button class="node" style="left:506px;top:264px" data-id="rag" data-group="data" data-flows="interact quality">
+            <span class="node-kicker">Grounding</span><strong>Hybrid RAG</strong><small>pgvector + FTS, Jina fallback</small>
+          </button>
+          <button class="node" style="left:274px;top:264px" data-id="answer" data-group="data" data-flows="interact">
+            <span class="node-kicker">Interactive output</span><strong>Mask + Explanation</strong><small>Highlighted object and VLM response</small>
+          </button>
+          <button class="node" style="left:970px;top:350px" data-id="threed" data-group="agent" data-flows="threed">
+            <span class="node-kicker">Hunyuan3D-2</span><strong>3D Agent</strong><small><code>/convert/start</code> + polling</small>
+          </button>
+          <button class="node" style="left:970px;top:468px" data-id="glb" data-group="data" data-flows="threed">
+            <span class="node-kicker">3D output</span><strong>Textured GLB</strong><small>Three.js viewer + download</small>
+          </button>
+
+          <button class="node" style="left:42px;top:438px" data-id="api" data-group="client" data-flows="quality">
+            <span class="node-kicker">Independent API route</span><strong>Service Client</strong><small><code>POST /generate</code></small>
+          </button>
+          <button class="node" style="left:274px;top:438px" data-id="orchestrator" data-group="decision" data-flows="quality">
+            <span class="node-kicker">FastAPI + LangGraph</span><strong>Orchestrator</strong><small>Pipeline state + tracing</small>
+          </button>
+          <button class="node" style="left:506px;top:438px" data-id="eval" data-group="agent" data-flows="quality">
+            <span class="node-kicker">CLIP + dual critic</span><strong>Evaluation Agent</strong><small>Visual + pedagogical scores</small>
+          </button>
+          <button class="node" style="left:738px;top:438px" data-id="reflect" data-group="decision" data-flows="quality">
+            <span class="node-kicker">Threshold ≥ 7 / 10</span><strong>Reflect & Retry</strong><small>Best attempt · maximum 2 retries</small>
+          </button>
+          <button class="node" style="left:1090px;top:438px" data-id="db" data-group="data" data-flows="quality">
+            <span class="node-kicker">PostgreSQL</span><strong>Supabase Memory</strong><small>Runs, interactions, RAG, skills</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="details" aria-live="polite">
+        <div class="detail-block">
+          <span class="detail-label">Selected component</span>
+          <h3 id="detail-name">EduVision system</h3>
+          <p id="detail-description">Choose a component to inspect its purpose in the active path.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-label">Interface</span>
+          <p id="detail-interface">HTTPS JSON APIs between independently deployed Modal applications.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-label">Runtime / data</span>
+          <p id="detail-runtime">GPU tier follows Normal, Pro, or Pro Max mode. Health checks run every 15 seconds.</p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="architecture-note">
+      <strong>Important:</strong>
+      <span>The current Expo frontend calls the prompt and image agents directly. The orchestrator shown in the lower lane is an independent evaluated generation endpoint; it is not yet the frontend's generation route.</span>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const flows = {
+        all: {
+          title: "Complete system",
+          subtitle: "Frontend runtime plus the independent LangGraph quality pipeline."
+        },
+        generate: {
+          title: "Image generation",
+          subtitle: "Direct generation skips enhancement; Enhance runs Qwen before FLUX."
+        },
+        interact: {
+          title: "Interactive analysis",
+          subtitle: "A point or box becomes a SAM 2 mask, grounded context, and a VLM response."
+        },
+        threed: {
+          title: "2D to 3D conversion",
+          subtitle: "The app starts an asynchronous Hunyuan3D job and polls until the GLB is ready."
+        },
+        quality: {
+          title: "Evaluated quality loop",
+          subtitle: "LangGraph evaluates each image and retries weak attempts before persistence."
+        }
+      };
+
+      const details = {
+        user: ["Learner / Educator", "Creates an educational prompt, selects image regions, and asks follow-up questions.", "Prompt text, pointer coordinates, or a normalized selection box.", "Receives a PNG, grounded explanation, or interactive 3D model."],
+        app: ["EduVision Frontend", "Expo and React Native client shared by web and Android.", "Calls each agent over HTTPS and renders base64 image / GLB responses.", "Tracks health, timing, warm estimates, theme, and GPU speed mode."],
+        mode: ["Direct or Enhance?", "Controls whether Qwen refines the raw prompt before image generation.", "Direct → Image Agent. Enhance → Prompt Agent → Image Agent.", "The selected speed mode is included with both requests."],
+        prompt: ["Prompt Agent", "Enhances instructional prompts and applies safety, skill, memory, and compression context.", "POST /enhance with raw_prompt, speed_mode, retry feedback, and optional controls.", "Qwen 2.5-3B on T4 or A10G depending on speed mode."],
+        image: ["Image Agent", "Generates the educational infographic from the best available prompt.", "POST /generate returns image_base64 or a structured policy / runtime error.", "FLUX.1-dev on A10G, A100, or H100."],
+        output: ["Educational Image", "The primary generated PNG and source for both downstream experiences.", "Base64 PNG returned to the client.", "Rendered directly, sent to Interactive Agent, or sent to 3D Agent."],
+        choice: ["Explore Output", "Branches the finished image into semantic analysis or 3D conversion.", "User selects a point / box or presses Convert to 3D.", "Both branches preserve the selected speed tier."],
+        interactive: ["Interactive Agent", "Segments the selected object, identifies it, retrieves context, then answers in identify, explain, or ask mode.", "POST /analyze with image_base64, interaction coordinates, mode, and optional question.", "SAM 2.1 on A10G / A100 and Qwen2.5-VL on A10G / A100 / H100."],
+        rag: ["Hybrid RAG", "Grounds interactive explanations using indexed knowledge and prior system data.", "Hybrid pgvector + PostgreSQL full-text retrieval; Jina Reader is a fallback.", "Retrieved context is token-limited before VLM use."],
+        answer: ["Mask + Explanation", "Returns the selected region, highlighted composite, concept, and grounded answer.", "mask_base64, highlighted_base64, response_text, bbox, and source identifiers.", "Interaction metadata is written to Supabase when available."],
+        threed: ["3D Agent", "Removes the background and converts the generated image into a textured mesh.", "POST /convert/start returns call_id; GET /convert/result/{call_id} is polled every 3 seconds.", "Hunyuan3D-2 on A10G, A100, or H100; frontend timeout is 20 minutes."],
+        glb: ["Textured GLB", "Portable 3D output displayed with the app's Three.js viewer.", "Base64-encoded .glb plus size_kb.", "The viewer supports orbit inspection and model export."],
+        api: ["Service Client", "Any caller using the full evaluated generation contract.", "POST /generate on the Image Generation Orchestrator.", "May configure reflexion, memory, skill rules, dual critics, persistence, and seed."],
+        orchestrator: ["Orchestrator", "Coordinates stateful prompt → image → evaluation → reflection execution.", "FastAPI request mapped into LangGraph PipelineState.", "CPU-only Modal service; heavy inference is delegated over HTTPS."],
+        eval: ["Evaluation Agent", "Scores prompt alignment, visual quality, and educational usefulness.", "POST /evaluate with image, enhanced prompt, and raw prompt.", "Produces CLIP, VLM, visual, pedagogical, and feedback fields."],
+        reflect: ["Reflect & Retry", "Accepts strong output or turns evaluator notes into targeted retry feedback.", "Scores ≥ 7 for visual and pedagogical quality are accepted.", "Retains the best attempt and permits at most two retries."],
+        db: ["Supabase Memory", "Persists pipeline runs and promotes strong attempts into reusable experience memory.", "PostgreSQL tables for runs, embeddings, knowledge chunks, interaction logs, and skill versions.", "Persistence failures remain non-fatal to image delivery."]
+      };
+
+      const edges = [
+        ["user", "app", "generate interact threed", "prompt / action"],
+        ["app", "mode", "generate", "generate"],
+        ["mode", "prompt", "generate", "enhance"],
+        ["prompt", "image", "generate quality", "enhanced prompt"],
+        ["mode", "image", "generate", "direct"],
+        ["image", "output", "generate", "PNG"],
+        ["output", "choice", "interact threed", "explore"],
+        ["choice", "interactive", "interact", "point / box"],
+        ["interactive", "rag", "interact", "identify"],
+        ["rag", "interactive", "interact", "context", "optional"],
+        ["interactive", "answer", "interact", "mask + answer"],
+        ["answer", "app", "interact", "render"],
+        ["choice", "threed", "threed", "convert"],
+        ["threed", "glb", "threed", "GLB"],
+        ["glb", "app", "threed", "3D viewer"],
+        ["api", "orchestrator", "quality", "request"],
+        ["orchestrator", "prompt", "quality", "1 · enhance"],
+        ["image", "eval", "quality", "2 · evaluate"],
+        ["eval", "reflect", "quality", "scores"],
+        ["reflect", "prompt", "quality", "retry ≤ 2", "optional"],
+        ["reflect", "db", "quality", "accept"],
+        ["db", "api", "quality", "response"]
+      ];
+
+      const canvas = document.getElementById("canvas");
+      const svg = document.getElementById("connectors");
+      const nodes = [...document.querySelectorAll(".node")];
+      const tabs = [...document.querySelectorAll(".tab")];
+      let activeFlow = "all";
+      let selectedNode = null;
+
+      function nodeCenter(id) {
+        const element = canvas.querySelector(`[data-id="${id}"]`);
+        return {
+          x: element.offsetLeft + element.offsetWidth / 2,
+          y: element.offsetTop + element.offsetHeight / 2,
+          left: element.offsetLeft,
+          right: element.offsetLeft + element.offsetWidth,
+          top: element.offsetTop,
+          bottom: element.offsetTop + element.offsetHeight
+        };
+      }
+
+      function pathBetween(sourceId, targetId) {
+        const a = nodeCenter(sourceId);
+        const b = nodeCenter(targetId);
+        const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
+        let sx, sy, tx, ty;
+        if (horizontal) {
+          sx = b.x >= a.x ? a.right : a.left;
+          sy = a.y;
+          tx = b.x >= a.x ? b.left : b.right;
+          ty = b.y;
+          const mx = (sx + tx) / 2;
+          return { d: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ty}, ${tx} ${ty}`, lx: mx, ly: (sy + ty) / 2 - 7 };
+        }
+        sx = a.x;
+        sy = b.y >= a.y ? a.bottom : a.top;
+        tx = b.x;
+        ty = b.y >= a.y ? b.top : b.bottom;
+        const my = (sy + ty) / 2;
+        return { d: `M ${sx} ${sy} C ${sx} ${my}, ${tx} ${my}, ${tx} ${ty}`, lx: (sx + tx) / 2 + 6, ly: my - 7 };
+      }
+
+      function drawEdges() {
+        svg.querySelectorAll(".edge, .edge-label").forEach((element) => element.remove());
+        edges.forEach(([source, target, edgeFlows, label, kind]) => {
+          const route = pathBetween(source, target);
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", route.d);
+          path.setAttribute("class", "edge");
+          path.dataset.flows = edgeFlows;
+          path.dataset.source = source;
+          path.dataset.target = target;
+          if (kind) path.dataset.kind = kind;
+          svg.appendChild(path);
+
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", route.lx);
+          text.setAttribute("y", route.ly);
+          text.setAttribute("text-anchor", "middle");
+          text.setAttribute("class", "edge-label");
+          text.dataset.flows = edgeFlows;
+          text.dataset.source = source;
+          text.dataset.target = target;
+          text.textContent = label;
+          svg.appendChild(text);
+        });
+      }
+
+      function belongs(element, flow) {
+        return flow === "all" || (element.dataset.flows || "").split(" ").includes(flow);
+      }
+
+      function updateView(flow) {
+        activeFlow = flow;
+        selectedNode = null;
+        tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.flow === flow)));
+        document.getElementById("diagram-title").textContent = flows[flow].title;
+        document.getElementById("diagram-subtitle").textContent = flows[flow].subtitle;
+        nodes.forEach((node) => {
+          node.classList.toggle("is-muted", !belongs(node, flow));
+          node.classList.remove("is-active");
+        });
+        svg.querySelectorAll(".edge, .edge-label").forEach((edge) => {
+          edge.classList.toggle("is-muted", !belongs(edge, flow));
+          edge.classList.toggle("is-active", flow !== "all" && belongs(edge, flow));
+        });
+        document.getElementById("detail-name").textContent = flows[flow].title;
+        document.getElementById("detail-description").textContent = flows[flow].subtitle;
+        document.getElementById("detail-interface").textContent = flow === "quality" ? "Service client → orchestrator → independently deployed agent APIs." : "Expo client → independently deployed Modal agent APIs.";
+        document.getElementById("detail-runtime").textContent = flow === "all" ? "Select a node for exact endpoint, model, and data details." : "Highlighted connectors show only this workflow; dashed lines are optional or conditional.";
+      }
+
+      function selectNode(node) {
+        selectedNode = node.dataset.id;
+        const info = details[selectedNode];
+        nodes.forEach((item) => item.classList.toggle("is-active", item === node));
+        svg.querySelectorAll(".edge").forEach((edge) => {
+          const connected = edge.dataset.source === selectedNode || edge.dataset.target === selectedNode;
+          edge.classList.toggle("is-active", connected);
+          edge.classList.toggle("is-muted", !connected);
+        });
+        svg.querySelectorAll(".edge-label").forEach((label) => {
+          const connected = label.dataset.source === selectedNode || label.dataset.target === selectedNode;
+          label.classList.toggle("is-muted", !connected);
+        });
+        document.getElementById("detail-name").textContent = info[0];
+        document.getElementById("detail-description").textContent = info[1];
+        document.getElementById("detail-interface").textContent = info[2];
+        document.getElementById("detail-runtime").textContent = info[3];
+      }
+
+      tabs.forEach((tab) => tab.addEventListener("click", () => updateView(tab.dataset.flow)));
+      nodes.forEach((node) => node.addEventListener("click", () => selectNode(node)));
+      window.addEventListener("resize", drawEdges);
+
+      drawEdges();
+      updateView("all");
+    })();
+  </script>
+</body>
+</html>
