@@ -377,7 +377,13 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
             ) : (isProcessing || isTranscribing) ? (
               <p className="text-[13px] font-medium text-brand-400 animate-pulse">
                 {isTranscribing
-                  ? `Sending to ${language === 'tamil' ? 'Tamil ASR (Qwen3)…' : 'Whisper…'}`
+                  ? `Sending to ${
+                      language === 'tamil'
+                        ? 'Tamil ASR (Qwen3)…'
+                        : language === 'sinhala'
+                          ? 'Sinhala ASR (Whisper Small)…'
+                          : 'Whisper…'
+                    }`
                   : 'Processing…'}
               </p>
             ) : (
@@ -446,7 +452,9 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
           <span className="text-sm text-brand-400 animate-pulse font-medium">
             {language === 'tamil'
               ? 'Transcribing with Tamil ASR Qwen3…'
-              : 'Transcribing with Whisper…'}
+              : language === 'sinhala'
+                ? 'Transcribing with Sinhala Whisper Small…'
+                : 'Transcribing with Whisper…'}
           </span>
         </div>
       )}

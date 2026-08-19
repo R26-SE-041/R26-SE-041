@@ -104,7 +104,8 @@ async def transcribe_audio(
     Phase 1 endpoint — Speech-to-Text only.
 
     1. Validates audio format and size.
-    2. Runs STT-only LangGraph pipeline (Whisper Large V3 on Modal).
+    2. Runs the STT-only LangGraph pipeline. Sinhala uses the dedicated
+       whisper-small-sinhala endpoint; other modes use their configured ASR.
     3. Returns transcript + detected language.
     """
     _validate_audio(audio_file)

@@ -155,6 +155,39 @@ async def call_whisper(audio_bytes: bytes, filename: str, language_hint: str) ->
     """
     settings = get_settings()
 
+    # Sinhala is intentionally restricted to the dedicated fine-tuned model.
+    # Never fall back to a different ASR model for Sinhala.
+    if language_hint.lower() == "sinhala":
+        if not settings.modal_sinhala_asr_url.strip():
+            raise RuntimeError(
+                "MODAL_SINHALA_ASR_URL is not configured. Deploy "
+                "backend/modal_endpoints/sinhala_whisper_asr.py and add its URL "
+                "to backend/.env."
+            )
+
+        result = await call_sinhala_asr_direct(
+            audio_bytes,
+            filename,
+            "application/octet-stream",
+        )
+        transcript = str((result or {}).get("text", "")).strip()
+        if not transcript:
+            raise RuntimeError(
+                "Lingalingeswaran/whisper-small-sinhala failed to return a "
+                "transcript. No fallback model was used."
+            )
+
+        return {
+            "transcript": transcript,
+            "detected_language": "si",
+            "duration_ms": int(
+                float((result or {}).get("duration_seconds", 0)) * 1000
+            ),
+            "engine": (result or {}).get(
+                "engine", "Lingalingeswaran/whisper-small-sinhala"
+            ),
+        }
+
     # Route Tamil to lemuralabs/tamil-asr-qwen3 if the endpoint is configured.
     # If the Qwen3-ASR model fails (crash-loop / cold-start timeout / any error),
     # automatically fall back to Whisper Large V3 with language_hint="tamil"
@@ -966,7 +999,7 @@ async def call_sinhala_asr_direct(
 ) -> dict | None:
     """Send audio to the isolated Sinhala Whisper ASR Modal endpoint.
 
-    TEMPORARY — used ONLY by POST /api/v1/test/sinhala-asr.
+    Used by the Sinhala voice route and by POST /api/v1/test/sinhala-asr.
 
     Architecture (completely isolated from all other ASR):
       - Uses MODAL_SINHALA_ASR_URL — separate from MODAL_WHISPER_URL and
@@ -974,8 +1007,8 @@ async def call_sinhala_asr_direct(
       - Calls the voicelearn-sinhala-whisper-asr Modal app.
       - The Modal container runs Lingalingeswaran/whisper-small-sinhala
         with forced Sinhala transcription mode (language="si", task="transcribe").
-      - Failure here ONLY affects the Sinhala ASR test route.
-        Tamil ASR, English ASR, RAG, TTS, and all other routes are untouched.
+      - Failure does not fall back to another ASR model. Tamil and English
+        routing are untouched.
 
     Returns dict with {"text", "latency_ms", "duration_seconds", "engine"}
     on success, or None on any failure.

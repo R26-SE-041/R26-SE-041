@@ -200,6 +200,10 @@ class Settings(BaseSettings):
     use_sinhala_asr_test: bool = False
     modal_sinhala_asr_url: str = ""
 
+    # Temporary manual Sinhala transcript -> existing multilingual RAG test.
+    # This flag does not affect production RAG, ASR, or any TTS route.
+    use_sinhala_rag_test: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

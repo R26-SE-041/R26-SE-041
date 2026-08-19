@@ -23,4 +23,8 @@ router.include_router(test_tamil_tts.router)
 # Does NOT affect Tamil/English/Mixed TTS, ASR, RAG, or any production route.
 from app.api.v1.routes import test_sinhala_tts  # noqa: E402
 router.include_router(test_sinhala_tts.router)
+
+# TEMPORARY: isolated Sinhala transcript -> existing RAG test route.
+from app.api.v1.routes import test_sinhala_rag  # noqa: E402
+router.include_router(test_sinhala_rag.router)
 # ── END TEMPORARY ─────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { LanguageSelector } from '@/components/voice/LanguageSelector'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import type { Language, TranscribeResponse, DocumentItem, AskResponse } from '@/types'
 import { uploadDocument, listDocuments, deleteDocument, correctTranscript, askDocument, synthesizeTamilSpeech, testSynthesizeTamilSpeech, synthesizeEnglishSpeech, testSynthesizeEnglishSpeech, synthesizeMixedSpeech, testSynthesizeMixedSpeech, testSynthesizeMultilingualSpeech, testSynthesizeIndicParlerMixedSpeech, testSynthesizeSinhalaSpeech, testSinhalaRomanize, testSinhalaPhoneticPreview, testSinhalaASR, type SinhalaPhoneticPreview } from '@/lib/api'
+import { testSinhalaRAG, type SinhalaRAGTestResult } from '@/services/sinhalaRagTestApi'
 import type { MixedTTSSegment } from '@/lib/api'
 
 // ── TEMPORARY feature flags (read once at module level, never re-read per render) ─
@@ -55,6 +56,9 @@ const _USE_SINHALA_TTS_TEST = process.env.NEXT_PUBLIC_USE_SINHALA_TTS_TEST === '
 // File-upload only — does NOT use useVoiceRecorder or affect Tamil/English ASR.
 // REMOVE this constant after Sinhala ASR evaluation is complete.
 const _USE_SINHALA_ASR_TEST = process.env.NEXT_PUBLIC_USE_SINHALA_ASR_TEST === 'true'
+
+// Manual text only; never connects the Sinhala ASR or any TTS path.
+const _USE_SINHALA_RAG_TEST = process.env.NEXT_PUBLIC_USE_SINHALA_RAG_TEST === 'true'
 
 // ── Script detection utility (mirrors backend detect_script) ─────────────────
 // Used to decide whether to call synthesizeMixedSpeech or synthesizeTamilSpeech
@@ -225,6 +229,14 @@ export default function StudyAssistantPage() {
   const [sinhalaAsrElapsed, setSinhalaAsrElapsed]       = useState(0)
   const sinhalaAsrFileInputRef = useRef<HTMLInputElement>(null)
   const sinhalaAsrTimerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // TEMPORARY Sinhala transcript -> existing RAG test state.
+  const [sinhalaRagTranscript, setSinhalaRagTranscript] = useState('')
+  const [sinhalaRagResult, setSinhalaRagResult] = useState<SinhalaRAGTestResult | null>(null)
+  const [sinhalaRagLoading, setSinhalaRagLoading] = useState(false)
+  const [sinhalaRagError, setSinhalaRagError] = useState<string | null>(null)
+  const [sinhalaRagElapsed, setSinhalaRagElapsed] = useState(0)
+  const sinhalaRagTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // END TEMPORARY Sinhala ASR Test state
 
   // English TTS production state
@@ -905,7 +917,11 @@ export default function StudyAssistantPage() {
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold rounded-full px-3 py-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {language === 'tamil' ? 'Tamil ASR · Qwen3' : 'Whisper V3'}
+              {language === 'tamil'
+                ? 'Tamil ASR · Qwen3'
+                : language === 'sinhala'
+                  ? 'Sinhala ASR · Whisper Small'
+                  : 'Whisper V3'}
             </span>
             <span className="inline-flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[11px] font-semibold rounded-full px-3 py-1">
               RAG · Phase 2
@@ -2523,6 +2539,105 @@ export default function StudyAssistantPage() {
           )}
           {/* ── TEMPORARY SINHALA TTS TEST SECTION END ──────────────────── */}
 
+          {/* TEMPORARY: manual Sinhala transcript -> existing RAG. No ASR/TTS. */}
+          {_USE_SINHALA_RAG_TEST && (
+            <section className="rounded-2xl border border-sky-400/20 bg-sky-400/[0.04] p-6 space-y-5">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="text-base font-bold text-white/90">
+                    Sinhala RAG &mdash; Transcript &rarr; Answer
+                    <span className="ml-2 text-[10px] uppercase tracking-widest text-sky-300/70 border border-sky-300/20 rounded-full px-2 py-0.5">Temporary Test</span>
+                  </h2>
+                  <p className="text-[11px] text-white/40 mt-1">Raw Sinhala text &rarr; existing BGE-M3 + BM25 + RRF + reranker + Gemma &rarr; Sinhala text.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSinhalaRagTranscript('')
+                    setSinhalaRagResult(null)
+                    setSinhalaRagError(null)
+                    setSinhalaRagElapsed(0)
+                  }}
+                  className="text-xs text-white/40 hover:text-white/70"
+                >Clear / Reset</button>
+              </div>
+
+              <textarea
+                id="sinhala-rag-transcript"
+                value={sinhalaRagTranscript}
+                onChange={(event) => setSinhalaRagTranscript(event.target.value)}
+                placeholder="බල්ලන්ට විෂ සහිත ආහාර මොනවාද?"
+                rows={4}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-base text-white/90 placeholder:text-white/20 focus:outline-none focus:border-sky-400/40 resize-y"
+                style={{ fontFamily: "'Noto Sans Sinhala', 'Iskoola Pota', sans-serif" }}
+              />
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  id="sinhala-rag-ask-btn"
+                  type="button"
+                  disabled={!sinhalaRagTranscript.trim() || sinhalaRagLoading}
+                  onClick={async () => {
+                    const transcript = sinhalaRagTranscript.trim()
+                    if (!transcript) return
+                    setSinhalaRagLoading(true)
+                    setSinhalaRagResult(null)
+                    setSinhalaRagError(null)
+                    setSinhalaRagElapsed(0)
+                    const started = Date.now()
+                    if (sinhalaRagTimerRef.current) clearInterval(sinhalaRagTimerRef.current)
+                    sinhalaRagTimerRef.current = setInterval(() => setSinhalaRagElapsed(Date.now() - started), 100)
+                    try {
+                      setSinhalaRagResult(await testSinhalaRAG(transcript))
+                    } catch (error: unknown) {
+                      setSinhalaRagError(error instanceof Error ? error.message : 'Sinhala RAG request failed.')
+                    } finally {
+                      setSinhalaRagLoading(false)
+                      setSinhalaRagElapsed(Date.now() - started)
+                      if (sinhalaRagTimerRef.current) clearInterval(sinhalaRagTimerRef.current)
+                      sinhalaRagTimerRef.current = null
+                    }
+                  }}
+                  className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-sky-400 transition-colors"
+                >{sinhalaRagLoading ? 'Asking RAG…' : 'Ask RAG'}</button>
+                <span className="text-xs text-white/35 tabular-nums">{(sinhalaRagElapsed / 1000).toFixed(1)}s elapsed</span>
+              </div>
+
+              {sinhalaRagError && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{sinhalaRagError}</div>}
+
+              {sinhalaRagResult && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-sky-400/15 bg-black/25 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-sky-300/60 mb-2">Sinhala answer</p>
+                    <p className="text-base leading-8 text-white/90" style={{ fontFamily: "'Noto Sans Sinhala', 'Iskoola Pota', sans-serif" }}>{sinhalaRagResult.answer}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px] text-white/50">
+                    <Chip label="Retrieval" value={`${sinhalaRagResult.timings.retrieval_ms} ms`} variant="dim" />
+                    <Chip label="Gemma" value={`${sinhalaRagResult.timings.generation_ms} ms`} variant="dim" />
+                    <Chip label="Localization" value={`${sinhalaRagResult.timings.localization_ms} ms`} variant="dim" />
+                    <Chip label="Total" value={`${sinhalaRagResult.timings.total_ms} ms`} variant="accent" />
+                    <Chip label="Translation fallback" value={sinhalaRagResult.translation_fallback_used ? 'used' : 'not used'} variant="brand" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">Retrieved sources</p>
+                    {sinhalaRagResult.sources.length === 0 ? (
+                      <p className="text-xs text-white/35">No matching chunks.</p>
+                    ) : sinhalaRagResult.sources.map((source, index) => (
+                      <details key={`${source.document_id}-${index}`} className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <summary className="cursor-pointer text-xs text-white/65">
+                          {source.filename}{source.page ? ` · page ${source.page}` : ''} · score {source.score.toFixed(4)}
+                        </summary>
+                        <p className="mt-2 text-xs leading-5 text-white/45 whitespace-pre-wrap">{source.excerpt}</p>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="border-t border-white/5 pt-3 text-[11px] text-white/30">Manual text only &middot; Raw transcript &middot; No ASR connection &middot; No transcript correction &middot; No TTS.</p>
+            </section>
+          )}
+
           {/* -- TEMPORARY: Sinhala ASR Test Panel ---------------------------------
                Model: Lingalingeswaran/whisper-small-sinhala
                Isolated: file-upload only, no RAG, no TTS, no transcript correction.
@@ -2716,7 +2831,13 @@ export default function StudyAssistantPage() {
           {/* -- TEMPORARY SINHALA ASR TEST SECTION END -- */}
           {/* ── Footer ────────────────────────────────────────── */}
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 pt-2 text-[11px] text-white/20 font-medium">
-            <span>{language === 'tamil' ? 'Tamil ASR Qwen3' : 'Whisper Large V3'}</span>
+            <span>
+              {language === 'tamil'
+                ? 'Tamil ASR Qwen3'
+                : language === 'sinhala'
+                  ? 'Sinhala Whisper Small'
+                  : 'Whisper Large V3'}
+            </span>
             <span className="text-white/10">·</span>
             <span>Gemma 4 12B Transcript Corrector</span>
             <span className="text-white/10">·</span>

@@ -1,8 +1,10 @@
 """
 STT Agent — LangGraph node.
 
-Responsibility: Call Modal Whisper Large V3 endpoint and populate
-the transcript in the pipeline state.
+Responsibility: Route audio to the language-appropriate Modal ASR endpoint and
+populate the transcript in the pipeline state. Sinhala uses the dedicated
+whisper-small-sinhala model; Tamil can use Qwen3 ASR; other modes use Whisper
+Large V3.
 
 Single Responsibility: this node ONLY handles speech-to-text.
 """
@@ -15,7 +17,7 @@ logger = get_logger(__name__)
 
 async def stt_node(state: dict) -> dict:
     """
-    LangGraph node: Speech-to-Text via Whisper Large V3 on Modal.
+    LangGraph node: language-routed Speech-to-Text on Modal.
 
     Expected state keys in:
         audio_bytes (bytes): Raw audio data.
