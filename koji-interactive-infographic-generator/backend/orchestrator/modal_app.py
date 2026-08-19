@@ -26,6 +26,7 @@ REST CONTRACT: see README.md
 from __future__ import annotations
 
 import base64
+from typing import Literal
 
 import modal
 
@@ -41,6 +42,7 @@ image = (
         "requests>=2.32.0",
         "psycopg2-binary>=2.9.9",
         "typing_extensions>=4.12.0",
+        "sentence-transformers>=3.2.0",
     )
     # Run `modal deploy` from backend/ so both source paths resolve correctly
     .add_local_python_source("shared")
@@ -54,7 +56,7 @@ app = modal.App("image-gen-orchestrator", image=image)
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 web_app = FastAPI(
     title="Image Generation Orchestrator",
@@ -75,8 +77,27 @@ web_app.add_middleware(
 
 # ── Request / Response schemas ────────────────────────────────────────────────
 
+class ExperimentConfig(BaseModel):
+    """Explicit switches used by reproducible ablation and skill validation runs."""
+
+    model_config = ConfigDict(extra="forbid")
+    config_id: str = Field(default="custom", max_length=40)
+    enable_reflexion: bool = True
+    enable_memento: bool = True
+    enable_skill_rules: bool = True
+    enable_dual_critic: bool = True
+    persist_run: bool = False
+    seed: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    skill_rules_override: str | None = Field(default=None, max_length=20_000)
+
+
 class GenerateRequest(BaseModel):
     prompt: str
+    experiment: ExperimentConfig | None = None
+    speed_mode: Literal["normal", "pro", "promax"] = "pro"
+    skill_compression_mode: Literal["auto", "always", "off"] = "auto"
+    skill_token_budget: int = Field(default=150, ge=40, le=600)
+    available_context_tokens: int | None = Field(default=None, ge=100, le=32_768)
 
     @field_validator("prompt")
     @classmethod
@@ -90,6 +111,8 @@ class GenerateRequest(BaseModel):
 class EvalScores(BaseModel):
     clip_score: float | None
     vlm_score: float | None
+    visual_score: float | None
+    pedagogical_score: float | None
     vlm_feedback: str | None
 
 
@@ -99,6 +122,10 @@ class GenerateResponse(BaseModel):
     eval_scores: EvalScores
     db_record_id: str | None
     error: str | None                  # None = full success; non-None = partial/full failure
+    retry_count: int
+    config_id: str | None
+    skill_compression: dict
+    safety: dict
 
 
 # ── Graph singleton — built once per container ────────────────────────────────
@@ -139,7 +166,12 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     from shared.state import initial_state
 
     graph = _get_graph()
-    state = initial_state(raw_prompt=req.prompt)
+    experiment_config = req.experiment.model_dump() if req.experiment else {}
+    state = initial_state(raw_prompt=req.prompt, experiment_config=experiment_config)
+    state["speed_mode"] = req.speed_mode
+    state["skill_compression_mode"] = req.skill_compression_mode
+    state["skill_token_budget"] = req.skill_token_budget
+    state["available_context_tokens"] = req.available_context_tokens
 
     try:
         final_state = graph.invoke(state)
@@ -161,10 +193,16 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         eval_scores=EvalScores(
             clip_score=final_state.get("clip_score"),
             vlm_score=final_state.get("vlm_score"),
+            visual_score=final_state.get("visual_score"),
+            pedagogical_score=final_state.get("pedagogical_score"),
             vlm_feedback=final_state.get("vlm_feedback"),
         ),
         db_record_id=final_state.get("db_record_id"),
         error=final_state.get("error"),
+        retry_count=final_state.get("retry_count", 0),
+        config_id=experiment_config.get("config_id") if experiment_config else None,
+        skill_compression=final_state.get("skill_compression") or {},
+        safety=final_state.get("safety") or {},
     )
 
 

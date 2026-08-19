@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.api.feedback import router as feedback_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(feedback_router)
 
 
 @app.get("/")

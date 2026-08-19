@@ -31,8 +31,9 @@ SUPABASE TABLE — run this migration once in the Supabase SQL editor:
 from __future__ import annotations
 
 import os
+import json
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
 import psycopg2
 import psycopg2.extras  # for DictCursor
@@ -88,6 +89,8 @@ def update_pipeline_record(
     image_data: Optional[bytes] = None,
     clip_score: Optional[float] = None,
     vlm_score: Optional[float] = None,
+    visual_score: Optional[float] = None,
+    pedagogical_score: Optional[float] = None,
     vlm_feedback: Optional[str] = None,
     error: Optional[str] = None,
 ) -> None:
@@ -107,6 +110,12 @@ def update_pipeline_record(
     if vlm_score is not None:
         fields.append("vlm_score = %s")
         values.append(vlm_score)
+    if visual_score is not None:
+        fields.append("visual_score = %s")
+        values.append(visual_score)
+    if pedagogical_score is not None:
+        fields.append("pedagogical_score = %s")
+        values.append(pedagogical_score)
     if vlm_feedback is not None:
         fields.append("vlm_feedback = %s")
         values.append(vlm_feedback)
@@ -123,3 +132,416 @@ def update_pipeline_record(
     with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, values)
+
+
+def _vector_literal(values: list[float]) -> str:
+    if len(values) != 384:
+        raise ValueError(f"Expected a 384-dimensional embedding, got {len(values)}")
+    return "[" + ",".join(f"{float(value):.8g}" for value in values) + "]"
+
+
+def insert_prompt_experience(
+    raw_prompt: str,
+    enhanced_prompt: str,
+    visual_score: float,
+    pedagogical_score: float,
+    prompt_embedding: list[float],
+    clip_score: float | None = None,
+    vlm_feedback: str | None = None,
+    subject_tag: str | None = None,
+    grade_tag: str | None = None,
+    style_tag: str | None = None,
+    skill_version: str | None = None,
+) -> str:
+    sql = """
+        INSERT INTO prompt_experiences
+            (raw_prompt, enhanced_prompt, visual_score, pedagogical_score,
+             clip_score, vlm_feedback, subject_tag, grade_tag, style_tag,
+             prompt_embedding, skill_version)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
+        RETURNING id::text
+    """
+    values = (
+        raw_prompt, enhanced_prompt, visual_score, pedagogical_score,
+        clip_score, vlm_feedback, subject_tag, grade_tag, style_tag,
+        _vector_literal(prompt_embedding), skill_version,
+    )
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, values)
+            return cur.fetchone()[0]
+
+
+def insert_knowledge_chunk(
+    content: str,
+    source_pdf: str,
+    page_num: int | None,
+    subject: str | None,
+    embedding: list[float],
+) -> str:
+    sql = """
+        INSERT INTO knowledge_chunks (content, source_pdf, page_num, subject, embedding)
+        VALUES (%s, %s, %s, %s, %s::vector)
+        RETURNING id::text
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (content, source_pdf, page_num, subject, _vector_literal(embedding)))
+            return cur.fetchone()[0]
+
+
+def insert_interaction_log(
+    pipeline_run_id: str | None,
+    click_x: float | None,
+    click_y: float | None,
+    mode: str,
+    user_question: str | None,
+    identified_concept: str | None,
+    vlm_response: str | None,
+    rag_chunks_used: list[str] | None = None,
+) -> str:
+    sql = """
+        INSERT INTO interaction_logs
+            (pipeline_run_id, click_x, click_y, mode, user_question,
+             identified_concept, vlm_response, rag_chunks_used)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::uuid[])
+        RETURNING id::text
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                pipeline_run_id, click_x, click_y, mode, user_question,
+                identified_concept, vlm_response, rag_chunks_used or [],
+            ))
+            return cur.fetchone()[0]
+
+
+_HYBRID_TABLES = {
+    "knowledge_chunks": ("content", "source_pdf"),
+    "prompt_experiences": ("enhanced_prompt", "raw_prompt"),
+}
+
+
+def hybrid_retrieve(
+    query: str,
+    query_embedding: list[float],
+    table: str,
+    n: int = 5,
+    k: int = 60,
+) -> list[dict[str, Any]]:
+    """Fuse semantic and full-text rankings using Reciprocal Rank Fusion."""
+    if table not in _HYBRID_TABLES:
+        raise ValueError(f"Hybrid retrieval is not allowed for table {table!r}")
+    if not query.strip() or n < 1:
+        return []
+    content_col, source_col = _HYBRID_TABLES[table]
+    candidate_limit = max(n * 4, 20)
+    sql = f"""
+        WITH vector_results AS (
+            SELECT id, {content_col} AS content, {source_col} AS source,
+                   ROW_NUMBER() OVER (ORDER BY prompt_embedding <=> %s::vector) AS vec_rank
+            FROM {table}
+            ORDER BY prompt_embedding <=> %s::vector
+            LIMIT %s
+        ),
+        fts_results AS (
+            SELECT id, {content_col} AS content, {source_col} AS source,
+                   ROW_NUMBER() OVER (
+                       ORDER BY ts_rank(fts, websearch_to_tsquery('english', %s)) DESC
+                   ) AS fts_rank
+            FROM {table}
+            WHERE fts @@ websearch_to_tsquery('english', %s)
+            LIMIT %s
+        ),
+        combined AS (
+            SELECT COALESCE(v.id, f.id) AS id,
+                   COALESCE(v.content, f.content) AS content,
+                   COALESCE(v.source, f.source) AS source,
+                   COALESCE(1.0 / (%s + v.vec_rank), 0) +
+                   COALESCE(1.0 / (%s + f.fts_rank), 0) AS rrf_score
+            FROM vector_results v FULL OUTER JOIN fts_results f ON v.id = f.id
+        )
+        SELECT id::text, content, source, rrf_score
+        FROM combined ORDER BY rrf_score DESC LIMIT %s
+    """
+    if table == "knowledge_chunks":
+        sql = sql.replace("prompt_embedding", "embedding")
+    vector = _vector_literal(query_embedding)
+    params = (vector, vector, candidate_limit, query, query, candidate_limit, k, k, n)
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+
+def get_similar_experiences(raw_prompt: str, embedding: list[float], limit: int = 3) -> list[dict[str, Any]]:
+    return hybrid_retrieve(raw_prompt, embedding, "prompt_experiences", limit)
+
+
+def vector_retrieve(
+    query_embedding: list[float],
+    table: str = "knowledge_chunks",
+    n: int = 5,
+) -> list[dict[str, Any]]:
+    if table not in _HYBRID_TABLES:
+        raise ValueError(f"Vector retrieval is not allowed for table {table!r}")
+    content_col, source_col = _HYBRID_TABLES[table]
+    embedding_col = "embedding" if table == "knowledge_chunks" else "prompt_embedding"
+    sql = f"""
+        SELECT id::text, {content_col} AS content, {source_col} AS source,
+               1 - ({embedding_col} <=> %s::vector) AS score
+        FROM {table}
+        ORDER BY {embedding_col} <=> %s::vector
+        LIMIT %s
+    """
+    vector = _vector_literal(query_embedding)
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (vector, vector, n))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def full_text_retrieve(
+    query: str,
+    table: str = "knowledge_chunks",
+    n: int = 5,
+) -> list[dict[str, Any]]:
+    if table not in _HYBRID_TABLES:
+        raise ValueError(f"Full-text retrieval is not allowed for table {table!r}")
+    if not query.strip():
+        return []
+    content_col, source_col = _HYBRID_TABLES[table]
+    sql = f"""
+        SELECT id::text, {content_col} AS content, {source_col} AS source,
+               ts_rank(fts, websearch_to_tsquery('english', %s)) AS score
+        FROM {table}
+        WHERE fts @@ websearch_to_tsquery('english', %s)
+        ORDER BY score DESC
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (query, query, n))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def list_high_scoring_experiences(min_score: float = 8.0, limit: int = 200) -> list[dict[str, Any]]:
+    sql = """
+        SELECT id::text, raw_prompt, enhanced_prompt, visual_score,
+               pedagogical_score, subject_tag, grade_tag, style_tag, skill_version
+        FROM prompt_experiences
+        WHERE (visual_score + pedagogical_score) / 2.0 >= %s
+        ORDER BY created_at DESC LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (min_score, limit))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def consolidate_prompt_experiences(similarity_threshold: float = 0.90) -> dict[str, int]:
+    """Delete lower-scoring near duplicates while retaining the best experience."""
+    sql = """
+        WITH ranked_duplicates AS (
+            SELECT CASE
+                WHEN (left_exp.visual_score + left_exp.pedagogical_score) >=
+                     (right_exp.visual_score + right_exp.pedagogical_score)
+                THEN right_exp.id ELSE left_exp.id
+            END AS id
+            FROM prompt_experiences left_exp
+            JOIN prompt_experiences right_exp ON left_exp.id < right_exp.id
+            WHERE 1 - (left_exp.prompt_embedding <=> right_exp.prompt_embedding) >= %s
+        )
+        DELETE FROM prompt_experiences
+        WHERE id IN (SELECT id FROM ranked_duplicates)
+        RETURNING id
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (similarity_threshold,))
+            return {"deleted": len(cur.fetchall())}
+
+
+def list_interaction_aggregates(days: int = 30, min_occurrences: int = 3) -> list[dict[str, Any]]:
+    """Aggregate interaction behavior by normalized identified concept."""
+    sql = """
+        SELECT lower(trim(identified_concept)) AS concept,
+               COUNT(*)::int AS occurrences,
+               COUNT(*) FILTER (WHERE mode = 'identify')::int AS identify_count,
+               COUNT(*) FILTER (WHERE mode = 'ask')::int AS ask_count,
+               COUNT(*) FILTER (WHERE user_question IS NOT NULL AND trim(user_question) <> '')::int AS question_count,
+               AVG(pr.visual_score) AS avg_visual_score,
+               AVG(pr.pedagogical_score) AS avg_pedagogical_score
+        FROM interaction_logs il
+        LEFT JOIN pipeline_runs pr ON pr.id = il.pipeline_run_id
+        WHERE il.created_at >= NOW() - (%s * INTERVAL '1 day')
+          AND identified_concept IS NOT NULL
+          AND trim(identified_concept) <> ''
+        GROUP BY lower(trim(identified_concept))
+        HAVING COUNT(*) >= %s
+        ORDER BY COUNT(*) DESC
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (days, min_occurrences))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def upsert_feedback_pattern(pattern: dict[str, Any]) -> str:
+    sql = """
+        INSERT INTO feedback_patterns
+            (pattern_key, concept, pattern_type, occurrences, confidence,
+             suggested_rule, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+        ON CONFLICT (pattern_key) DO UPDATE SET
+            occurrences = EXCLUDED.occurrences,
+            confidence = EXCLUDED.confidence,
+            suggested_rule = EXCLUDED.suggested_rule,
+            metadata = EXCLUDED.metadata,
+            status = CASE WHEN feedback_patterns.status = 'dismissed'
+                          THEN 'dismissed' ELSE 'active' END,
+            last_seen_at = NOW()
+        RETURNING id::text
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                pattern["pattern_key"], pattern["concept"], pattern["pattern_type"],
+                pattern["occurrences"], pattern["confidence"], pattern["suggested_rule"],
+                json.dumps(pattern.get("metadata") or {}),
+            ))
+            return cur.fetchone()[0]
+
+
+def list_active_feedback_patterns(limit: int = 50) -> list[dict[str, Any]]:
+    sql = """
+        SELECT id::text, pattern_key, concept, pattern_type, occurrences,
+               confidence, suggested_rule, metadata
+        FROM feedback_patterns
+        WHERE status = 'active'
+        ORDER BY confidence DESC, occurrences DESC
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (limit,))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def mark_feedback_patterns_consumed(pattern_ids: list[str]) -> None:
+    if not pattern_ids:
+        return
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE feedback_patterns SET status = 'consumed' WHERE id = ANY(%s::uuid[])",
+                (pattern_ids,),
+            )
+
+
+def list_validation_prompts(limit: int = 10) -> list[str]:
+    """Return a deterministic held-out prompt set not selected by recency."""
+    sql = """
+        SELECT raw_prompt
+        FROM pipeline_runs
+        WHERE error IS NULL AND raw_prompt IS NOT NULL AND trim(raw_prompt) <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM prompt_experiences pe
+              WHERE pe.raw_prompt = pipeline_runs.raw_prompt
+          )
+        GROUP BY raw_prompt
+        ORDER BY md5(raw_prompt)
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (limit,))
+            return [row[0] for row in cur.fetchall()]
+
+
+def get_deployed_skill_version() -> dict[str, Any] | None:
+    sql = """
+        SELECT id::text, version, content, old_score, new_score, deployed_at
+        FROM skill_versions WHERE status = 'deployed' LIMIT 1
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def get_latest_skill_version_number() -> int | None:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT MAX(version) FROM skill_versions")
+            row = cur.fetchone()
+            return int(row[0]) if row and row[0] is not None else None
+
+
+def record_skill_version(
+    version: int,
+    content: str,
+    status: str,
+    old_score: float | None,
+    new_score: float | None,
+    validation_count: int,
+    source_experience_count: int,
+    feedback_pattern_ids: list[str],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    if status not in {"candidate", "rejected", "deployed", "superseded"}:
+        raise ValueError(f"Invalid skill version status: {status}")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            if status == "deployed":
+                cur.execute("UPDATE skill_versions SET status = 'superseded' WHERE status = 'deployed'")
+            cur.execute("""
+                INSERT INTO skill_versions
+                    (version, content, status, old_score, new_score, validation_count,
+                     source_experience_count, feedback_pattern_ids, metadata, deployed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s::jsonb,
+                        CASE WHEN %s = 'deployed' THEN NOW() ELSE NULL END)
+                RETURNING id::text
+            """, (
+                version, content, status, old_score, new_score, validation_count,
+                source_experience_count, feedback_pattern_ids, json.dumps(metadata or {}), status,
+            ))
+            return cur.fetchone()[0]
+
+
+def activate_skill_version(version: int) -> None:
+    """Atomically supersede the active version and activate a committed candidate."""
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE skill_versions SET status = 'superseded' WHERE status = 'deployed'")
+            cur.execute(
+                "UPDATE skill_versions SET status = 'deployed', deployed_at = NOW() "
+                "WHERE version = %s AND status = 'candidate'",
+                (version,),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"Skill version {version} is not an activatable candidate")
+
+
+def insert_ablation_result(result: dict[str, Any]) -> None:
+    sql = """
+        INSERT INTO ablation_results
+            (experiment_id, config_id, prompt_id, seed, visual_score,
+             pedagogical_score, clip_score, retry_count, latency_ms, error)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (experiment_id, config_id, prompt_id, seed) DO UPDATE SET
+            visual_score = EXCLUDED.visual_score,
+            pedagogical_score = EXCLUDED.pedagogical_score,
+            clip_score = EXCLUDED.clip_score,
+            retry_count = EXCLUDED.retry_count,
+            latency_ms = EXCLUDED.latency_ms,
+            error = EXCLUDED.error
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                result["experiment_id"], result["config_id"], result["prompt_id"], result["seed"],
+                result.get("visual_score"), result.get("pedagogical_score"), result.get("clip_score"),
+                result.get("retry_count", 0), result.get("latency_ms"), result.get("error"),
+            ))
