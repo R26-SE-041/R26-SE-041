@@ -5,17 +5,20 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { startSession, getDocuments, uploadDocument } from "@/lib/api";
 import type { QuizConfig, ExamType, DifficultyMode, DocumentInfo } from "@/types/quiz";
+import {
+  FileTextIcon,
+  PresentationIcon,
+  FolderIcon,
+  UploadCloudIcon,
+  ClockIcon,
+} from "@/components/ui/Icons";
 
 const ALLOWED_TYPES = [".pdf", ".docx", ".pptx", ".txt"];
 
 function FileIcon({ ext }: { ext: string }) {
-  const icons: Record<string, string> = {
-    pdf: "📄",
-    docx: "📝",
-    pptx: "📊",
-    txt: "🗒️",
-  };
-  return <span>{icons[ext] ?? "📁"}</span>;
+  if (ext === "pptx") return <PresentationIcon className="w-5 h-5 text-orange-400" />;
+  if (ext === "pdf" || ext === "docx" || ext === "txt") return <FileTextIcon className="w-5 h-5 text-violet-400" />;
+  return <FolderIcon className="w-5 h-5 text-white/40" />;
 }
 
 export default function UploadPage() {
@@ -25,7 +28,7 @@ export default function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingDocs, setLoadingDocs] = useState(true);
-  
+
   const [config, setConfig] = useState<QuizConfig>({
     examType: "mcq",
     numQuestions: 10,
@@ -112,6 +115,13 @@ export default function UploadPage() {
     }
   };
 
+  const difficultyOptions: { val: DifficultyMode; label: string; desc: string; color: string }[] = [
+    { val: "adaptive", label: "Adaptive", desc: "Adjusts in real-time (recommended)", color: "#8b5cf6" },
+    { val: "easy",     label: "Easy",     desc: "Remember & understand level",         color: "#34d399" },
+    { val: "medium",   label: "Medium",   desc: "Apply level",                          color: "#fbbf24" },
+    { val: "hard",     label: "Hard",     desc: "Analyze & evaluate level",             color: "#f87171" },
+  ];
+
   return (
     <main className="min-h-screen py-12 px-4">
       {/* Nav */}
@@ -168,7 +178,13 @@ export default function UploadPage() {
                 onChange={(e) => e.target.files && addFiles(e.target.files)}
               />
               <div className="p-8 text-center">
-                <div className="text-4xl mb-4">{uploading ? "⏳" : dragging ? "✨" : "📂"}</div>
+                <div className="mb-4 flex justify-center text-white/50">
+                  {uploading
+                    ? <ClockIcon className="w-10 h-10 animate-pulse" />
+                    : dragging
+                    ? <UploadCloudIcon className="w-10 h-10 text-violet-400" />
+                    : <FolderIcon className="w-10 h-10" />}
+                </div>
                 <p className="text-white font-semibold mb-1">
                   {uploading ? "Uploading and processing..." : dragging ? "Drop files here" : "Upload new document"}
                 </p>
@@ -196,7 +212,7 @@ export default function UploadPage() {
                           isSelected ? "border-purple-500/50 bg-purple-500/10" : "border-white/10 bg-white/5 hover:border-white/20"
                         }`}
                       >
-                        <div className="mt-0.5 text-xl"><FileIcon ext={ext} /></div>
+                        <div className="mt-0.5"><FileIcon ext={ext} /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-white truncate pr-2">{doc.filename}</p>
                           <div className="flex gap-1 flex-wrap mt-1.5">
@@ -277,12 +293,7 @@ export default function UploadPage() {
                   Difficulty Mode
                 </label>
                 <div className="space-y-2">
-                  {([
-                    { val: "adaptive", label: "🎯 Adaptive", desc: "Adjusts in real-time (recommended)" },
-                    { val: "easy", label: "🟢 Easy", desc: "Remember & understand level" },
-                    { val: "medium", label: "🟡 Medium", desc: "Apply level" },
-                    { val: "hard", label: "🔴 Hard", desc: "Analyze & evaluate level" },
-                  ] as { val: DifficultyMode; label: string; desc: string }[]).map((d) => (
+                  {difficultyOptions.map((d) => (
                     <button
                       key={d.val}
                       id={`diff-${d.val}`}
@@ -294,10 +305,11 @@ export default function UploadPage() {
                       }}
                     >
                       <div>
-                        <div className={`text-sm font-bold ${config.difficultyMode === d.val ? "text-white" : "text-white/70"}`}>
+                        <div className={`text-sm font-bold flex items-center gap-1.5 ${config.difficultyMode === d.val ? "text-white" : "text-white/70"}`}>
+                          <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ background: d.color }} />
                           {d.label}
                         </div>
-                        <div className="text-xs text-white/40 mt-0.5">{d.desc}</div>
+                        <div className="text-xs text-white/40 mt-0.5 pl-3.5">{d.desc}</div>
                       </div>
                       {config.difficultyMode === d.val && (
                         <div className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_10px_rgba(192,132,252,0.8)]" />
