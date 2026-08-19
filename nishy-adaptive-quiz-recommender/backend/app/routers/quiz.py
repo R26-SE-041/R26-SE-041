@@ -87,10 +87,21 @@ def submit_answer(session_id: str, req: SubmitAnswerRequest):
     q_idx = final_state.get("current_q_index", 0)
     quiz_complete = q_idx >= final_state.get("num_questions", 0)
 
+    # Extract hint text from feedback if incorrect (hint is embedded after "❌ Incorrect. ")
+    hint_text = None
+    if not last_answer["is_correct"] and last_answer["attempts"] < 4:
+        raw_fb = last_answer.get("feedback", "")
+        # Strip the leading emoji prefix if present
+        if raw_fb.startswith("❌ Incorrect. "):
+            hint_text = raw_fb[len("❌ Incorrect. "):]
+        else:
+            hint_text = raw_fb
+
     return SubmitAnswerResponse(
         is_correct=last_answer["is_correct"],
         score=last_answer["score"],
         feedback=last_answer["feedback"],
+        hint=hint_text,
         hints_used=last_answer.get("hints_used", 0),
         attempts=last_answer["attempts"],
         next_question_available=not quiz_complete,

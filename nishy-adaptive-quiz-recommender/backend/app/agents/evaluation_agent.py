@@ -60,38 +60,73 @@ Max marks: accuracy/30, completeness/25, structure/20, terminology/15, critical_
 """
 
 HINT_PROMPTS = [
-    """Context from the uploaded material:
+    """Context from the student's uploaded material:
 {context}
 
 Question: {question}
+Topic: {topic}
 
-Give a LEVEL 1 hint — conceptual, general. Do NOT reveal the answer or mention the correct option.
-Help the student think about the underlying concept of '{topic}'.""",
+The student answered INCORRECTLY on attempt 1.
 
-    """Context from the uploaded material:
+Generate a LEVEL 1 HINT (HARD) — A deep conceptual explanation that forces the student to think hard.
+
+ABSOLUTE RULES — violating any of these is a failure:
+- Formulate the hint as a conceptual explanation, NOT as a question. Do NOT ask any questions.
+- Adopt a strict Sri Lankan university academic standard (e.g., SLIIT standard).
+- Make the hint extremely confusing and force the student to rack their brains (user mandaya pottu kulapura maathiri hint). Explain the core concept deeply, but do NOT give a direct answer.
+- Do NOT explicitly state or give away the correct option (A/B/C/D) or explain why a specific answer is correct.
+- Do NOT directly explain how the concept applies to the specific scenario in the question.
+- Keep it to 2-3 sentences.
+
+Return ONLY the hint text. No preamble.""",
+
+    """Context from the student's uploaded material:
 {context}
 
 Question: {question}
+Topic: {topic}
 
-Give a LEVEL 2 hint — more focused. Reference a specific concept or term from the material.
-Do NOT state the answer. Guide the student to the right approach for '{topic}'.""",
+The student answered INCORRECTLY on attempts 1 and 2.
 
-    """Context from the uploaded material:
+Generate a LEVEL 2 HINT (MEDIUM) — A conceptual explanation requiring deep thought.
+
+ABSOLUTE RULES — violating any of these is a failure:
+- Formulate the hint as a conceptual explanation, NOT as a question. Do NOT ask any questions.
+- Adopt a strict Sri Lankan university academic standard.
+- The hint MUST make the student think deeply (user ku yosika vaikanumm) by explaining the underlying concept.
+- Do NOT explicitly state the correct option (A/B/C/D).
+- Do NOT say "therefore the answer is...", "this means you should pick...".
+- Keep it to 3-4 sentences.
+
+Return ONLY the hint text. No preamble.""",
+
+    """Context from the student's uploaded material:
 {context}
 
 Question: {question}
+Topic: {topic}
 
-Give a LEVEL 3 hint — near-direct. Walk the student step-by-step toward the answer for '{topic}'.
-Do NOT state the answer letter or the complete answer. Encourage reasoning."""
+The student answered INCORRECTLY on all 3 attempts.
+
+Generate a LEVEL 3 HINT (EASY) — An easy-to-understand conceptual explanation.
+
+ABSOLUTE RULES — violating any of these is a failure:
+- Formulate the hint as a conceptual explanation, NOT as a question. Do NOT ask any questions.
+- Adopt a strict Sri Lankan university academic standard.
+- Explain the concept simply so the student can easily deduce the answer (takkunu vizhankura maathiri hint).
+- UNDER NO CIRCUMSTANCES should you reveal the direct answer or the correct option letter (A/B/C/D). Do NOT directly explain the answer.
+- Keep it to 4-5 sentences.
+
+Return ONLY the hint text. No preamble."""
 ]
 
 
 def _generate_hint(llm: LlmService, rag: RagService,
                    question: dict, hint_level: int,
                    collection_id: str) -> str:
-    """Generate a RAG-grounded hint at the specified level (0-indexed)."""
-    chunks = rag.retrieve(collection_id, question["topic"], k=2)
-    context = "\n".join([c["text"] for c in chunks]) if chunks else "Use your knowledge of the topic."
+    """Generate a RAG-grounded hint at the specified level (0-indexed, 0=hard, 2=easy)."""
+    chunks = rag.retrieve(collection_id, question["topic"], k=3)
+    context = "\n\n".join([c["text"] for c in chunks]) if chunks else "Use your knowledge of the topic."
     prompt = HINT_PROMPTS[min(hint_level, 2)].format(
         context=context,
         question=question["question"],
@@ -153,14 +188,28 @@ def evaluation_agent(state: AssessmentState) -> dict:
 
         if is_correct:
             result["feedback"] = f"✅ Correct! {question.get('model_answer', '')}"
-        elif attempt_num <= 3:
-            # Give hint (counts as 1 hint used)
-            hint = _generate_hint(llm, rag, question, attempt_num - 1,
-                                   state["chroma_collection_id"])
+        elif attempt_num == 1:
+            # Attempt 1 wrong → Level 1 hard hint (conceptual clue)
+            hint = _generate_hint(llm, rag, question, 0, state["chroma_collection_id"])
+            result["feedback"] = f"❌ Incorrect. {hint}"
+            result["hints_used"] = prev_hints + 1
+        elif attempt_num == 2:
+            # Attempt 2 wrong → Level 2 medium hint (concept explanation)
+            hint = _generate_hint(llm, rag, question, 1, state["chroma_collection_id"])
+            result["feedback"] = f"❌ Incorrect. {hint}"
+            result["hints_used"] = prev_hints + 1
+        elif attempt_num == 3:
+            # Attempt 3 wrong → Level 3 near-direct concept walkthrough
+            hint = _generate_hint(llm, rag, question, 2, state["chroma_collection_id"])
             result["feedback"] = f"❌ Incorrect. {hint}"
             result["hints_used"] = prev_hints + 1
         else:
-            result["feedback"] = f"❌ The correct answer is {question['correct_answer']}. {question.get('model_answer', '')}"
+            # All 4 attempts used → reveal correct answer with full explanation
+            result["feedback"] = (
+                f"❌ The correct answer is **{question['correct_answer']}**.\n\n"
+                f"**Detailed Explanation:**\n"
+                f"{question.get('model_answer', 'Please review this topic in your notes for deeper understanding.')}"
+            )
 
     # ── Structured: LLM rubric evaluation ─────────
     elif q_type == "structured":
@@ -217,9 +266,10 @@ def evaluation_agent(state: AssessmentState) -> dict:
         topic_scores[topic]["correct"] += 1
         bloom_scores[bloom]["correct"] += 1
 
-    # Advance question index only if correct or max attempts reached
+    # Advance question index only if correct or all hint attempts exhausted (attempt 4+)
+    # Attempts 1/2/3 give L1/L2/L3 hints; attempt 4+ reveals the answer and moves on
     new_idx = q_idx
-    if result["is_correct"] or attempt_num >= 3:
+    if result["is_correct"] or attempt_num >= 4:
         new_idx = q_idx + 1
 
     logs.append(f"[EvaluationAgent] Q{q_idx+1} | correct={result['is_correct']} | "

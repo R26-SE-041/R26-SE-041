@@ -5,6 +5,7 @@ and verifies each question's grounding score.
 import os
 import uuid
 import json
+import random
 import logging
 from typing import List, Tuple
 from dotenv import load_dotenv
@@ -24,7 +25,7 @@ DIFF_BANDS = [
     (0.66, 1.0,  "hard",   "analyze"),
 ]
 
-INIT_DIFFICULTY = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.5}
+INIT_DIFFICULTY = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.8}
 
 MCQ_PROMPT = """
 Use ONLY the following context from the student's uploaded material.
@@ -35,14 +36,14 @@ Context:
 
 Generate a {bloom_level}-level Multiple Choice Question about "{topic}".
 Difficulty: {diff_label} ({difficulty:.2f}/1.0)
-Target university: SLIIT, Sri Lanka — emphasize application and reasoning, not pure recall.
+Target university: SLIIT, Sri Lanka — emphasize application and reasoning at a Sri Lankan academic standard. Use local contexts and avoid foreign examples.
 
 Return ONLY valid JSON:
 {{
     "question": "The question text here?",
     "options": {{"A": "Option A", "B": "Option B", "C": "Option C", "D": "Option D"}},
     "correct_answer": "B",
-    "model_answer": "Full explanation of why B is correct, referencing the context.",
+    "model_answer": "Detailed explanation of the core concept and why B is the only correct answer. Do not just state it is correct, explain the reasoning behind it.",
     "explanation": "Brief explanation for feedback."
 }}
 
@@ -51,6 +52,10 @@ Rules:
 - Question must test a specific concept from the context
 - Do not repeat any question already in the quiz
 - Phrase the question directly as a real-world concept. Do NOT refer to "the context", "the document", "the text", "the uploaded material", or "the page".
+- CRITICAL DIFFICULTY RULES:
+  * HARD: The question MUST be extremely confusing and force the student to rack their brains (user mandaya pottu kulapura mathiri). It should be an indirect, complex scenario at a high Sri Lankan degree standard where the answer requires deep thinking to discover.
+  * MEDIUM: The question should be about 15% less hard than the HARD level, but it MUST still be confusing and make the student think deeply to find the answer.
+  * EASY: The question MUST be a direct, straightforward question (direct quizes kekanum).
 """
 
 STRUCTURED_PROMPT = """
@@ -62,7 +67,7 @@ Context:
 
 Generate a {bloom_level}-level structured question about "{topic}".
 Difficulty: {diff_label}
-Target university: SLIIT, Sri Lanka.
+Target university: SLIIT, Sri Lanka — maintain a Sri Lankan academic standard and use local context/examples where applicable.
 
 Return ONLY valid JSON:
 {{
@@ -74,6 +79,10 @@ Return ONLY valid JSON:
 
 Rules:
 - Phrase the question directly as a real-world concept. Do NOT refer to "the context", "the document", "the text", "the uploaded material", or "the page".
+- CRITICAL DIFFICULTY RULES:
+  * HARD: The question MUST be extremely confusing and force the student to rack their brains (user mandaya pottu kulapura mathiri). It should be an indirect, complex scenario at a high Sri Lankan degree standard where the answer requires deep thinking to discover.
+  * MEDIUM: The question should be about 15% less hard than the HARD level, but it MUST still be confusing and make the student think deeply to find the answer.
+  * EASY: The question MUST be a direct, straightforward question (direct quizes kekanum).
 """
 
 ESSAY_PROMPT = """
@@ -85,7 +94,7 @@ Context:
 
 Generate an essay question about "{topic}" requiring critical thinking and analysis.
 Difficulty: {diff_label}
-Target university: SLIIT, Sri Lanka.
+Target university: SLIIT, Sri Lanka — maintain a Sri Lankan academic standard and use local context/examples where applicable.
 
 Return ONLY valid JSON:
 {{
@@ -97,6 +106,10 @@ Return ONLY valid JSON:
 
 Rules:
 - Phrase the question directly as a real-world scenario or concept. Do NOT refer to "the context", "the document", "the text", "the uploaded material", or "the page".
+- CRITICAL DIFFICULTY RULES:
+  * HARD: The question MUST be extremely confusing and force the student to rack their brains (user mandaya pottu kulapura mathiri). It should be an indirect, complex scenario at a high Sri Lankan degree standard where the answer requires deep thinking to discover.
+  * MEDIUM: The question should be about 15% less hard than the HARD level, but it MUST still be confusing and make the student think deeply to find the answer.
+  * EASY: The question MUST be a direct, straightforward question (direct quizes kekanum).
 """
 
 
@@ -109,19 +122,23 @@ def get_diff_info(score: float) -> Tuple[str, str]:
 
 
 def build_blueprint(state: AssessmentState) -> List[dict]:
-    """Distribute questions proportionally across topics."""
-    topics = state.get("topics", []) or ["General"]  # fallback if topics is empty
+    """Distribute questions proportionally across topics with randomization to prevent repeats."""
+    topics = list(state.get("topics", []) or ["General"])  # fallback if topics is empty
     if not topics:
         topics = ["General"]
     n = state.get("num_questions", 5)
     q_type = state.get("exam_type", "mcq")
     init_diff = INIT_DIFFICULTY.get(state.get("difficulty_mode", "adaptive"), 0.5)
 
-    per_topic = max(1, n // len(topics))
-    remainder = n % len(topics)
+    # Shuffle topics so each session has a different question order
+    shuffled_topics = topics[:]
+    random.shuffle(shuffled_topics)
+
+    per_topic = max(1, n // len(shuffled_topics))
+    remainder = n % len(shuffled_topics)
     blueprint = []
 
-    for i, topic in enumerate(topics):
+    for i, topic in enumerate(shuffled_topics):
         count = per_topic + (1 if i < remainder else 0)
         for _ in range(count):
             blueprint.append({
@@ -130,6 +147,8 @@ def build_blueprint(state: AssessmentState) -> List[dict]:
                 "difficulty": init_diff
             })
 
+    # Final shuffle so topic clusters are also mixed
+    random.shuffle(blueprint)
     return blueprint[:n]
 
 
@@ -155,7 +174,11 @@ def quiz_agent(state: AssessmentState) -> dict:
         blueprint = build_blueprint(state)
         logs.append(f"[QuizAgent] Blueprint created: {len(blueprint)} questions")
 
-    current_idx = len(questions)
+    current_idx = state.get("current_q_index", 0)
+    if len(questions) > current_idx:
+        logs.append(f"[QuizAgent] Question {current_idx+1} already generated. Waiting for correct answer.")
+        return {"quiz_blueprint": blueprint, "agent_logs": logs}
+
     if current_idx >= state.get("num_questions", 5):
         return {"quiz_blueprint": blueprint, "agent_logs": logs}  # All done
 
@@ -166,10 +189,17 @@ def quiz_agent(state: AssessmentState) -> dict:
     diff_label, bloom = get_diff_info(diff_score)
     q_type = state.get("exam_type", "mcq")
 
-    # RAG: retrieve grounded context
+    # RAG: retrieve grounded context with randomized query variation to prevent identical questions
+    # Build a varied query using topic + bloom level + a random variation keyword
+    variation_seeds = [
+        "definition", "example", "application", "comparison", "advantage",
+        "disadvantage", "mechanism", "process", "purpose", "difference",
+        "relationship", "characteristic", "role", "impact", "implementation"
+    ]
+    variation = random.choice(variation_seeds)
     context_chunks = rag.retrieve(
         collection_id=state["chroma_collection_id"],
-        query=f"{topic} {diff_label} {bloom}",
+        query=f"{topic} {diff_label} {bloom} {variation}",
         k=4
     )
 
@@ -195,10 +225,20 @@ def quiz_agent(state: AssessmentState) -> dict:
     )
 
     # Generate with retry (tenacity handles this in llm_service)
+    # Include previously generated questions to explicitly avoid repetition
+    existing_questions = [q["question"] for q in questions]
+    no_repeat_instruction = ""
+    if existing_questions:
+        no_repeat_instruction = (
+            "\n\nALREADY GENERATED QUESTIONS (do NOT repeat or paraphrase any of these):\n"
+            + "\n".join(f"- {q}" for q in existing_questions)
+        )
+
     q_data = None
     for attempt in range(3):
         try:
-            q_data = llm.call_json(prompt, temperature=0.4)
+            full_prompt = prompt + no_repeat_instruction
+            q_data = llm.call_json(full_prompt, temperature=0.5 + random.uniform(0.0, 0.15))
             break
         except (ValueError, Exception) as e:
             logs.append(f"[QuizAgent] JSON parse attempt {attempt+1} failed: {e}")

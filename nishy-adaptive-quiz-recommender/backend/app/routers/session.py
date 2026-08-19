@@ -39,7 +39,7 @@ def _initial_state(
     document_ids: list,
 ) -> AssessmentState:
     """Build the initial LangGraph state for a new session."""
-    diff_map = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.5}
+    diff_map = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.8}
     return {
         "session_id":             session_id,
         "student_id":             student_id,

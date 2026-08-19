@@ -1,4 +1,16 @@
 import Link from "next/link";
+import {
+  FileTextIcon,
+  ZapIcon,
+  HelpCircleIcon,
+  BarChartIcon,
+  TargetIcon,
+  TrendingUpIcon,
+  LayersIcon,
+  CpuIcon,
+  ListIcon,
+  ClipboardIcon,
+} from "@/components/ui/Icons";
 
 export default function HomePage() {
   return (
@@ -94,28 +106,28 @@ export default function HomePage() {
           {[
             {
               step: "01",
-              icon: "📄",
+              icon: <FileTextIcon className="w-8 h-8" />,
               title: "Upload Documents",
               desc: "PDF, DOCX, PPTX, TXT — any study material you have.",
               color: "from-violet-600/20 to-violet-600/5",
             },
             {
               step: "02",
-              icon: "🧠",
+              icon: <ZapIcon className="w-8 h-8" />,
               title: "AI Ingestion",
               desc: "LangGraph agents extract topics and build a knowledge graph.",
               color: "from-indigo-600/20 to-indigo-600/5",
             },
             {
               step: "03",
-              icon: "❓",
+              icon: <HelpCircleIcon className="w-8 h-8" />,
               title: "Adaptive Questions",
               desc: "Qwen2.5-7B generates Bloom's-level MCQs grounded in your docs.",
               color: "from-cyan-600/20 to-cyan-600/5",
             },
             {
               step: "04",
-              icon: "📊",
+              icon: <BarChartIcon className="w-8 h-8" />,
               title: "Instant Feedback",
               desc: "See your performance, weak topics, and difficulty progression.",
               color: "from-emerald-600/20 to-emerald-600/5",
@@ -126,7 +138,7 @@ export default function HomePage() {
               className={`glass-card p-6 bg-gradient-to-b ${item.color} relative overflow-hidden`}
             >
               <div className="text-xs font-bold text-white/20 mb-4 tracking-widest">STEP {item.step}</div>
-              <div className="text-3xl mb-4">{item.icon}</div>
+              <div className="mb-4 text-white/70">{item.icon}</div>
               <h3 className="font-bold text-white mb-2">{item.title}</h3>
               <p className="text-sm text-white/50 leading-relaxed">{item.desc}</p>
             </div>
@@ -146,42 +158,42 @@ export default function HomePage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[
             {
-              icon: "🎯",
+              icon: <TargetIcon className="w-7 h-7" />,
               title: "RAG-Grounded Questions",
               desc: "Every question is verified against your uploaded material using cosine similarity. Hallucinations are detected and rejected.",
               badge: "Research Metric",
               badgeType: "badge-violet",
             },
             {
-              icon: "📈",
+              icon: <TrendingUpIcon className="w-7 h-7" />,
               title: "Real-time Difficulty Adaptation",
               desc: "Correct answer → harder question. Wrong answer → easier with hint. Implements Item Response Theory principles.",
               badge: "IRT Model",
               badgeType: "badge-cyan",
             },
             {
-              icon: "🌿",
+              icon: <LayersIcon className="w-7 h-7" />,
               title: "Bloom's Taxonomy Mapping",
               desc: "Questions span Remember → Analyze. The system tracks your coverage across all cognitive levels.",
               badge: "6 Levels",
               badgeType: "badge-green",
             },
             {
-              icon: "🤖",
+              icon: <CpuIcon className="w-7 h-7" />,
               title: "Multi-Agent LangGraph",
               desc: "7 specialized agents: Ingestion, Knowledge, Quiz, Evaluation, Adaptive, Recommendation, Analytics.",
               badge: "7 Agents",
               badgeType: "badge-violet",
             },
             {
-              icon: "⚡",
+              icon: <ZapIcon className="w-7 h-7" />,
               title: "Qwen2.5-7B on Modal.com",
               desc: "Open-source LLM runs serverlessly on GPU. No OpenAI dependency — fully reproducible for research.",
               badge: "Open Source",
               badgeType: "badge-cyan",
             },
             {
-              icon: "📋",
+              icon: <ListIcon className="w-7 h-7" />,
               title: "MCQ + Structured + Essay",
               desc: "Choose your exam format. All types support adaptive difficulty and grounding verification.",
               badge: "3 Types",
@@ -189,7 +201,7 @@ export default function HomePage() {
             },
           ].map((f) => (
             <div key={f.title} className="glass-card-hover p-6">
-              <div className="text-3xl mb-4">{f.icon}</div>
+              <div className="mb-4 text-white/70">{f.icon}</div>
               <div className="flex items-start justify-between gap-2 mb-3">
                 <h3 className="font-bold text-white text-lg leading-tight">{f.title}</h3>
                 <span className={`${f.badgeType} shrink-0 mt-0.5`}>{f.badge}</span>

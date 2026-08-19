@@ -68,6 +68,7 @@ export interface Question {
 }
 
 export interface SubmitAnswerRequest {
+  q_id?: string;         // optional — backend resolves from session state
   answer: string;
   time_taken_sec: number;
 }
@@ -76,6 +77,7 @@ export interface SubmitAnswerResponse {
   is_correct: boolean;
   score: number;
   feedback: string;
+  hint?: string | null;  // populated when incorrect (separate from feedback)
   hints_used: number;
   attempts: number;
   next_question_available: boolean;
@@ -84,21 +86,55 @@ export interface SubmitAnswerResponse {
 
 // ── Analytics ────────────────────────────────────────────────────
 
+export interface ResourceLink {
+  label: "English" | "Tamil" | "Sinhala" | string;
+  title: string;
+  url: string;
+  source: string;
+}
+
+export interface WeakTopicRecommendation {
+  topic: string;
+  score_ratio: number;
+  percentage: number;
+  concept_notes: string[];
+  resources: ResourceLink[];
+}
+
+export interface QuestionMarkDetail {
+  q_num: number;
+  topic: string;
+  bloom: string;
+  difficulty: number;
+  is_correct: boolean;
+  attempts: number;
+  hints_used: number;
+  marks: number;
+  max_marks: number;
+}
+
 export interface AnalyticsReport {
   session_id: string;
   final_score: number;
+  total_marks_earned?: number;
+  total_marks_possible?: number;
+  question_marks_detail?: QuestionMarkDetail[];
   total_questions: number;
   correct_count: number;
   topic_scores: Record<string, { correct: number; total: number }>;
   bloom_scores: Record<string, { correct: number; total: number }>;
   weak_topics: string[];
   strong_topics: string[];
+  recommendations: WeakTopicRecommendation[];
   avg_time_per_question: number;
   difficulty_progression: number[];
   grounding_stats: {
     avg_grounding_score: number;
     flagged_count: number;
   };
+  avg_attempts?: number;
+  avg_hints_used?: number;
+  total_time_min?: number;
 }
 
 // ── UI State ─────────────────────────────────────────────────────
