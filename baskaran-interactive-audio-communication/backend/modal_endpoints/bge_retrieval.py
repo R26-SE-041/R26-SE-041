@@ -24,7 +24,7 @@ GPU: T4 (16 GB VRAM) — both models fit with room to spare.
 Cold-start strategy:
   - Model weights are cached in the Modal volume "voicelearn-bge-models".
   - @modal.enter() loads the model ONCE per container lifetime.
-  - scaledown_window=300 keeps the container warm for 5 minutes after the
+  - scaledown_window=1200 keeps the container warm for 20 minutes after the
     last request, eliminating cold starts within a conversation session.
   - Weights are never downloaded during a live request.
 """
@@ -47,6 +47,10 @@ image = (
         "fastapi[standard]>=0.115.0",
         "pydantic>=2.0.0",
     )
+    .env({
+        "HF_HOME": "/bge_models",
+        "TRANSFORMERS_CACHE": "/bge_models",
+    })
 )
 
 app = modal.App("voicelearn-bge-retrieval", image=image)
@@ -88,7 +92,7 @@ class RerankResponse(BaseModel):
 @app.cls(
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
-    scaledown_window=300,   # keep container warm for 5 min after last request
+    scaledown_window=1200,
     memory=8192,
 )
 class BGEEmbedder:
@@ -115,6 +119,7 @@ class BGEEmbedder:
             EMBEDDING_MODEL,
             cache_folder=MODELS_DIR,
         )
+        bge_volume.commit()
         # Move to GPU explicitly (sentence-transformers usually does this
         # automatically, but we make it explicit for clarity and diagnostics).
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -157,7 +162,7 @@ class BGEEmbedder:
 @app.cls(
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
-    scaledown_window=300,
+    scaledown_window=1200,
     memory=8192,
 )
 class BGEReranker:
@@ -179,6 +184,7 @@ class BGEReranker:
             max_length=512,
             # CrossEncoder automatically uses the GPU when torch.cuda is available.
         )
+        bge_volume.commit()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         print(f"[BGEReranker] {RERANKER_MODEL} loaded on {device} ✓")

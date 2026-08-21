@@ -20,26 +20,13 @@ export default function DashboardPage() {
     setLanguage,
     messages,
     addMessage,
+    updateMessage,
     lastTranscript,
     setLastTranscript,
   } = useSessionStore()
 
   const [error, setError] = useState<string | null>(null)
   const [isQuerying, setIsQuerying] = useState(false)
-
-  // Redirect if not authenticated
-  if (!authLoading && !user) {
-    router.replace('/login')
-    return null
-  }
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-hero-gradient flex items-center justify-center">
-        <LoadingSpinner size="lg" label="Loading…" />
-      </div>
-    )
-  }
 
   const handleTranscript = useCallback(async (result: TranscribeResponse) => {
     setLastTranscript(result.transcript)
@@ -62,34 +49,56 @@ export default function DashboardPage() {
         result.detected_language  // ← pass Whisper's detected language for Tamil/Sinhala
       )
 
-      // 3. Try TTS — get audio URL for the answer (non-blocking)
-      let audio_url: string | undefined
-      try {
-        const audioBlob = await synthesizeSpeech(queryResult.answer, language)
-        audio_url = URL.createObjectURL(audioBlob)
-      } catch {
-        // TTS unavailable — answer still shows as text
-      }
-
-      // 4. Add localized assistant answer to chat (with audio if available)
+      // 3. Publish the text and sources before starting TTS.
+      const answerCreatedAt = new Date().toISOString()
       addMessage({
         role: 'assistant',
         content: queryResult.answer,
         references: queryResult.references ?? [],
-        audio_url: audio_url ?? null,
-        created_at: new Date().toISOString(),
+        audio_url: null,
+        audio_pending: true,
+        created_at: answerCreatedAt,
       })
+
+      // 4. Start exactly one independent TTS request.
+      void synthesizeSpeech(queryResult.answer, language)
+        .then((audioBlob) => {
+          updateMessage(answerCreatedAt, {
+            audio_url: URL.createObjectURL(audioBlob),
+            audio_pending: false,
+            audio_error: null,
+          })
+        })
+        .catch(() => {
+          updateMessage(answerCreatedAt, {
+            audio_pending: false,
+            audio_error: 'Answer audio is unavailable. The text answer is complete.',
+          })
+        })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Query failed. Check if documents are uploaded.')
     } finally {
       setIsQuerying(false)
     }
-  }, [language, addMessage, setLastTranscript])
+  }, [language, addMessage, setLastTranscript, updateMessage])
 
 
   const handleError = useCallback((msg: string) => {
     setError(msg)
   }, [])
+
+  if (!authLoading && !user) {
+    router.replace('/login')
+    return null
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-hero-gradient flex items-center justify-center">
+        <LoadingSpinner size="lg" label="Loading…" />
+      </div>
+    )
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -158,9 +167,7 @@ export default function DashboardPage() {
                     ? 'Finding answer from your documents…'
                     : language === 'tamil'
                     ? 'தமிழில் பதில் தயாராகிறது…'
-                    : language === 'sinhala'
-                    ? 'සිංහලෙන් පිළිතුර සකස් කරමින්…'
-                    : 'Thanglish-la answer ready pannurom…'}
+                    : 'සිංහලෙන් පිළිතුර සකස් කරමින්…'}
                 </div>
                 <div className="w-full bg-white/5 rounded-full h-1">
                   <div className="bg-gradient-to-r from-brand-500 to-accent-500 h-1 rounded-full animate-pulse w-3/4" />
@@ -180,7 +187,7 @@ export default function DashboardPage() {
           {lastTranscript && (
             <div className="glass rounded-2xl p-5">
               <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Last Transcript</p>
-              <p className="text-sm text-white/80 leading-relaxed italic">"{lastTranscript}"</p>
+              <p className="text-sm text-white/80 leading-relaxed italic">&ldquo;{lastTranscript}&rdquo;</p>
             </div>
           )}
 

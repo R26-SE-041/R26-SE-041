@@ -1,7 +1,7 @@
 ﻿"""
 Modal Serverless Endpoint: Sinhala Whisper ASR -- Speech-to-Text (Sinhala only)
 
-ISOLATED EXPERIMENT -- DO NOT connect to RAG, TTS, or any existing pipeline.
+Production Sinhala ASR service for the VoiceLearn language router.
 
 Model: Lingalingeswaran/whisper-small-sinhala
   Base: openai/whisper-small (~241.7M params, WhisperForConditionalGeneration)

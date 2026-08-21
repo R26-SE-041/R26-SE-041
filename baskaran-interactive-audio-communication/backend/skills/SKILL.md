@@ -21,7 +21,7 @@ Audio Input
     ↓
 [Localization Agent]      — Qwen2.5-7B-Instruct on Modal (T4)
     ↓
-[TTS Agent]               — MMS-TTS on Modal (T4) + Supabase Storage
+[TTS Agent]               — Language-specific TTS + Supabase Storage
     ↓
 Text + Audio Response
 ```
@@ -39,7 +39,7 @@ Text + Audio Response
 | Prompt Enhancement | [`skills/prompt_agent/SKILL.md`](./prompt_agent/SKILL.md) | Qwen2.5-3B-Instruct | T4 |
 | RAG Generation | [`skills/rag_agent/SKILL.md`](./rag_agent/SKILL.md) | Qwen2.5-7B-Instruct | A10G |
 | Localization | [`skills/localization_agent/SKILL.md`](./localization_agent/SKILL.md) | Qwen2.5-7B-Instruct | T4 |
-| TTS | [`skills/tts_agent/SKILL.md`](./tts_agent/SKILL.md) | Facebook MMS-TTS | T4 |
+| TTS | [`skills/tts_agent/SKILL.md`](./tts_agent/SKILL.md) | Kokoro / Indic Parler / SinhalaVITS | CPU / A10G / T4 |
 
 ---
 

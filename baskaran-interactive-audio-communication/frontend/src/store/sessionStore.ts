@@ -18,6 +18,7 @@ interface SessionStore {
   // Messages
   messages: SessionMessage[]
   addMessage: (msg: SessionMessage) => void
+  updateMessage: (createdAt: string, updates: Partial<SessionMessage>) => void
   clearMessages: () => void
 
   // Recording state
@@ -38,6 +39,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   messages: [],
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+  updateMessage: (createdAt, updates) => set((s) => ({
+    messages: s.messages.map((message) => (
+      message.created_at === createdAt ? { ...message, ...updates } : message
+    )),
+  })),
   clearMessages: () => set({ messages: [] }),
 
   recordingState: 'idle',

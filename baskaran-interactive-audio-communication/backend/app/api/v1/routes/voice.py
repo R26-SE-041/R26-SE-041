@@ -59,8 +59,7 @@ async def text_to_speech(
 ):
     """Synthesize a localized answer to WAV audio.
 
-    Tamil is routed to AI4Bharat Indic Parler-TTS, a Tamil-specific model.
-    MMS-TTS remains in use for English, Sinhala, and mixed text.
+    Routes English, Tamil, and Sinhala to their final production voices.
     """
     text = request.text.strip()
     if not text:
@@ -73,23 +72,38 @@ async def text_to_speech(
         len(text),
     )
 
-    if request.language is Language.TAMIL:
-        from app.services.modal_client import call_tamil_tts
+    from app.services.modal_client import (
+        call_english_tts,
+        call_sinhala_vits_tts_direct,
+        call_tamil_tts,
+    )
 
-        audio_bytes = await call_tamil_tts(text)
-        if audio_bytes is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Tamil TTS is currently unavailable. Text answer is still shown.",
-            )
-    else:
-        from app.services.modal_client import call_tts
+    started = time.perf_counter()
+    try:
+        if request.language is Language.ENGLISH:
+            audio_bytes = await call_english_tts(text)
+        elif request.language is Language.TAMIL:
+            audio_bytes = await call_tamil_tts(text)
+        else:
+            audio_bytes = await call_sinhala_vits_tts_direct(text)
+    except Exception as exc:
+        logger.warning("TTS failed for %s: %s", request.language.value, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Answer audio is currently unavailable. The text answer is still shown.",
+        ) from exc
+    finally:
+        logger.info(
+            "[LATENCY] TTS language=%s duration=%.3fs",
+            request.language.value,
+            time.perf_counter() - started,
+        )
 
-        try:
-            audio_bytes = await call_tts(text, request.language.value)
-        except Exception as exc:
-            logger.warning("MMS-TTS failed for %s: %s", request.language.value, exc)
-            raise HTTPException(status_code=503, detail="TTS service is currently unavailable.") from exc
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=503,
+            detail="Answer audio is currently unavailable. The text answer is still shown.",
+        )
 
     return Response(content=audio_bytes, media_type="audio/wav")
 
@@ -142,6 +156,16 @@ async def transcribe_audio(
 
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     logger.info("STT completed in %dms", elapsed_ms)
+    logger.info(
+        "[LATENCY] ASR language=%s duration=%.3fs",
+        language.value,
+        elapsed_ms / 1000,
+    )
+    if language is Language.TAMIL:
+        logger.info(
+            "[LATENCY] ASR tamil fallback_used=%s",
+            str(bool(result.get("fallback_used", False))).lower(),
+        )
 
     return TranscribeResponse(
         transcript=result["transcript"],

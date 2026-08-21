@@ -195,6 +195,9 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
             onClick={handleSeek}
             role="slider"
             aria-label="Audio progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress)}
           >
             <div
               className="h-full bg-gradient-to-r from-emerald-400 to-emerald-300 rounded-full transition-all duration-100"
@@ -351,7 +354,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
               disabled={disabled}
               className="text-xs font-medium text-white/45 hover:text-brand-300 transition-colors disabled:opacity-50"
             >
-              📁 Upload Audio
+              Upload an audio file
             </button>
           )}
 
@@ -377,13 +380,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
             ) : (isProcessing || isTranscribing) ? (
               <p className="text-[13px] font-medium text-brand-400 animate-pulse">
                 {isTranscribing
-                  ? `Sending to ${
-                      language === 'tamil'
-                        ? 'Tamil ASR (Qwen3)…'
-                        : language === 'sinhala'
-                          ? 'Sinhala ASR (Whisper Small)…'
-                          : 'Whisper…'
-                    }`
+                  ? 'Transcribing your question…'
                   : 'Processing…'}
               </p>
             ) : (
@@ -410,7 +407,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
           <div className="flex items-center justify-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-400/80">
-              {uploadedFileName ? 'Local Audio File' : 'Recording Preview'}
+              {uploadedFileName ? 'Audio File Ready' : 'Recording Ready'}
             </span>
           </div>
 
@@ -427,7 +424,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
               className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-500 hover:to-accent-500 text-white text-sm font-semibold px-5 py-3 rounded-xl transition-all shadow-brand hover:scale-[1.02] active:scale-[0.98]"
             >
               <SendIcon />
-              Submit & Transcribe
+              Ask This Question
             </button>
 
             {/* Re-record */}
@@ -450,11 +447,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
         <div className="w-full flex items-center justify-center gap-3 py-4 animate-fade-up">
           <div className="w-5 h-5 rounded-full border-2 border-brand-500/30 border-t-brand-400 animate-spin shrink-0" />
           <span className="text-sm text-brand-400 animate-pulse font-medium">
-            {language === 'tamil'
-              ? 'Transcribing with Tamil ASR Qwen3…'
-              : language === 'sinhala'
-                ? 'Transcribing with Sinhala Whisper Small…'
-                : 'Transcribing with Whisper…'}
+            Transcribing your question…
           </span>
         </div>
       )}

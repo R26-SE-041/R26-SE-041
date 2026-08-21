@@ -1,6 +1,6 @@
 /** Shared TypeScript types across the frontend. */
 
-export type Language = 'english' | 'tamil' | 'sinhala' | 'mixed'
+export type Language = 'english' | 'tamil' | 'sinhala'
 
 export type FileType = 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'txt' | 'md'
 
@@ -48,9 +48,10 @@ export interface SessionMessage {
   role: 'user' | 'assistant'
   content: string
   audio_url?: string | null
+  audio_pending?: boolean
+  audio_error?: string | null
   references?: ChunkReference[]
   created_at: string
 }
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'done' | 'error'
-

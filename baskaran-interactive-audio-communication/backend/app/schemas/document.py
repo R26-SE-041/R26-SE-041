@@ -1,6 +1,7 @@
 """Pydantic schemas for document upload, management, and RAG queries."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -34,7 +35,9 @@ class ChunkReference(BaseModel):
 
 class AskRequest(BaseModel):
     transcript: str = Field(..., description="Raw or transcribed question from user")
-    language: str = Field(default="english", description="Response language")
+    language: Literal["english", "tamil", "sinhala"] = Field(
+        default="english", description="Response language"
+    )
     enhanced_query: str | None = Field(
         default=None,
         description="If provided, skip prompt enhancement and use this query directly",
@@ -43,7 +46,9 @@ class AskRequest(BaseModel):
 
 class EnhanceRequest(BaseModel):
     transcript: str = Field(..., description="Raw transcript to enhance")
-    language: str = Field(default="english", description="Language of the query")
+    language: Literal["english", "tamil", "sinhala"] = Field(
+        default="english", description="Language of the query"
+    )
 
 
 class EnhanceResponse(BaseModel):

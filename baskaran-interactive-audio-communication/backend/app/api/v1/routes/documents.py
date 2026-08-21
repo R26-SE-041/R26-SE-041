@@ -15,6 +15,7 @@ NOTE: When Supabase is not configured (placeholder creds), documents are stored
 
 import asyncio
 import pathlib
+import time
 import uuid
 from typing import Annotated
 from datetime import datetime, timezone
@@ -363,15 +364,16 @@ async def ask_question(
     current_user: Annotated[dict | None, Depends(get_current_user)] = None,
 ):
     """
-    Phase 2 RAG + Localization pipeline:
+    Phase 2 RAG pipeline:
     1. Query selection -- uses corrected_transcript if frontend provides it
        (user chose 'Fix Transcript'); otherwise uses raw transcript directly.
        Gemma is NEVER called automatically here.
     2. Retrieve top-5 relevant chunks from ChromaDB (user-scoped)
-    3. Generate a grounded answer via Gemma 4 12B
-    4. Localize the answer to Tamil / Sinhala / Mixed
-    5. Return localized answer + source references
+    3. Generate a grounded answer via Gemma 4 12B in the selected language
+       (or use the legacy English + Localizer path when the experiment is off)
+    4. Return the final answer + source references
     """
+    rag_started = time.perf_counter()
     bge_ready, _ = bge_m3_cache_status()
     if not bge_ready:
         raise HTTPException(
@@ -383,6 +385,7 @@ async def ask_question(
     user_id = current_user["sub"] if current_user else "guest"
     transcript = body.transcript.strip()
     language = body.language
+    direct_multilingual_gemma = get_settings().use_direct_multilingual_gemma
 
     if not transcript:
         raise HTTPException(status_code=400, detail="transcript cannot be empty")
@@ -396,15 +399,16 @@ async def ask_question(
         logger.info("Ask: using raw transcript directly")
 
     # Step 2 -- BGE-M3 dense retrieval + BM25 keyword signals + multilingual reranking.
+    retrieval_started = time.perf_counter()
     raw_chunks = await hybrid_query_chunks(query, user_id, n_results=5)
+    logger.info("[LATENCY] RETRIEVAL = %.3fs", time.perf_counter() - retrieval_started)
 
     if not raw_chunks:
         no_content_messages = {
             "tamil": "பதிவேற்றிய ஆவணங்களில் இந்தக் கேள்விக்கான தொடர்புடைய தகவல் கிடைக்கவில்லை. முதலில் வாசிக்கக்கூடிய lecture document ஒன்றைப் பதிவேற்றவும்.",
             "sinhala": "ඔබ උඩුගත කළ ලේඛනවල මෙම ප්‍රශ්නයට අදාළ තොරතුරු හමු නොවීය. කරුණාකර කියවිය හැකි lecture document එකක් උඩුගත කරන්න.",
-            "mixed": "Ungal uploaded documents-la indha kelvikku relevant content kidaikkala. Mudhal-la readable lecture document upload pannunga.",
         }
-        return AskResponse(
+        response = AskResponse(
             answer=no_content_messages.get(
                 language,
                 "I couldn't find relevant content in your uploaded documents. Please upload lecture materials first.",
@@ -412,20 +416,43 @@ async def ask_question(
             enhanced_query=query,
             references=[],
         )
+        logger.info("[LATENCY] RAG TOTAL = %.3fs", time.perf_counter() - rag_started)
+        return response
 
-    # Step 3 — RAG generation (always in English for maximum accuracy)
+    # Step 3 — RAG generation. The flag keeps the legacy English-first path
+    # immediately restorable without duplicating retrieval or generation.
     context_texts = [c["text"] for c in raw_chunks]
+    rag_language = language if direct_multilingual_gemma else "english"
+    logger.info(
+        "[RAG] direct_multilingual_gemma=%s language=%s",
+        str(direct_multilingual_gemma).lower(),
+        language,
+    )
+    gemma_started = time.perf_counter()
     try:
-        rag_result = await call_rag_generator(query, context_texts, language)
+        rag_result = await call_rag_generator(query, context_texts, rag_language)
         answer = rag_result.get("answer", "I couldn't generate an answer right now.")
+        remote_timings = rag_result.get("timings_ms") or {}
+        logger.info(
+            "[LATENCY] GEMMA REMOTE tokenize_ms=%s generation_ms=%s total_ms=%s "
+            "input_tokens=%s output_tokens=%s",
+            remote_timings.get("tokenize"),
+            remote_timings.get("generation"),
+            remote_timings.get("total"),
+            rag_result.get("input_tokens"),
+            rag_result.get("output_tokens"),
+        )
     except Exception as e:
         logger.error("RAG generator failed: %s", e)
         answer = "RAG generation is not available right now. Please deploy the Modal RAG endpoint."
+    finally:
+        logger.info("[LATENCY] GEMMA = %.3fs", time.perf_counter() - gemma_started)
 
-    # Step 4 — Localization: Tamil / Sinhala / Mixed / Thanglish
-    # English passthrough — no translation needed, saves latency
-    if language and language != "english":
+    # Step 4 — Legacy localization. Direct mode returns Gemma's selected-language
+    # answer unchanged and deliberately has no hidden quality-triggered fallback.
+    if not direct_multilingual_gemma and language != "english":
         try:
+            localizer_started = time.perf_counter()
             loc_result = await call_localizer(answer, language)
             localized_answer = loc_result.get("localized_text", answer)
             logger.info(
@@ -438,6 +465,12 @@ async def ask_question(
             # Never crash the pipeline — fallback to English answer
             logger.warning("Localizer failed, returning English answer: %s", e)
             localized_answer = answer
+        finally:
+            logger.info(
+                "[LATENCY] LOCALIZER language=%s = %.3fs",
+                language,
+                time.perf_counter() - localizer_started,
+            )
     else:
         localized_answer = answer
 
@@ -464,8 +497,10 @@ async def ask_question(
         user_id, language, len(references), len(localized_answer),
     )
 
-    return AskResponse(
+    response = AskResponse(
         answer=localized_answer,
         enhanced_query=query,
         references=references,
     )
+    logger.info("[LATENCY] RAG TOTAL = %.3fs", time.perf_counter() - rag_started)
+    return response

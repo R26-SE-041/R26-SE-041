@@ -18,7 +18,6 @@ const LANG_OPTIONS: { value: Language; label: string }[] = [
   { value: 'english', label: '🇬🇧 English' },
   { value: 'tamil',   label: '🇮🇳 Tamil' },
   { value: 'sinhala', label: '🇱🇰 Sinhala' },
-  { value: 'mixed',   label: '🌐 Mixed' },
 ]
 
 export default function DashboardDocumentsPage() {
@@ -235,7 +234,7 @@ export default function DashboardDocumentsPage() {
               {response.enhanced_query && response.enhanced_query !== question && (
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
                   <span style={{ color: 'rgba(99,102,241,0.8)' }}>Optimized query: </span>
-                  "{response.enhanced_query}"
+                  &ldquo;{response.enhanced_query}&rdquo;
                 </div>
               )}
 

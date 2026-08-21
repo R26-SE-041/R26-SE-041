@@ -77,6 +77,17 @@ def _timed(label: str):
     finally:
         elapsed = time.perf_counter() - t0
         logger.info("[TIMING] %s: %.3fs", label, elapsed)
+        latency_label = {
+            "modal_bge_embedding": "EMBEDDING",
+            "local_bge_embedding": "EMBEDDING",
+            "chroma_dense_search": "CHROMA",
+            "bm25_search": "BM25",
+            "hybrid_merge": "RRF",
+            "modal_reranker": "RERANK",
+            "local_reranker": "RERANK",
+        }.get(label)
+        if latency_label:
+            logger.info("[LATENCY] %s = %.3fs", latency_label, elapsed)
 
 
 class DocumentIngestionError(ValueError):
@@ -609,14 +620,16 @@ async def hybrid_query_chunks(
     Returns:
         List of chunk dicts with keys: text, metadata, score, retrieval_method.
     """
-    import time as _time
+    retrieval_started = time.perf_counter()
     loop = asyncio.get_event_loop()
     settings = get_settings()
     use_modal = settings.use_modal_retrieval_models
 
     # ── Step 1: Dense Search ──────────────────────────────────────────────────
-    dense_results: list[dict] = []
-    try:
+    # Dense and sparse retrieval are independent until RRF. Running them
+    # concurrently preserves both rankings while shortening the critical path.
+    async def _dense_search() -> list[dict]:
+        dense_results: list[dict] = []
         collection = await get_or_create_collection()
 
         try:
@@ -660,16 +673,17 @@ async def hybrid_query_chunks(
                     "score":    round(max(0.0, min(1.0, 1 - dist)), 4),
                     "retrieval_method": "dense",
                 })
-            logger.debug("Dense search: %d results", len(dense_results))
-    except Exception as e:
-        logger.warning("Dense search failed: %s", e)
+        logger.debug("Dense search: %d results", len(dense_results))
+        return dense_results
 
     # ── Step 2: Sparse Search (BM25) ─────────────────────────────────────────
-    sparse_results: list[dict] = []
-    try:
-        # Warm up BM25 index from ChromaDB if server just restarted
-        await _ensure_bm25_loaded(user_id)
+    async def _sparse_search() -> list[dict]:
+        sparse_results: list[dict] = []
         with _timed("bm25_search"):
+            # Include the first-request index rebuild in the BM25 cold timing.
+            # On the immediate second request this is already loaded, so the
+            # same log line naturally represents the warm timing.
+            await _ensure_bm25_loaded(user_id)
             raw_sparse = await loop.run_in_executor(
                 _ML_EXECUTOR,
                 lambda: _bm25_store.search(user_id, query, top_k=sparse_candidates),
@@ -682,8 +696,23 @@ async def hybrid_query_chunks(
                 "retrieval_method": "bm25",
             })
         logger.debug("BM25 search: %d results", len(sparse_results))
-    except Exception as e:
-        logger.warning("BM25 search failed (non-fatal, dense-only fallback): %s", e)
+        return sparse_results
+
+    dense_outcome, sparse_outcome = await asyncio.gather(
+        _dense_search(), _sparse_search(), return_exceptions=True
+    )
+    if isinstance(dense_outcome, BaseException):
+        logger.warning("Dense search failed: %s", dense_outcome)
+        dense_results: list[dict] = []
+    else:
+        dense_results = dense_outcome
+    if isinstance(sparse_outcome, BaseException):
+        logger.warning(
+            "BM25 search failed (non-fatal, dense-only fallback): %s", sparse_outcome
+        )
+        sparse_results: list[dict] = []
+    else:
+        sparse_results = sparse_outcome
 
     # ── Step 3: RRF Fusion ────────────────────────────────────────────────────
     with _timed("hybrid_merge"):
@@ -698,6 +727,7 @@ async def hybrid_query_chunks(
 
     if not fused:
         logger.info("hybrid_query_chunks: no candidates found for user=%s", user_id)
+        logger.info("[LATENCY] RETRIEVAL TOTAL = %.3fs", time.perf_counter() - retrieval_started)
         return []
 
     # Send up to 10 candidates to the reranker (dense_candidates + sparse_candidates
@@ -716,25 +746,32 @@ async def hybrid_query_chunks(
                 chunk.get("reranker_score", chunk.get("rrf_score", chunk.get("score", 0.0))),
                 4,
             )
+        logger.info("[LATENCY] RETRIEVAL TOTAL = %.3fs", time.perf_counter() - retrieval_started)
         return candidates
     else:
-        # Local CPU CrossEncoder (original path — unchanged)
-        reranker = _get_reranker()
-        if reranker and len(candidates) > 1:
-            try:
-                pairs = [(query, c["text"]) for c in candidates]
-                with _timed("local_reranker"):
+        # Time the complete local reranking stage, including lazy model loading
+        # on the cold request.  Keep the timer around skipped/fallback cases too
+        # so every successful retrieval request emits one RERANK latency line.
+        with _timed("local_reranker"):
+            reranker = _get_reranker()
+            if reranker and len(candidates) > 1:
+                try:
+                    pairs = [(query, c["text"]) for c in candidates]
                     scores = await asyncio.wait_for(
                         loop.run_in_executor(_ML_EXECUTOR, lambda: reranker.predict(pairs)),
                         timeout=20.0,  # reranker timeout; skip if slow
                     )
-                for chunk, score in zip(candidates, scores):
-                    logit = float(score)
-                    chunk["reranker_score"] = 1.0 / (1.0 + pow(2.718281828, -logit))
-                candidates.sort(key=lambda c: c.get("reranker_score", 0.0), reverse=True)
-                logger.debug("Reranker scored %d candidates", len(candidates))
-            except Exception as e:
-                logger.warning("Reranker failed (non-fatal, using RRF order): %s", e)
+                    for chunk, score in zip(candidates, scores):
+                        logit = float(score)
+                        chunk["reranker_score"] = 1.0 / (1.0 + pow(2.718281828, -logit))
+                    candidates.sort(key=lambda c: c.get("reranker_score", 0.0), reverse=True)
+                    logger.debug("Reranker scored %d candidates", len(candidates))
+                except Exception as e:
+                    logger.warning("Reranker failed (non-fatal, using RRF order): %s", e)
+            else:
+                logger.info(
+                    "Reranker skipped: model unavailable or fewer than two candidates"
+                )
 
         # ── Step 5: Return top-N ──────────────────────────────────────────────
         top = candidates[:n_results]
@@ -743,6 +780,7 @@ async def hybrid_query_chunks(
                 chunk.get("reranker_score", chunk.get("rrf_score", chunk.get("score", 0.0))),
                 4,
             )
+        logger.info("[LATENCY] RETRIEVAL TOTAL = %.3fs", time.perf_counter() - retrieval_started)
         return top
 
 

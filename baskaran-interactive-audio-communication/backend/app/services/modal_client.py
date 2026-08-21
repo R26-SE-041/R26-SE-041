@@ -6,6 +6,8 @@ This module provides typed async callers for each endpoint.
 No modal SDK dependency in the application layer — just httpx.
 """
 
+import time
+
 import httpx
 
 from app.core.config import get_settings
@@ -52,7 +54,8 @@ async def call_bge_embed(texts: list[str]) -> list[list[float]]:
     try:
         response = await _http.post(
             url,
-            headers=_auth_headers(),
+            # These Modal web endpoints are public FastAPI endpoints. Modal
+            # rejects workspace CLI credentials on ordinary HTTP requests.
             json={"texts": texts, "normalize": True},
             timeout=120.0,   # 30-60 s cold-start on T4; 0.2-0.5 s warm
         )
@@ -111,7 +114,7 @@ async def call_bge_rerank(
     try:
         response = await _http.post(
             url,
-            headers=_auth_headers(),
+            # Public FastAPI endpoint; do not send Modal CLI credentials.
             json={
                 "query": query,
                 "candidates": candidates,
@@ -154,10 +157,12 @@ async def call_whisper(audio_bytes: bytes, filename: str, language_hint: str) ->
         dict with keys: transcript, detected_language, duration_ms
     """
     settings = get_settings()
+    started = time.perf_counter()
+    language = language_hint.lower()
 
     # Sinhala is intentionally restricted to the dedicated fine-tuned model.
     # Never fall back to a different ASR model for Sinhala.
-    if language_hint.lower() == "sinhala":
+    if language == "sinhala":
         if not settings.modal_sinhala_asr_url.strip():
             raise RuntimeError(
                 "MODAL_SINHALA_ASR_URL is not configured. Deploy "
@@ -177,7 +182,7 @@ async def call_whisper(audio_bytes: bytes, filename: str, language_hint: str) ->
                 "transcript. No fallback model was used."
             )
 
-        return {
+        output = {
             "transcript": transcript,
             "detected_language": "si",
             "duration_ms": int(
@@ -187,19 +192,30 @@ async def call_whisper(audio_bytes: bytes, filename: str, language_hint: str) ->
                 "engine", "Lingalingeswaran/whisper-small-sinhala"
             ),
         }
+        logger.info("[LATENCY] ASR language=sinhala duration=%.3fs", time.perf_counter() - started)
+        return output
 
     # Route Tamil to lemuralabs/tamil-asr-qwen3 if the endpoint is configured.
     # If the Qwen3-ASR model fails (crash-loop / cold-start timeout / any error),
     # automatically fall back to Whisper Large V3 with language_hint="tamil"
     # so Tamil transcription always works.
     indic_url = settings.modal_indic_stt_url.strip()
-    if language_hint.lower() == "tamil" and indic_url:
-        logger.info("Routing Tamil audio to IndicConformer STT (%s bytes)", len(audio_bytes))
+    tamil_fallback_used = False
+    if language == "tamil" and indic_url:
+        logger.info("Routing Tamil audio to Qwen3 ASR (%s bytes)", len(audio_bytes))
         try:
-            return await call_indic_stt(audio_bytes, filename)
+            result = await call_indic_stt(audio_bytes, filename)
+            result["engine"] = result.get("engine", "osmapi/tamil-asr-qwen3")
+            result["fallback_used"] = False
+            elapsed = time.perf_counter() - started
+            logger.info("[LATENCY] ASR tamil qwen = %.3fs", elapsed)
+            logger.info("[LATENCY] ASR tamil fallback_used=false")
+            logger.info("[LATENCY] ASR TOTAL = %.3fs", elapsed)
+            return result
         except Exception as indic_exc:
+            tamil_fallback_used = True
             logger.warning(
-                "IndicConformer STT failed (%s: %s) — falling back to Whisper for Tamil",
+                "Qwen3 ASR failed (%s: %s) — falling back to Whisper for Tamil",
                 type(indic_exc).__name__,
                 indic_exc,
             )
@@ -227,7 +243,15 @@ async def call_whisper(audio_bytes: bytes, filename: str, language_hint: str) ->
         params={"language_hint": effective_hint},
     )
     response.raise_for_status()
-    return response.json()
+    result = response.json()
+    result["engine"] = result.get("engine", "openai/whisper-large-v3")
+    result["fallback_used"] = tamil_fallback_used
+    elapsed = time.perf_counter() - started
+    logger.info("[LATENCY] ASR language=%s duration=%.3fs", language, elapsed)
+    if language == "tamil":
+        logger.info("[LATENCY] ASR tamil fallback_used=%s", str(tamil_fallback_used).lower())
+        logger.info("[LATENCY] ASR TOTAL = %.3fs", elapsed)
+    return result
 
 
 async def call_indic_stt(audio_bytes: bytes, filename: str) -> dict:
@@ -354,9 +378,9 @@ async def call_rag_generator(query: str, context_chunks: list[str], language: st
     try:
         response = await _http.post(
             url,
-            headers=_auth_headers(),
+            # Public FastAPI endpoint; do not send Modal CLI credentials.
             json={"query": query, "context": context_chunks, "language": language},
-            timeout=120.0,  # Gemma 4 12B cold-start on A100 can take ~60-120s
+            timeout=300.0,  # Includes Modal scheduling plus Gemma 4 model initialization.
         )
         response.raise_for_status()
         return response.json()
@@ -558,14 +582,14 @@ async def call_indic_parler_mixed_tts_direct(text: str, description: str = "") -
       - Does NOT segment by script (Tamil vs English)
       - Does NOT split into two separate TTS calls and join
       - Does NOT use IndicF5 (different from Mode A, B, C)
-      - Does NOT use Parler-TTS Mini v1 (different from English TTS)
+      - Does NOT use Kokoro-82M (the separate English TTS service)
 
     The original mixed Tamil+English text is sent in ONE call to the
     ai4bharat/indic-parler-tts model — a unified multilingual model trained
     on 1,806 hours of Indic+English data, capable of code-switched synthesis.
 
     URL used: MODAL_INDIC_PARLER_MIXED_TTS_URL
-    This URL is SEPARATE from MODAL_TAMIL_TTS_URL and MODAL_ENGLISH_TTS_URL.
+    This URL is separate from the Tamil and English Kokoro TTS endpoints.
     Failure here ONLY affects Mode D — no other TTS path is touched.
 
     Returns raw WAV bytes (44,100 Hz) on success, or None on any failure.
@@ -637,7 +661,7 @@ async def call_indic_parler_mixed_tts_direct(text: str, description: str = "") -
 
 
 async def call_tamil_tts(text: str) -> bytes | None:
-    """Call the AI4Bharat Indic Parler-TTS endpoint for Tamil synthesis.
+    """Call ai4bharat/indic-parler-tts for final Tamil synthesis.
 
     Returns raw WAV bytes on success, or None on any failure.
     This function is intentionally non-raising so that TTS failure never
@@ -657,12 +681,19 @@ async def call_tamil_tts(text: str) -> bytes | None:
         logger.debug("call_tamil_tts: USE_TAMIL_TTS=false — skipping Tamil TTS")
         return None
 
-    url = settings.modal_tamil_tts_url.strip()
+    url = settings.modal_indic_parler_mixed_tts_url.strip()
     if not url:
         logger.warning(
-            "call_tamil_tts: MODAL_TAMIL_TTS_URL is not configured — "
-            "Tamil TTS will be skipped. Deploy tamil_parler_tts.py first."
+            "call_tamil_tts: MODAL_INDIC_PARLER_MIXED_TTS_URL is not configured; "
+            "Tamil TTS will be skipped. Deploy indic_parler_mixed_tts.py first."
         )
+        return None
+
+    from app.services.tts_text import prepare_mixed_tts_text
+
+    speech_text = prepare_mixed_tts_text(text)
+    if not speech_text:
+        logger.warning("call_tamil_tts: text contained no speakable content")
         return None
 
     _t0 = _time.perf_counter()
@@ -670,7 +701,7 @@ async def call_tamil_tts(text: str) -> bytes | None:
         response = await _http.post(
             url,
             headers=_auth_headers(),
-            json={"text": text, "language": "tamil"},
+            json={"text": speech_text},
             timeout=180.0,   # A10G cold-start for Parler-TTS can take ~90-120s
         )
         response.raise_for_status()
@@ -680,7 +711,7 @@ async def call_tamil_tts(text: str) -> bytes | None:
         warmth = "cold-start" if elapsed > 15.0 else "warm"
         logger.info(
             "[TIMING] tamil_tts_generation: %.3fs (container=%s, %d chars)",
-            elapsed, warmth, len(text),
+            elapsed, warmth, len(speech_text),
         )
         return response.content
 
@@ -694,10 +725,14 @@ async def call_tamil_tts(text: str) -> bytes | None:
         return None
 
 
-# ── English TTS (Parler-TTS Mini v1 on Modal T4) ───────────────────────
+# ── English TTS (Kokoro-82M) ───────────────────────────────────────────
 
-async def call_english_tts_direct(text: str, description: str = "") -> bytes | None:
-    """Call the Parler-TTS Mini v1 endpoint unconditionally.
+async def call_english_tts_direct(
+    text: str,
+    voice: str = "",
+    speed: float | None = None,
+) -> bytes | None:
+    """Call the Kokoro-82M endpoint without checking the feature flag.
 
     TEMPORARY — used ONLY by the isolated TTS test route
     (POST /api/v1/test/english-tts).  Unlike call_english_tts(), this function
@@ -712,24 +747,24 @@ async def call_english_tts_direct(text: str, description: str = "") -> bytes | N
 
     settings = get_settings()
 
-    url = settings.modal_english_tts_url.strip()
+    url = settings.modal_english_kokoro_tts_url.strip()
     if not url:
         logger.warning(
-            "call_english_tts_direct: MODAL_ENGLISH_TTS_URL is not configured — "
-            "English TTS test will be skipped. Deploy english_parler_tts.py first."
+            "call_english_tts_direct: MODAL_ENGLISH_KOKORO_TTS_URL is not configured — "
+            "English TTS test will be skipped. Deploy english_kokoro_tts.py first."
         )
         return None
 
-    # Use the caller's description or the centrally configured default.
-    effective_description = description.strip() or settings.english_tts_default_description
+    effective_voice = voice.strip() or settings.english_tts_voice
+    effective_speed = speed if speed is not None else settings.english_tts_speed
 
     _t0 = _time.perf_counter()
     try:
         response = await _http.post(
             url,
             headers=_auth_headers(),
-            json={"text": text, "description": effective_description},
-            timeout=180.0,  # T4 cold-start for Parler-TTS can take ~60-90s
+            json={"text": text, "voice": effective_voice, "speed": effective_speed},
+            timeout=120.0,
         )
         response.raise_for_status()
         elapsed = _time.perf_counter() - _t0
@@ -764,8 +799,12 @@ async def call_english_tts_direct(text: str, description: str = "") -> bytes | N
         return None
 
 
-async def call_english_tts(text: str, description: str = "") -> bytes | None:
-    """Call the Parler-TTS Mini v1 endpoint for English synthesis.
+async def call_english_tts(
+    text: str,
+    voice: str = "",
+    speed: float | None = None,
+) -> bytes | None:
+    """Call Kokoro-82M for final English synthesis.
 
     Returns raw WAV bytes on success, or None on any failure.
     This function is intentionally non-raising so that TTS failure never
@@ -773,9 +812,8 @@ async def call_english_tts(text: str, description: str = "") -> bytes | None:
 
     Args:
         text:        English text to synthesize.
-        description: Optional Parler-TTS style description.  If empty,
-                     the centrally configured default educational voice
-                     description is used.
+        voice: Optional Kokoro English voice ID. Uses the configured voice when empty.
+        speed: Optional speech-speed multiplier. Uses the configured speed when omitted.
 
     Returns:
         bytes (audio/wav) on success, None if TTS is disabled or fails.
@@ -788,24 +826,24 @@ async def call_english_tts(text: str, description: str = "") -> bytes | None:
         logger.debug("call_english_tts: USE_ENGLISH_TTS=false — skipping English TTS")
         return None
 
-    url = settings.modal_english_tts_url.strip()
+    url = settings.modal_english_kokoro_tts_url.strip()
     if not url:
         logger.warning(
-            "call_english_tts: MODAL_ENGLISH_TTS_URL is not configured — "
-            "English TTS will be skipped. Deploy english_parler_tts.py first."
+            "call_english_tts: MODAL_ENGLISH_KOKORO_TTS_URL is not configured — "
+            "English TTS will be skipped. Deploy english_kokoro_tts.py first."
         )
         return None
 
-    # Use the caller's description or the centrally configured default.
-    effective_description = description.strip() or settings.english_tts_default_description
+    effective_voice = voice.strip() or settings.english_tts_voice
+    effective_speed = speed if speed is not None else settings.english_tts_speed
 
     _t0 = _time.perf_counter()
     try:
         response = await _http.post(
             url,
             headers=_auth_headers(),
-            json={"text": text, "description": effective_description},
-            timeout=180.0,  # T4 cold-start for Parler-TTS can take ~60-90s
+            json={"text": text, "voice": effective_voice, "speed": effective_speed},
+            timeout=120.0,
         )
         response.raise_for_status()
         elapsed = _time.perf_counter() - _t0
@@ -841,25 +879,13 @@ async def call_english_tts(text: str, description: str = "") -> bytes | None:
         return None
 
 
-# ── Sinhala VITS TTS (dialoglk/SinhalaVITS-TTS-F1, DEV ONLY) ─────────────────
+# ── Sinhala VITS TTS (dialoglk/SinhalaVITS-TTS-F1) ────────────────────────────
 
 async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
-    """Call the SinhalaVITS-TTS-F1 endpoint unconditionally.
+    """Call the final SinhalaVITS-TTS-F1 production endpoint.
 
-    TEMPORARY — used ONLY by the isolated Sinhala TTS test route
-    (POST /api/v1/test/sinhala-tts).
-
-    Architecture (completely isolated from all other TTS):
-      - Uses MODAL_SINHALA_VITS_TTS_URL — separate from MODAL_TAMIL_TTS_URL
-        and MODAL_ENGLISH_TTS_URL and MODAL_INDIC_PARLER_MIXED_TTS_URL.
-      - Calls the voicelearn-sinhala-vits-tts Modal app.
-      - The Modal container applies romanizer.py (Sinhala → romanized Sinhala)
-        then runs Coqui VITS inference at 22,050 Hz.
-      - Failure here ONLY affects the Sinhala test route. Tamil TTS, English TTS,
-        Mixed TTS (all modes), ASR, RAG, and production routing are untouched.
-
-    Returns raw WAV bytes (22,050 Hz, PCM 16-bit) on success, None on any failure.
-    REMOVE this function after Sinhala TTS evaluation is complete.
+    Returns raw WAV bytes (22,050 Hz, PCM 16-bit) on success and ``None`` on
+    failure so the text answer remains usable.
     """
     import time as _time
 
@@ -869,7 +895,7 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
     if not url:
         logger.warning(
             "call_sinhala_vits_tts_direct: MODAL_SINHALA_VITS_TTS_URL is not configured — "
-            "Sinhala TTS test will be skipped. "
+            "Sinhala answer audio will be skipped. "
             "Deploy backend/modal_endpoints/sinhala_vits_tts.py first."
         )
         return None
@@ -895,7 +921,7 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
         if "audio" not in content_type and "octet-stream" not in content_type:
             logger.warning(
                 "[SINHALA-VITS] Unexpected content-type '%s' after %.2fs — "
-                "Sinhala test only; no other TTS affected.",
+                "Sinhala answer audio is unavailable.",
                 content_type, elapsed,
             )
             return None
@@ -903,7 +929,7 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
         content = response.content
         if not content:
             logger.warning(
-                "[SINHALA-VITS] Empty audio bytes after %.2fs — Sinhala test only.",
+                "[SINHALA-VITS] Empty audio bytes after %.2fs.",
                 elapsed,
             )
             return None
@@ -918,8 +944,8 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
     except Exception as exc:
         elapsed = _time.perf_counter() - _t0
         logger.warning(
-            "call_sinhala_vits_tts_direct failed after %.2fs (%s: %s) — "
-            "Sinhala test only; Tamil/English/Mixed TTS and RAG are unaffected.",
+            "call_sinhala_vits_tts_direct failed after %.2fs (%s: %s); "
+            "the Sinhala text answer is unaffected.",
             elapsed, type(exc).__name__, exc,
         )
         return None
@@ -990,7 +1016,7 @@ async def call_sinhala_phonetic_gemma(english_span: str) -> str | None:
         return None
 
 
-# ── TEMPORARY Sinhala ASR (Lingalingeswaran/whisper-small-sinhala, DEV ONLY) ──
+# ── Sinhala ASR (Lingalingeswaran/whisper-small-sinhala) ──────────────────────
 
 async def call_sinhala_asr_direct(
     audio_bytes: bytes,
@@ -999,7 +1025,7 @@ async def call_sinhala_asr_direct(
 ) -> dict | None:
     """Send audio to the isolated Sinhala Whisper ASR Modal endpoint.
 
-    Used by the Sinhala voice route and by POST /api/v1/test/sinhala-asr.
+    Used by the production Sinhala voice route.
 
     Architecture (completely isolated from all other ASR):
       - Uses MODAL_SINHALA_ASR_URL — separate from MODAL_WHISPER_URL and

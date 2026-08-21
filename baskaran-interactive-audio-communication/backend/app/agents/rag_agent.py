@@ -26,8 +26,6 @@ async def rag_agent_node(state: dict) -> dict:
     """
     query: str = state.get("enhanced_query") or state.get("transcript", "")
     user_id: str = state.get("user_id", "")
-    language: str = state.get("language", "english")
-
     logger.info("RAG agent: retrieving chunks for user=%s", user_id)
 
     # Keep the embedding runtime out of application startup.  Upload routes
@@ -38,7 +36,9 @@ async def rag_agent_node(state: dict) -> dict:
     chunks = await hybrid_query_chunks(query, user_id)
     context_texts = [c["text"] for c in chunks]
 
-    result = await call_rag_generator(query, context_texts, language)
+    # Generate the grounded answer once in English.  The following localization
+    # node performs the single target-language conversion.
+    result = await call_rag_generator(query, context_texts, "english")
 
     return {
         **state,

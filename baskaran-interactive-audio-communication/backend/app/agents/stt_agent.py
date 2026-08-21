@@ -42,4 +42,6 @@ async def stt_node(state: dict) -> dict:
         "transcript": result["transcript"],
         "detected_language": result.get("detected_language", "en"),
         "duration_ms": result.get("duration_ms", 0),
+        "engine": result.get("engine"),
+        "fallback_used": result.get("fallback_used", False),
     }

@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SupabaseUser = { id: string } | any | null
+type SupabaseUser = { id: string } | null
 
 export function useSession() {
   const [user, setUser] = useState<SupabaseUser>(null)
@@ -13,8 +12,7 @@ export function useSession() {
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getSession().then(({ data }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setUser((data.session as any)?.user ?? null)
+      setUser(data.session?.user ?? null)
       setLoading(false)
     })
   }, [])

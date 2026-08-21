@@ -5,60 +5,41 @@ import type { Language } from '@/types'
 
 interface LanguageSelectorProps {
   value: Language
-  onChange: (lang: Language) => void
+  onChange: (language: Language) => void
   disabled?: boolean
 }
 
-const LANGUAGES = [
-  { value: 'english' as Language, label: 'English', native: 'Full English',         flag: '🇬🇧' },
-  { value: 'tamil'   as Language, label: 'Tamil',   native: 'தமிழ்',                flag: '🇮🇳' },
-  { value: 'sinhala' as Language, label: 'Sinhala', native: 'සිංහල',               flag: '🇱🇰' },
-  { value: 'mixed'   as Language, label: 'Mixed',   native: 'Thanglish / Singlish', flag: '🌐' },
+const LANGUAGES: Array<{ value: Language; label: string; native: string }> = [
+  { value: 'english', label: 'English', native: 'Full English' },
+  { value: 'tamil', label: 'Tamil', native: 'தமிழ்' },
+  { value: 'sinhala', label: 'Sinhala', native: 'සිංහල' },
 ]
 
 export function LanguageSelector({ value, onChange, disabled = false }: LanguageSelectorProps) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label="Language mode">
-      {LANGUAGES.map((lang) => {
-        const active = value === lang.value
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Response language">
+      {LANGUAGES.map((language) => {
+        const selected = value === language.value
         return (
           <button
-            key={lang.value}
-            id={`lang-${lang.value}`}
+            key={language.value}
+            id={`lang-${language.value}`}
             type="button"
+            role="radio"
+            aria-checked={selected}
             disabled={disabled}
-            onClick={() => !disabled && onChange(lang.value)}
-            aria-pressed={active}
+            onClick={() => onChange(language.value)}
             className={clsx(
-              'relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl border transition-all duration-200 select-none',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-              'disabled:opacity-40 disabled:pointer-events-none',
-              active ? 'lang-btn-active' : 'lang-btn'
+              'relative flex min-h-24 flex-col items-start justify-center rounded-2xl border px-5 text-left transition-all',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:pointer-events-none disabled:opacity-50',
+              selected
+                ? 'border-brand-400/70 bg-brand-500/15 shadow-brand'
+                : 'border-white/10 bg-white/[0.025] hover:border-white/20 hover:bg-white/[0.05]',
             )}
           >
-            {/* Active dot */}
-            {active && (
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-brand-400" />
-            )}
-
-            {/* Flag */}
-            <span
-              className={clsx('text-2xl transition-transform duration-150', active ? 'scale-110' : 'group-hover:scale-105')}
-              role="img"
-              aria-label={lang.label}
-            >
-              {lang.flag}
-            </span>
-
-            {/* Name */}
-            <span className={clsx('text-sm font-semibold leading-tight', active ? 'text-white' : 'text-white/70')}>
-              {lang.label}
-            </span>
-
-            {/* Native script */}
-            <span className="text-[10px] text-white/35 leading-tight truncate w-full text-center px-1">
-              {lang.native}
-            </span>
+            {selected && <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-brand-300" />}
+            <span className="text-sm font-semibold text-white/90">{language.label}</span>
+            <span className="mt-1 text-sm text-white/45">{language.native}</span>
           </button>
         )
       })}

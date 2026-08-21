@@ -14,7 +14,7 @@ Why this instead of IndicConformer?
 Architecture:
   - Audio Encoder (AuT): Fbank 128-dim features -> attention-based encoder
   - Text Decoder: Qwen3 LLM (28-layer GQA + RoPE + SwiGLU)
-  - Recommended decoding: beam search (num_beams=5)
+  - Decoding is handled by the qwen-asr toolkit
   - Input: 16 kHz mono WAV
 
 Deploy:
@@ -47,13 +47,17 @@ image = (
     )
     .apt_install("ffmpeg")
     .pip_install(
+        # Torch 2.2.2/native extensions in this image require the NumPy 1.x ABI.
+        # Keep this exact constraint in the same pip transaction so later
+        # dependencies cannot resolve NumPy 2.x.
+        "numpy==1.26.4",
         "torch==2.2.2",
         "torchaudio==2.2.2",
         # Transformers 4.46+ required for Qwen3-ASR model class support
         "transformers>=4.46.0",
         "huggingface_hub>=0.22.0",
         "fastapi[standard]==0.115.0",
-        # Qwen3-ASR toolkit (official; gives transcribe() helper + beam search)
+        # Qwen3-ASR toolkit (official; gives the transcribe() helper)
         "qwen-asr>=0.0.6",
         # soundfile for audio I/O
         "soundfile>=0.12.1",
@@ -93,9 +97,11 @@ class TamilASRQwen3:
         Model is cached in /models (Modal Volume) so cold-starts after the
         first download take only a few seconds.
         """
+        import numpy as np
         import torch
         from qwen_asr import Qwen3ASRModel
 
+        print(f"[TamilASRQwen3] numpy={np.__version__} torch={torch.__version__}")
         print(f"[TamilASRQwen3] Loading {_MODEL_ID} ...")
         self.model = Qwen3ASRModel.from_pretrained(
             _MODEL_ID,
@@ -180,13 +186,10 @@ class TamilASRQwen3:
             # Convert to 16 kHz mono WAV and get temp file path
             wav_path = self._audio_to_wav_file(audio_bytes, audio_file.filename or "recording.webm")
 
-            # Run transcription with beam search (num_beams=5 recommended for Tamil)
-            results = self.model.transcribe(
-                audio=wav_path,
-                num_beams=5,
-            )
+            # qwen-asr's transcribe API does not accept transformers-style
+            # num_beams. Decoding remains the toolkit/model default.
+            results = self.model.transcribe(audio=wav_path)
 
-            # results is a list of TranscriptionResult objects; take the first
             if isinstance(results, list) and results:
                 transcript = results[0].text.strip()
             elif hasattr(results, "text"):
@@ -204,6 +207,9 @@ class TamilASRQwen3:
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         preview = transcript[:60] if transcript else ""
         print(f"[TamilASRQwen3] '{preview}...' | lang=ta | {elapsed_ms}ms")
+        print(f"[LATENCY] ASR tamil qwen = {elapsed_ms / 1000:.3f}s")
+        print("[LATENCY] ASR tamil fallback_used=false")
+        print(f"[LATENCY] ASR TOTAL = {elapsed_ms / 1000:.3f}s")
 
         return {
             "transcript":        transcript,

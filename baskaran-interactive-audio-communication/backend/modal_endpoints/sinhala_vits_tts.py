@@ -12,22 +12,13 @@ Accepts JSON:
 
 Returns: audio/wav (22,050 Hz, PCM 16-bit)
 
-Debug headers returned (test route only):
+Response metadata headers:
     X-TTS-Engine:     SinhalaVITS-F1
     X-TTS-Latency-Ms: <round-trip ms>
     X-TTS-Sample-Rate: 22050
 
-Also exposes POST /romanize for debug preview of Sinhala → Roman conversion.
-
-ISOLATION CONTRACT:
-    - This file has NO imports from or dependencies on the main FastAPI app.
-    - TTS==0.21.1 is installed ONLY inside this container image.
-    - This endpoint is completely separate from:
-        * voicelearn-tamil-parler-tts   (IndicF5 Tamil)
-        * voicelearn-english-parler-tts (Parler-TTS Mini v1 English)
-        * voicelearn-indic-parler-mixed-tts (Mode D)
-    - DO NOT connect to RAG, ASR, ChromaDB, or any production pipeline.
-    - This is a TEMPORARY test endpoint. Remove when evaluation is complete.
+This is the final Sinhala answer-audio service. Its dependency environment is
+isolated from the main FastAPI process because Coqui TTS uses older audio pins.
 """
 
 import io

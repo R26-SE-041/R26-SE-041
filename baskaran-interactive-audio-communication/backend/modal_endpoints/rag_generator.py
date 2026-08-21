@@ -28,6 +28,8 @@ image = (
     .pip_install(
         "transformers>=5.0.0",
         "torch>=2.2.0",
+        "torchvision>=0.17.0",
+        "pillow>=10.0.0",
         "accelerate>=0.28.0",
         "fastapi[standard]>=0.115.0",
         "pydantic>=2.0.0",
@@ -97,20 +99,18 @@ RAG_SYSTEM_PROMPTS = {
         "Be concise and clear. Do not hallucinate or use external knowledge."
     ),
     "tamil": (
-        "Neenga oru kalvi aasiriyar. Keezhe kodukkapatta Context (aavana paguthi) mattume "
-        "payanduthu maanavar kelvikku Tamil-il patil tharunga. "
-        "Context English-il irundhaalum, unga patil Tamil-iley irukkanum. "
-        "Context-la illatha thavalkalai sollaadheenga. "
-        "Patil thelivagavum surukkamakavum irukkattum. "
-        "Thozhilnutpa sorkal (technical terms) English-iley vaikkalaam."
+        "You are an academic tutor. Answer the student's question using ONLY the provided context. "
+        "Answer naturally in Tamil using Tamil Unicode script, even when the context is in English. "
+        "If the answer is not in the context, say so in Tamil. "
+        "Be concise and clear. Do not hallucinate or use external knowledge. "
+        "Preserve technical terms when needed and do not translate source filenames."
     ),
     "sinhala": (
-        "Oba adhyaapanaya guruwaryekis. Pahath Context (lekana kothas) pamanak bhavita kara "
-        "sisuwage prashnaayata Sinhalen pilituru denna. "
-        "Context Ingrisin tibunath oba pilithuwa Sinhalen liyanna. "
-        "Context-aye nathi thooru nokiyanna. "
-        "Pilithuwa pahediliwwa ha sankshipthawa liyanna. "
-        "Thakshaniya vachan Ingrisin randwa gatha hakiya."
+        "You are an academic tutor. Answer the student's question using ONLY the provided context. "
+        "Answer naturally in Sinhala using Sinhala Unicode script, even when the context is in English. "
+        "If the answer is not in the context, say so in Sinhala. "
+        "Be concise and clear. Do not hallucinate or use external knowledge. "
+        "Preserve technical terms when needed and do not translate source filenames."
     ),
     "mixed": (
         "You are an academic tutor. Answer using ONLY the provided context. "
@@ -189,32 +189,42 @@ SCRIPT_CORRECT_PROMPTS = {
 
 
 @app.cls(
-    # Gemma 4 12B BF16 weights are ~24 GB; use 40 GB for the model,
-    # generation buffers, and the retrieved RAG context.
-    gpu="A100-40GB",
+    # Gemma 4's multimodal weights plus KV cache exceed the practical memory
+    # available on a 40 GB worker.  With device_map="auto" that silently
+    # offloads layers to CPU and reduces generation to well below 1 token/s.
+    gpu="A100-80GB",
     volumes={"/models": model_volume},
-    scaledown_window=300,
+    # Keep a conversation's worker resident without imposing the continuous
+    # cost of a permanently reserved A100.
+    scaledown_window=1200,
     memory=16384,
 )
 class RAGGenerator:
     @modal.enter()
     def load_model(self):
-        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from transformers import AutoModelForMultimodalLM, AutoProcessor
         import torch
 
-        model_id = "google/gemma-4-12b-it"
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir="/models")
-        self.model = AutoModelForCausalLM.from_pretrained(
+        model_id = "google/gemma-4-12B-it"
+        self.processor = AutoProcessor.from_pretrained(model_id, cache_dir="/models")
+        # Keep the tokenizer alias for the transcript/phonetic endpoints below.
+        self.tokenizer = self.processor.tokenizer
+        self.model = AutoModelForMultimodalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
+            attn_implementation="sdpa",
             cache_dir="/models",
         )
+        self.model.eval()
 
     @modal.fastapi_endpoint(method="POST")
     async def generate(self, payload: RAGRequest):
         """RAG answer generation."""
+        import time
         import torch
+
+        request_started = time.perf_counter()
 
         query: str = payload.query
         context_chunks: List[str] = payload.context
@@ -243,27 +253,47 @@ class RAGGenerator:
             },
         ]
 
-        text = self.tokenizer.apply_chat_template(
+        tokenize_started = time.perf_counter()
+        inputs = self.processor.apply_chat_template(
             messages,
-            tokenize=False,
+            tokenize=True,
             add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         )
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        inputs = inputs.to(self.model.device)
         input_length = inputs["input_ids"].shape[-1]
+        tokenize_ms = (time.perf_counter() - tokenize_started) * 1000
 
-        with torch.no_grad():
+        generation_started = time.perf_counter()
+        with torch.inference_mode():
             output = self.model.generate(
                 **inputs,
                 max_new_tokens=512,
                 do_sample=False,
+                use_cache=True,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
+        torch.cuda.synchronize()
+        generation_ms = (time.perf_counter() - generation_started) * 1000
 
-        answer = self.tokenizer.decode(
+        answer = self.processor.decode(
             output[0][input_length:], skip_special_tokens=True
         ).strip()
 
-        return {"answer": answer}
+        output_tokens = output.shape[-1] - input_length
+        return {
+            "answer": answer,
+            "gpu": torch.cuda.get_device_name(0),
+            "timings_ms": {
+                "tokenize": round(tokenize_ms, 1),
+                "generation": round(generation_ms, 1),
+                "total": round((time.perf_counter() - request_started) * 1000, 1),
+            },
+            "input_tokens": input_length,
+            "output_tokens": output_tokens,
+        }
 
     @modal.fastapi_endpoint(method="POST")
     async def correct_transcript(self, payload: TranscriptCorrectorRequest):

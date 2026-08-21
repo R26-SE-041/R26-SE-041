@@ -37,6 +37,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             Your browser does not support the audio element.
           </audio>
         )}
+        {!isUser && message.audio_pending && (
+          <p className="mt-2 text-xs text-white/40">Generating audio…</p>
+        )}
+        {!isUser && message.audio_error && (
+          <p className="mt-2 text-xs text-amber-300/80">{message.audio_error}</p>
+        )}
 
         {/* Document references — shown for assistant messages */}
         {!isUser && message.references && message.references.length > 0 && (

@@ -3,14 +3,14 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'VoiceLearn AI — Voice-Powered Study Assistant',
-  description: 'Upload your lecture PDFs and ask questions using your voice. Get answers in Tamil, Sinhala, English, or mixed.',
+  description: 'Upload your lecture documents and ask questions using your voice. Get grounded answers in English, Tamil, or Sinhala.',
 }
 
 const features = [
   { icon: '🎤', title: 'Voice Queries', desc: 'Ask questions naturally using your microphone. Whisper Large V3 transcribes your speech.' },
   { icon: '🧠', title: 'RAG Answers', desc: 'Llama 3.1 8B answers only from your uploaded documents — no hallucinations.' },
-  { icon: '🌐', title: 'Multilingual', desc: 'Get answers in English, Tamil, Sinhala, or Thanglish/Singlish mixed mode.' },
-  { icon: '🔊', title: 'Voice Responses', desc: 'Listen to answers with MMS-TTS speech synthesis in your language.' },
+  { icon: '🌐', title: 'Multilingual', desc: 'Get answers in English, Tamil, or Sinhala.' },
+  { icon: '🔊', title: 'Voice Responses', desc: 'Listen to answers with language-specific neural speech synthesis.' },
 ]
 
 export default function HomePage() {
@@ -47,7 +47,7 @@ export default function HomePage() {
       <section className="relative z-10 max-w-4xl mx-auto px-6 pt-24 pb-20 text-center">
         <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 rounded-full px-4 py-1.5 text-sm text-brand-300 mb-8">
           <span className="glow-dot w-2 h-2" />
-          Powered by Whisper · Llama 3.1 · MMS-TTS
+          Powered by Whisper · Llama 3.1 · Kokoro-82M
         </div>
 
         <h1 className="text-5xl sm:text-7xl font-bold leading-tight mb-6">
@@ -104,7 +104,7 @@ export default function HomePage() {
         <div className="mt-12 text-center">
           <p className="text-white/40 text-sm mb-4">Supports</p>
           <div className="flex flex-wrap justify-center gap-3">
-            {['🇬🇧 English', '🇮🇳 Tamil · தமிழ்', '🇱🇰 Sinhala · සිංහල', '🌐 Thanglish / Singlish'].map((l) => (
+            {['English', 'Tamil · தமிழ்', 'Sinhala · සිංහල'].map((l) => (
               <span key={l} className="glass rounded-full px-4 py-2 text-sm text-white/70">
                 {l}
               </span>
