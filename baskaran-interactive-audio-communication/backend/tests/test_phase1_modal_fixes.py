@@ -76,3 +76,22 @@ def test_bge_reranker_uses_existing_persistent_model_volume():
     assert 'MODELS_DIR = "/bge_models"' in source
     assert 'Volume.from_name("voicelearn-bge-models"' in source
     assert "bge_volume.commit()" in source
+
+
+def test_bge_image_uses_secure_torch_and_numpy_1_abi():
+    source = (BACKEND_ROOT / "modal_endpoints" / "bge_retrieval.py").read_text(encoding="utf-8-sig")
+    tree = ast.parse(source)
+    pip_installs = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "pip_install"
+    ]
+
+    assert len(pip_installs) == 1
+    dependencies = {
+        arg.value for arg in pip_installs[0].args
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+    }
+    assert "torch==2.6.0" in dependencies
+    assert "numpy>=1.26,<2" in dependencies

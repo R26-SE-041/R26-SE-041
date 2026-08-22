@@ -55,7 +55,7 @@ image = (
     )
     .run_commands(
         "pip install "
-        "  'torch>=2.1.0' "
+        "  'torch==2.2.2' "
         "  'numpy>=1.24.0' "
         "  'git+https://github.com/AI4Bharat/IndicF5.git' "
         "  'transformers<4.50' "

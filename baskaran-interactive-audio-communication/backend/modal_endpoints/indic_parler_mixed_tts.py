@@ -44,11 +44,12 @@ image = (
     )
     .pip_install(
         # Core PyTorch — install before parler-tts to guarantee GPU wheels
-        "torch>=2.1.0",
+        "torch>=2.4.0",
+        "torchaudio>=2.4.0",
         # HuggingFace parler-tts from source — required for indic-parler-tts multilingual support
         "git+https://github.com/huggingface/parler-tts.git",
         # Transformers — must be >= 4.40 for SDPA and multilingual tokenizer compatibility
-        "transformers>=4.40.0",
+        "transformers>=4.40.0,<5",
         "accelerate>=0.26.0",
         # Audio / IO
         "soundfile>=0.12.1",

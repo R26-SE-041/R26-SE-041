@@ -46,7 +46,7 @@ image = (
         # This installs old scipy/librosa/numba — ISOLATED from main environment.
         "TTS==0.21.1",
         # PyTorch 2.x — compatible with Coqui TTS 0.21.1
-        "torch>=2.0.0",
+        "torch==2.2.2",
         # Audio I/O
         "soundfile>=0.12.1",
         "numpy",

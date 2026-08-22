@@ -27,8 +27,8 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "transformers>=5.0.0",
-        "torch>=2.2.0",
-        "torchvision>=0.17.0",
+        "torch>=2.4.0",
+        "torchvision>=0.19.0",
         "pillow>=10.0.0",
         "accelerate>=0.28.0",
         "fastapi[standard]>=0.115.0",
@@ -106,11 +106,14 @@ RAG_SYSTEM_PROMPTS = {
         "Preserve technical terms when needed and do not translate source filenames."
     ),
     "sinhala": (
+        "ඔබ අධ්‍යාපනික උපදේශකයෙකි. සිංහලෙන් පිළිතුරු දෙන්න. "
         "You are an academic tutor. Answer the student's question using ONLY the provided context. "
-        "Answer naturally in Sinhala using Sinhala Unicode script, even when the context is in English. "
+        "CRITICAL: You MUST answer ENTIRELY in Sinhala Unicode script. "
+        "Do NOT write any English words in your response. "
+        "If a term has no Sinhala equivalent, describe its meaning in Sinhala instead. "
+        "List ALL relevant items from the context — do not stop after the first point. "
         "If the answer is not in the context, say so in Sinhala. "
-        "Be concise and clear. Do not hallucinate or use external knowledge. "
-        "Preserve technical terms when needed and do not translate source filenames."
+        "Be complete. Do not hallucinate or use external knowledge."
     ),
     "mixed": (
         "You are an academic tutor. Answer using ONLY the provided context. "
@@ -211,7 +214,7 @@ class RAGGenerator:
         self.tokenizer = self.processor.tokenizer
         self.model = AutoModelForMultimodalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation="sdpa",
             cache_dir="/models",
@@ -270,7 +273,7 @@ class RAGGenerator:
         with torch.inference_mode():
             output = self.model.generate(
                 **inputs,
-                max_new_tokens=512,
+                max_new_tokens=1500,
                 do_sample=False,
                 use_cache=True,
                 pad_token_id=self.tokenizer.eos_token_id,

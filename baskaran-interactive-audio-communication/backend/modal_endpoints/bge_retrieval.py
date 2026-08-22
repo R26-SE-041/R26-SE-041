@@ -41,7 +41,13 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "sentence-transformers==3.1.1",
-        "torch>=2.2.0",
+        # Transformers rejects torch.load on torch<2.6 because of
+        # CVE-2025-32434. Pin a CUDA 12-era secure release instead of allowing
+        # pip to drift to the much larger newest CUDA stack.
+        "torch==2.6.0",
+        # Torch and sentence-transformers extensions in this image are not
+        # compatible with the NumPy 2 ABI yet.
+        "numpy>=1.26,<2",
         "transformers>=4.41.0",
         "accelerate>=0.28.0",
         "fastapi[standard]>=0.115.0",
@@ -182,6 +188,7 @@ class BGEReranker:
         self.model = CrossEncoder(
             RERANKER_MODEL,
             max_length=512,
+            cache_folder=MODELS_DIR,
             # CrossEncoder automatically uses the GPU when torch.cuda is available.
         )
         bge_volume.commit()

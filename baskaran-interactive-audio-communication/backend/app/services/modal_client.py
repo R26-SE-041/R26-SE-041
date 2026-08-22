@@ -837,12 +837,21 @@ async def call_english_tts(
     effective_voice = voice.strip() or settings.english_tts_voice
     effective_speed = speed if speed is not None else settings.english_tts_speed
 
+    # Strip markdown symbols (**, *, _, `, ##, bullets, URLs etc.) so Kokoro
+    # never reads "asterisk" or "pound" aloud.  Reuses the same helper used
+    # for Tamil TTS text preparation.
+    from app.services.tts_text import prepare_mixed_tts_text
+    speech_text = prepare_mixed_tts_text(text)
+    if not speech_text:
+        logger.warning("call_english_tts: text contained no speakable content after cleanup")
+        return None
+
     _t0 = _time.perf_counter()
     try:
         response = await _http.post(
             url,
             headers=_auth_headers(),
-            json={"text": text, "voice": effective_voice, "speed": effective_speed},
+            json={"text": speech_text, "voice": effective_voice, "speed": effective_speed},
             timeout=120.0,
         )
         response.raise_for_status()

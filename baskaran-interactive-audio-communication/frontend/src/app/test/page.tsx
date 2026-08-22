@@ -193,9 +193,13 @@ export default function StudyAssistantPage() {
       setResult({ transcript: question, answer: answer.answer, references: answer.references })
       setPhase('answered')
       void synthesizeAnswer(answer.answer, language)
-    } catch {
+    } catch (error) {
       setPhase('rag-error')
-      setRagError('Couldn\u2019t generate an answer. Please try again.')
+      setRagError(
+        error instanceof Error
+          ? error.message
+          : 'Couldn\u2019t generate an answer. Please try again.',
+      )
     } finally {
       ragRequestActiveRef.current = false
     }
