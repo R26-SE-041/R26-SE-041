@@ -1,0 +1,10 @@
+{
+  "organ":"brain","version":"1.0.0","default_view":"midsagittal","views":[{
+    "id":"midsagittal","label":"Midsagittal view","aliases":["median sagittal","side cutaway","sagittal section"],
+    "default_orientation":"landscape","allowed_detail_levels":["basic","intermediate","advanced"],
+    "orientation_note":"Midsagittal section viewed from the patient's left side: anterior is viewer-left, posterior is viewer-right, superior is up.",
+    "required_structures":["frontal_lobe","parietal_lobe","temporal_lobe","occipital_lobe","corpus_callosum","thalamus","hypothalamus","midbrain","pons","medulla_oblongata","cerebellum","spinal_cord"],
+    "optional_structures":["cerebrum","pituitary_gland"],
+    "clean_image_rules":["single isolated brain","midsagittal section","centered subject","light neutral background","clear boundaries","empty side margins","no embedded text","no labels","no arrows","no callout lines","no legend","no skull"]
+  }]
+}

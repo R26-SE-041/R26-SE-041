@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eduvision.local/schemas/anatomy_spec.schema.json",
+  "title": "Anatomy specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["is_anatomy"],
+  "properties": {
+    "is_anatomy": {"type": "boolean"},
+    "organ": {"type": ["string", "null"]},
+    "view": {"type": ["string", "null"]},
+    "view_description": {"type": ["string", "null"], "maxLength": 240},
+    "grade_level": {
+      "type": ["string", "null"],
+      "enum": ["primary_school", "middle_school", "high_school", "undergraduate", "general_audience", null]
+    },
+    "required_structures": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "focus_structures": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "detail_level": {
+      "type": ["string", "null"],
+      "enum": ["basic", "intermediate", "advanced", null]
+    },
+    "orientation": {
+      "type": ["string", "null"],
+      "enum": ["square", "portrait", "landscape", null]
+    },
+    "show_flow": {"type": "boolean"},
+    "orientation_note": {"type": ["string", "null"]},
+    "knowledge_version": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"is_anatomy": {"const": true}}},
+      "then": {
+        "required": ["organ", "view", "view_description", "grade_level", "required_structures", "focus_structures", "detail_level", "orientation", "show_flow"],
+        "properties": {"required_structures": {"minItems": 1}}
+      }
+    }
+  ]
+}

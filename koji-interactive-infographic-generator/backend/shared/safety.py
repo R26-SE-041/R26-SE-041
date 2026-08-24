@@ -51,6 +51,42 @@ _BENIGN_CONTEXT = re.compile(
     re.I,
 )
 
+# Broad biological / anatomical subject regex — used to deterministically
+# allow benign educational prompts before a probabilistic model gets a vote.
+_BIOLOGY_SUBJECT = re.compile(
+    r"\b(brain|heart|lungs?|liver|kidney|kidneys|eye|eyes|skin|stomach|intestin(?:e|es|al)|"
+    r"skull|spine|spinal|muscle|bone|joint|tendon|ligament|artery|arter(?:y|ies|ial)|"
+    r"vein|veins?|aorta|ventricle|atrium|cortex|cerebr(?:um|al|ellum)|lobe|neuron|"
+    r"organ|cell|tissue|membrane|nucleus|chromosome|dna|rna|mitosis|meiosis|"
+    r"anatomy|anatomical|dissect(?:ion)?|cross[- ]?section|cutaway|sagittal|coronal|"
+    r"transverse|axial|anterior|posterior|dorsal|ventral|lateral|medial|"
+    r"histolog(?:y|ical)|physiolog(?:y|ical)|morpholog(?:y|ical)|"
+    r"photosynthesis|ecosystem|biome|organism|species|genus|"
+    r"illustration|diagram|textbook|infographic|educational)\b",
+    re.I,
+)
+
+
+def is_benign_biology(prompt: str) -> bool:
+    """Deterministically identify benign biology/anatomy/educational prompts.
+
+    These prompts must never be sent to a probabilistic classifier because a
+    3B model can randomly misclassify normal anatomy terms (e.g. "brain") as
+    illegal content.  Only prompts that also match an explicit harmful target
+    remain eligible for contextual review.
+    """
+    clean = re.sub(r"\s+", " ", prompt).strip()
+    if not _BIOLOGY_SUBJECT.search(clean):
+        return False
+    # If an illegal *target* is explicitly present alongside biology language,
+    # this is ambiguous and should NOT be short-circuited as benign.
+    if _ILLEGAL_TARGET.search(clean):
+        return False
+    # Sexual language combined with biology is also ambiguous.
+    if _SEXUAL.search(clean) or _EXPLICIT.search(clean):
+        return False
+    return True
+
 
 def assess_prompt(prompt: str) -> SafetyDecision:
     """Block explicit sexual content and actionable facilitation of illegal harm."""
@@ -76,6 +112,42 @@ def assess_prompt(prompt: str) -> SafetyDecision:
     if _SEXUAL.search(clean) and not _BENIGN_CONTEXT.search(clean):
         return SafetyDecision(False, "sexual", "Adult sexualized content is not allowed")
     return SafetyDecision(True)
+
+
+def needs_contextual_review(prompt: str) -> bool:
+    """Return whether a rules-safe prompt still contains ambiguous risk language.
+
+    The model classifier is useful for genuinely ambiguous context, but it must
+    not get a random veto over ordinary educational requests such as anatomy.
+
+    Benign biology/anatomy prompts are deterministically allowed — they must
+    never be sent to a probabilistic classifier that can randomly block "brain"
+    as illegal.
+    """
+    clean = re.sub(r"\s+", " ", prompt).strip()
+    # Short-circuit: clear biology/anatomy with no illegal targets or sexual
+    # language is unambiguously benign.
+    if is_benign_biology(clean):
+        return False
+    return bool(
+        _MINOR.search(clean)
+        or _SEXUAL.search(clean)
+        or _EXPLICIT.search(clean)
+        or _ILLEGAL_ACTION.search(clean)
+        or _ILLEGAL_TARGET.search(clean)
+    )
+
+
+def is_model_generated_safe(prompt: str) -> SafetyDecision:
+    """Safety check for model-generated output (enhanced prompts).
+
+    Model output should only be checked with deterministic rules, never re-run
+    through the probabilistic Qwen classifier.  This prevents the circular
+    false-positive where Qwen generates a prompt containing words like "build"
+    or "textbook", needs_contextual_review() triggers, and Qwen then
+    misclassifies its own output as illegal.
+    """
+    return assess_prompt(prompt)
 
 
 def model_decision(payload: dict[str, Any] | None) -> SafetyDecision | None:

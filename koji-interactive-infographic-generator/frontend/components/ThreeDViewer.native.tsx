@@ -88,9 +88,10 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
           <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} size="large" /><Text style={styles.hint}>{loadError ?? "Preparing 3D viewer..."}</Text></View>
         ) : (
           <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={styles.canvasFill}>
-            <ambientLight intensity={0.8} />
-            <directionalLight position={[5, 8, 5]} intensity={1.3} />
-            <directionalLight position={[-4, 3, -4]} intensity={0.5} />
+            <ambientLight intensity={1.5} />
+            <directionalLight position={[5, 8, 5]} intensity={1.8} />
+            <directionalLight position={[-5, 3, 2]} intensity={1.2} />
+            <directionalLight position={[0, -3, -4]} intensity={0.8} />
             <Model pitch={pitch} scene={scene} yaw={yaw} zoom={zoom} />
           </Canvas>
         )}

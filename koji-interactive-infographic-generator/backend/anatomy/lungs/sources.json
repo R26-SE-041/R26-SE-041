@@ -1,0 +1,7 @@
+{
+  "organ":"lungs","version":"1.0.0","sources":[
+    {"id":"ncbi-lung-anatomy","title":"Anatomy, Thorax, Lungs","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK470197/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-bronchial-anatomy","title":"Anatomy, Thorax, Bronchial","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK537353/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-lung-histology","title":"Histology, Lung","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK534789/","accessed":"2026-08-21","reviewed":true}
+  ]
+}

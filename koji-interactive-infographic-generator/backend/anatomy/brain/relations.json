@@ -1,0 +1,16 @@
+{
+  "organ":"brain","version":"1.0.0","relations":[
+    {"source":"frontal_lobe","relation":"part_of","target":"cerebrum"},
+    {"source":"parietal_lobe","relation":"part_of","target":"cerebrum"},
+    {"source":"temporal_lobe","relation":"part_of","target":"cerebrum"},
+    {"source":"occipital_lobe","relation":"part_of","target":"cerebrum"},
+    {"source":"corpus_callosum","relation":"connects_regions_of","target":"cerebrum"},
+    {"source":"hypothalamus","relation":"lies_inferior_to","target":"thalamus"},
+    {"source":"pituitary_gland","relation":"functionally_linked_to","target":"hypothalamus"},
+    {"source":"midbrain","relation":"continuous_with","target":"pons"},
+    {"source":"pons","relation":"continuous_with","target":"medulla_oblongata"},
+    {"source":"medulla_oblongata","relation":"continuous_with","target":"spinal_cord"},
+    {"source":"cerebellum","relation":"lies_posterior_to","target":"pons"},
+    {"source":"cerebellum","relation":"lies_posterior_to","target":"medulla_oblongata"}
+  ]
+}

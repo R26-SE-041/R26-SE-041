@@ -46,6 +46,7 @@ class MemoryManager:
         agent_name: str = "prompt-agent",
         agents_root: str | Path | None = None,
         memento_path: str | Path | None = None,
+        global_root: str | Path | None = None,
     ) -> None:
         if not _AGENT_NAME.fullmatch(agent_name):
             raise ValueError(f"Invalid agent name: {agent_name!r}")
@@ -53,6 +54,7 @@ class MemoryManager:
         backend_root = Path(__file__).resolve().parents[1]
         self.agent_name = agent_name
         self.agents_root = Path(agents_root) if agents_root else backend_root / "agents"
+        self.global_root = Path(global_root) if global_root else backend_root / "config" / "global"
         agent_root = self.agents_root / agent_name
         preferred_skill = agent_root / "SKILL.md"
         legacy_skill = backend_root / "skills" / "SKILL.md"
@@ -82,11 +84,28 @@ class MemoryManager:
         return self._read(self.memento_path)
 
     def load_static_context(self) -> dict[str, str]:
-        """Return named blocks so the caller can apply its own token budgets."""
+        """Return global + agent-local memory without changing existing callers."""
+        global_skill = self._read(self.global_root / "SKILL.md")
+        global_memento = self._read(self.global_root / "MEMENTO.md")
+        local_skill = self.load_semantic_memory()
+        local_memento = self.load_memento_memory()
         return {
-            "skill_rules": self.load_semantic_memory(),
-            "memento": self.load_memento_memory(),
+            "global_skill_rules": global_skill,
+            "agent_skill_rules": local_skill,
+            "global_memento": global_memento,
+            "agent_memento": local_memento,
+            "skill_rules": self._join_scoped("Global rules", global_skill, "Agent rules", local_skill),
+            "memento": self._join_scoped("Global lessons", global_memento, "Agent lessons", local_memento),
         }
+
+    @staticmethod
+    def _join_scoped(first_label: str, first: str, second_label: str, second: str) -> str:
+        blocks = []
+        if first:
+            blocks.append(f"## {first_label}\n{first}")
+        if second:
+            blocks.append(f"## {second_label}\n{second}")
+        return "\n\n".join(blocks)
 
     def recall(self, raw_prompt: str, limit: int = 3) -> list[dict[str, Any]]:
         if not raw_prompt.strip() or limit < 1:
@@ -99,6 +118,26 @@ class MemoryManager:
         from shared.db import get_similar_experiences
         from shared.rag import embed
         return get_similar_experiences(raw_prompt, embed(raw_prompt), min(limit, 5))
+
+    def recall_scoped(
+        self,
+        query: str,
+        *,
+        user_id: str | None = None,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Retrieve deployed vector memories without crossing user or agent scope."""
+        clean = query.strip()
+        if not clean or limit < 1:
+            return []
+        from shared.db import retrieve_scoped_memories
+        from shared.rag import embed
+        return retrieve_scoped_memories(
+            query_embedding=embed(clean),
+            agent_name=self.agent_name,
+            user_id=user_id,
+            limit=min(limit, 10),
+        )
 
     def promote(
         self,

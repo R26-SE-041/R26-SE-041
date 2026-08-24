@@ -215,6 +215,7 @@ class _ThreeDAgentBase:
                 num_inference_steps=num_inference_steps,
             )[0]
 
+
             # Stage 2: Texture synthesis (optional but default)
             if texture:
                 print("Stage 2 — synthesizing texture…")
@@ -233,13 +234,13 @@ class _ThreeDAgentBase:
             return {"glb_bytes": None, "error": f"Hunyuan3DFailed: {exc}"}
 
 
-# ── A10G variant (Normal / Pro modes) ─────────────────────────────────────────
+# ── A10G variant (Normal mode) ─────────────────────────────────────────────────
 
 @app.cls(
     gpu="A10G",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=900,   # texture synthesis can exceed 5 min on a cold container
+    timeout=1200,  # raised from 900 — cold-start + shape + texture can exceed 15 min on A10G
     scaledown_window=300,
 )
 class ThreeDAgentA10G(_ThreeDAgentBase):
@@ -249,7 +250,7 @@ class ThreeDAgentA10G(_ThreeDAgentBase):
     gpu="A100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=900,
+    timeout=1200,  # raised from 900 — headroom for cold-start texture synthesis
     scaledown_window=300,
 )
 class ThreeDAgentA100(_ThreeDAgentBase):
@@ -263,7 +264,7 @@ class ThreeDAgentA100(_ThreeDAgentBase):
     gpu="H100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=900,
+    timeout=1200,  # raised from 900 — consistent with A10G/A100 tiers
     scaledown_window=300,   # ~2-3× faster than A10G on H100
 )
 class ThreeDAgentH100(_ThreeDAgentBase):
@@ -290,7 +291,7 @@ class ConvertRequest(BaseModel):
     image_base64: str
     speed_mode: str = "pro"       # "normal" | "pro" | "promax"
     texture: bool = True          # False = shape-only (faster, no colour)
-    num_inference_steps: int = 50  # 50 default; reduce to 30 for speed
+    num_inference_steps: int = 30  # reduced from 50 → 30: ~40% faster, avoids timeout on A10G cold starts
 
 
 def _agent_for_mode(speed_mode: str):

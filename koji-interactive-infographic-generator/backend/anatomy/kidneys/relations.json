@@ -1,0 +1,17 @@
+{
+  "organ":"kidneys","version":"1.0.0","relations":[
+    {"source":"renal_capsule","relation":"surrounds","target":"renal_cortex"},
+    {"source":"renal_cortex","relation":"surrounds","target":"renal_medulla"},
+    {"source":"renal_pyramids","relation":"part_of","target":"renal_medulla"},
+    {"source":"renal_pyramids","relation":"terminate_at","target":"renal_papillae"},
+    {"source":"renal_papillae","relation":"urine_flows_to","target":"minor_calyces"},
+    {"source":"minor_calyces","relation":"urine_flows_to","target":"major_calyces"},
+    {"source":"major_calyces","relation":"urine_flows_to","target":"renal_pelvis"},
+    {"source":"renal_pelvis","relation":"urine_flows_to","target":"ureter"},
+    {"source":"renal_artery","relation":"enters_at","target":"renal_hilum"},
+    {"source":"renal_vein","relation":"exits_at","target":"renal_hilum"},
+    {"source":"renal_pelvis","relation":"exits_at","target":"renal_hilum"},
+    {"source":"renal_hilum","relation":"located_on_medial_border_of","target":"right_kidney"},
+    {"source":"renal_hilum","relation":"located_on_medial_border_of","target":"left_kidney"}
+  ]
+}

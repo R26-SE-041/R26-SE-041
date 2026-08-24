@@ -1,0 +1,10 @@
+{
+  "organ":"lungs","version":"1.0.0","default_view":"anterior_airway","views":[{
+    "id":"anterior_airway","label":"Anterior airway and lobe view","aliases":["front view","anterior lungs","airway view"],
+    "default_orientation":"portrait","allowed_detail_levels":["basic","intermediate","advanced"],
+    "orientation_note":"Anterior view: the patient's right lung appears on viewer-left and the patient's left lung appears on viewer-right.",
+    "required_structures":["trachea","carina","right_main_bronchus","left_main_bronchus","right_upper_lobe","right_middle_lobe","right_lower_lobe","left_upper_lobe","left_lower_lobe","horizontal_fissure","right_oblique_fissure","left_oblique_fissure"],
+    "optional_structures":["bronchioles","alveoli"],
+    "clean_image_rules":["paired isolated lungs","anterior view","visible tracheobronchial tree","centered subject","light neutral background","empty side margins","no embedded text","no labels","no arrows","no callout lines","no legend","no torso"]
+  }]
+}

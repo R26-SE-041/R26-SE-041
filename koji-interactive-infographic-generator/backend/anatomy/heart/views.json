@@ -1,0 +1,18 @@
+{
+  "organ": "heart",
+  "version": "1.0.0",
+  "default_view": "anterior_cutaway",
+  "views": [
+    {
+      "id": "anterior_cutaway",
+      "label": "Anterior cutaway",
+      "aliases": ["front cutaway", "internal front view", "cutaway"],
+      "default_orientation": "portrait",
+      "allowed_detail_levels": ["basic", "intermediate", "advanced"],
+      "orientation_note": "Anterior cutaway: the patient's anatomical right appears on the viewer's left and the patient's anatomical left appears on the viewer's right.",
+      "required_structures": ["superior_vena_cava", "inferior_vena_cava", "right_atrium", "right_ventricle", "pulmonary_trunk", "pulmonary_arteries", "pulmonary_veins", "left_atrium", "left_ventricle", "aorta"],
+      "optional_structures": ["tricuspid_valve", "pulmonary_valve", "mitral_valve", "aortic_valve", "interventricular_septum"],
+      "clean_image_rules": ["single isolated heart", "centered subject", "light neutral background", "clear internal boundaries", "empty side margins", "no embedded text", "no labels", "no arrows", "no callout lines", "no legend", "no torso"]
+    }
+  ]
+}

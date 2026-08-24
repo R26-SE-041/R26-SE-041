@@ -66,6 +66,7 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
                 "skill_compression_mode": state.get("skill_compression_mode", "auto"),
                 "skill_token_budget": state.get("skill_token_budget", 150),
                 "available_context_tokens": state.get("available_context_tokens"),
+                "model_variant": config.get("prompt_model_variant", "base"),
             },
             timeout=90,
         )
@@ -74,6 +75,11 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
 
         return {
             "enhanced_prompt": data.get("enhanced_prompt"),
+            "anatomy_spec": data.get("anatomy_spec") or {"is_anatomy": False},
+            "model_variants": {
+                **(state.get("model_variants") or {}),
+                "prompt": data.get("model_variant", config.get("prompt_model_variant", "base")),
+            },
             "prompt_parse_error": data.get("prompt_parse_error", False),
             "memento_examples": examples,
             "skill_compression": data.get("skill_compression") or {},
@@ -94,11 +100,13 @@ def image_node(state: PipelineState) -> dict[str, Any]:
     url = os.environ["IMAGE_AGENT_URL"].rstrip("/") + "/generate"
     config = state.get("experiment_config") or {}
     safety = state.get("safety") or {}
-    if safety.get("allowed") is False or str(state.get("error") or "").startswith("CONTENT_POLICY_BLOCKED"):
+    if state.get("error") or safety.get("allowed") is False:
         return {
             "image_bytes": None,
             "error": state.get("error") or "CONTENT_POLICY_BLOCKED: prompt failed safety review",
         }
+    if not state.get("enhanced_prompt"):
+        return {"image_bytes": None, "error": "IMAGE_PROMPT_MISSING: generation skipped"}
     try:
         # image-agent expects a single "prompt" key — use enhanced if available
         best_prompt = (
@@ -111,7 +119,14 @@ def image_node(state: PipelineState) -> dict[str, Any]:
             json={
                 "prompt": best_prompt,
                 "speed_mode": state.get("speed_mode", "pro"),
-                "seed": config.get("seed"),
+                "seed": (
+                    int(config["seed"]) + int(state.get("retry_count", 0))
+                    if config.get("seed") is not None else None
+                ),
+                "domain": "anatomy" if (state.get("anatomy_spec") or {}).get("is_anatomy") else "generic",
+                "organ": (state.get("anatomy_spec") or {}).get("organ"),
+                "view": (state.get("anatomy_spec") or {}).get("view"),
+                "use_skill_rules": config.get("enable_skill_rules", True),
             },
             timeout=360,
         )
@@ -130,7 +145,14 @@ def image_node(state: PipelineState) -> dict[str, Any]:
         b64 = data.get("image_base64", "")
         image_bytes = base64.b64decode(b64) if b64 else None
 
-        return {"image_bytes": image_bytes, "error": state.get("error")}
+        return {
+            "image_bytes": image_bytes,
+            "model_variants": {
+                **(state.get("model_variants") or {}),
+                "image": data.get("model_variant", config.get("image_model_variant", "base")),
+            },
+            "error": state.get("error"),
+        }
 
     except requests.exceptions.Timeout:
         return {"image_bytes": None, "error": "image-agent timed out after 360s"}
@@ -166,6 +188,8 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
                 "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
                 "enhanced_prompt": state.get("enhanced_prompt"),
                 "raw_prompt": state["raw_prompt"],
+                "anatomy_spec": state.get("anatomy_spec") or {"is_anatomy": False},
+                "enable_anatomy_critic": (state.get("experiment_config") or {}).get("enable_anatomy_critic", True),
             },
             timeout=150,
         )
@@ -185,6 +209,8 @@ def eval_node(state: PipelineState) -> dict[str, Any]:
             "visual_score": visual_score,
             "pedagogical_score": pedagogical_score,
             "vlm_feedback": data.get("vlm_feedback"),
+            "anatomy_metrics": data.get("anatomy_metrics") or {},
+            "anatomy_hard_failures": data.get("anatomy_hard_failures") or [],
             "error": data.get("error") or state.get("error"),
         }
 
@@ -244,7 +270,12 @@ def db_node(state: PipelineState) -> dict[str, Any]:
 
         try:
             from shared.memory import MemoryManager
-            if config.get("enable_memento", True) and state.get("enhanced_prompt"):
+            if (
+                config.get("enable_memento", True)
+                and state.get("enhanced_prompt")
+                and not state.get("anatomy_hard_failures")
+            ):
+                anatomy_spec = state.get("anatomy_spec") or {}
                 MemoryManager().promote(
                     raw_prompt=state["raw_prompt"],
                     enhanced_prompt=state["enhanced_prompt"],
@@ -252,6 +283,9 @@ def db_node(state: PipelineState) -> dict[str, Any]:
                     pedagogical_score=float(state.get("pedagogical_score") or 0),
                     clip_score=state.get("clip_score"),
                     vlm_feedback=state.get("vlm_feedback"),
+                    subject_tag=anatomy_spec.get("organ"),
+                    grade_tag=anatomy_spec.get("grade_level"),
+                    style_tag=anatomy_spec.get("view"),
                 )
         except Exception:
             pass
@@ -281,6 +315,7 @@ def reflection_node(state: PipelineState) -> dict[str, Any]:
     """Store the best attempt and prepare feedback for at most two retries."""
     visual = float(state.get("visual_score") or 0)
     pedagogical = float(state.get("pedagogical_score") or 0)
+    anatomy_failures = state.get("anatomy_hard_failures") or []
     current = {
         "visual_score": visual,
         "pedagogical_score": pedagogical,
@@ -289,17 +324,24 @@ def reflection_node(state: PipelineState) -> dict[str, Any]:
         "vlm_feedback": state.get("vlm_feedback"),
         "enhanced_prompt": state.get("enhanced_prompt"),
         "image_bytes": state.get("image_bytes"),
+        "anatomy_metrics": state.get("anatomy_metrics") or {},
+        "anatomy_hard_failures": anatomy_failures,
     }
     best = state.get("best_attempt")
-    best_total = float(best.get("visual_score", 0)) + float(best.get("pedagogical_score", 0)) if best else -1
-    if visual + pedagogical > best_total:
+    best_total = (
+        float(best.get("visual_score", 0)) + float(best.get("pedagogical_score", 0))
+        - (20 if best.get("anatomy_hard_failures") else 0)
+        if best else -1
+    )
+    current_total = visual + pedagogical - (20 if anatomy_failures else 0)
+    if current_total > best_total:
         best = current
 
     retries = state.get("retry_count", 0)
     config = state.get("experiment_config") or {}
     accepted = (
         not config.get("enable_reflexion", True)
-        or (visual >= 7.0 and pedagogical >= 7.0)
+        or (visual >= 7.0 and pedagogical >= 7.0 and not anatomy_failures)
     )
     if accepted or retries >= 2 or not state.get("image_bytes"):
         assert best is not None
@@ -312,12 +354,17 @@ def reflection_node(state: PipelineState) -> dict[str, Any]:
             "visual_score": best.get("visual_score"),
             "pedagogical_score": best.get("pedagogical_score"),
             "vlm_feedback": best.get("vlm_feedback"),
+            "anatomy_metrics": best.get("anatomy_metrics") or {},
+            "anatomy_hard_failures": best.get("anatomy_hard_failures") or [],
             "retry_feedback": None,
         }
     return {
         "best_attempt": best,
         "retry_count": retries + 1,
-        "retry_feedback": generate_retry_feedback(visual, pedagogical, state.get("vlm_feedback")),
+        "retry_feedback": " | ".join(filter(None, [
+            generate_retry_feedback(visual, pedagogical, state.get("vlm_feedback")),
+            f"ANATOMY HARD FAILURES: {'; '.join(anatomy_failures)}" if anatomy_failures else "",
+        ])),
         "error": None,
     }
 
@@ -326,7 +373,11 @@ def should_retry(state: PipelineState) -> str:
     config = state.get("experiment_config") or {}
     if not config.get("enable_reflexion", True):
         return "accept"
-    return "retry" if state.get("retry_feedback") else "accept"
+    if not state.get("retry_feedback"):
+        return "accept"
+    if (state.get("anatomy_spec") or {}).get("is_anatomy"):
+        return "retry_image"
+    return "retry_prompt"
 
 
 def traced_node(name: str, node: Callable[[PipelineState], dict[str, Any]]) -> Callable[[PipelineState], dict[str, Any]]:
@@ -365,7 +416,7 @@ def build_graph() -> Any:
     g.add_edge("image", "eval")
     g.add_edge("eval", "reflect")
     g.add_conditional_edges(
-        "reflect", should_retry, {"retry": "prompt", "accept": "db"}
+        "reflect", should_retry, {"retry_prompt": "prompt", "retry_image": "image", "accept": "db"}
     )
     g.add_edge("db", END)
 

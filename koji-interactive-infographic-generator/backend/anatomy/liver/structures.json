@@ -1,0 +1,16 @@
+{
+  "organ":"liver","version":"1.0.0","aliases":["liver","hepatic","kalleeral"],"trigger_word":"LVRANAT","structures":[
+    {"id":"right_lobe","label":"Right lobe","aliases":["right hepatic lobe"],"importance":"primary","function":"Largest anatomical lobe of the liver.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"left_lobe","label":"Left lobe","aliases":["left hepatic lobe"],"importance":"primary","function":"Anatomical lobe extending toward the left upper abdomen.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"caudate_lobe","label":"Caudate lobe","aliases":[],"importance":"secondary","function":"Small anatomical lobe on the posterior visceral surface.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"quadrate_lobe","label":"Quadrate lobe","aliases":[],"importance":"secondary","function":"Anatomical lobe on the inferior surface.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"falciform_ligament","label":"Falciform ligament","aliases":[],"importance":"secondary","function":"Peritoneal fold associated with the anatomical division between right and left lobes on the diaphragmatic surface.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"gallbladder","label":"Gallbladder","aliases":[],"importance":"primary","function":"Stores and concentrates bile produced by the liver.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"porta_hepatis","label":"Porta hepatis","aliases":["liver hilum","hepatic hilum"],"importance":"primary","function":"Transverse gateway on the visceral surface for major vessels, ducts, nerves, and lymphatics.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"hepatic_portal_vein","label":"Hepatic portal vein","aliases":["portal vein"],"importance":"primary","function":"Delivers nutrient-rich venous blood from abdominal digestive organs to the liver.","source_ids":["ncbi-liver-anatomy","ncbi-portal-system"]},
+    {"id":"proper_hepatic_artery","label":"Proper hepatic artery","aliases":["hepatic artery"],"importance":"primary","function":"Supplies oxygenated arterial blood to the liver.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"common_hepatic_duct","label":"Common hepatic duct","aliases":["hepatic duct"],"importance":"primary","function":"Carries bile away from the liver's right and left hepatic ducts.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"hepatic_veins","label":"Hepatic veins","aliases":["right middle and left hepatic veins"],"importance":"primary","function":"Drain venous blood from the liver toward the inferior vena cava.","source_ids":["ncbi-liver-anatomy"]},
+    {"id":"inferior_vena_cava","label":"Inferior vena cava","aliases":["IVC"],"importance":"secondary","function":"Receives hepatic venous drainage on the posterior aspect of the liver.","source_ids":["ncbi-liver-anatomy"]}
+  ]
+}

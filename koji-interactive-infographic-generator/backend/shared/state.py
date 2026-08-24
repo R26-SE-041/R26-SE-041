@@ -34,12 +34,16 @@ class PipelineState(TypedDict):
 
     raw_prompt: str
     enhanced_prompt: Optional[str]
+    anatomy_spec: dict[str, Any]
+    model_variants: dict[str, str]
     prompt_parse_error: bool
     image_bytes: Optional[bytes]
     clip_score: Optional[float]
     vlm_score: Optional[float]
     visual_score: Optional[float]
     pedagogical_score: Optional[float]
+    anatomy_metrics: dict[str, Any]
+    anatomy_hard_failures: list[str]
     vlm_feedback: Optional[str]
     retry_count: int
     retry_feedback: Optional[str]
@@ -66,12 +70,16 @@ def initial_state(
     return PipelineState(
         raw_prompt=raw_prompt,
         enhanced_prompt=None,
+        anatomy_spec={"is_anatomy": False},
+        model_variants={"prompt": "base", "image": "base", "interactive": "base"},
         prompt_parse_error=False,
         image_bytes=None,
         clip_score=None,
         vlm_score=None,
         visual_score=None,
         pedagogical_score=None,
+        anatomy_metrics={},
+        anatomy_hard_failures=[],
         vlm_feedback=None,
         retry_count=0,
         retry_feedback=None,

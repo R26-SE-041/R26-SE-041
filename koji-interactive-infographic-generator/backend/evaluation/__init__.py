@@ -1,2 +1,1 @@
-"""Reproducible EduVision ablation experiment utilities."""
-
+"""Reproducible offline and endpoint evaluation utilities."""

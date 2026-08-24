@@ -1,0 +1,23 @@
+{
+  "organ": "heart",
+  "version": "1.0.0",
+  "aliases": ["heart", "cardiac", "idhayam", "iruthayam"],
+  "trigger_word": "HRTANAT",
+  "structures": [
+    {"id": "superior_vena_cava", "label": "Superior vena cava", "aliases": ["SVC"], "importance": "primary", "function": "Returns deoxygenated blood from the upper body to the right atrium.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "inferior_vena_cava", "label": "Inferior vena cava", "aliases": ["IVC"], "importance": "primary", "function": "Returns deoxygenated blood from the lower body to the right atrium.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "right_atrium", "label": "Right atrium", "aliases": ["RA", "right atrial chamber"], "importance": "primary", "function": "Receives systemic venous blood before it passes to the right ventricle.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "tricuspid_valve", "label": "Tricuspid valve", "aliases": ["right atrioventricular valve"], "importance": "secondary", "function": "Controls one-way flow from the right atrium to the right ventricle.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "right_ventricle", "label": "Right ventricle", "aliases": ["RV", "right ventricular chamber"], "importance": "primary", "function": "Pumps deoxygenated blood through the pulmonary valve toward the lungs.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "pulmonary_valve", "label": "Pulmonary valve", "aliases": ["pulmonic valve"], "importance": "secondary", "function": "Controls flow from the right ventricle into the pulmonary trunk.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "pulmonary_trunk", "label": "Pulmonary trunk", "aliases": ["main pulmonary artery"], "importance": "primary", "function": "Carries deoxygenated blood from the right ventricle before dividing into pulmonary arteries.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "pulmonary_arteries", "label": "Pulmonary arteries", "aliases": ["left and right pulmonary arteries", "pulmonary artery"], "importance": "primary", "function": "Carry deoxygenated blood from the heart to the lungs.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "pulmonary_veins", "label": "Pulmonary veins", "aliases": ["pulmonary vein"], "importance": "primary", "function": "Return oxygenated blood from the lungs to the left atrium.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "left_atrium", "label": "Left atrium", "aliases": ["LA", "left atrial chamber"], "importance": "primary", "function": "Receives oxygenated blood from the pulmonary veins.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "mitral_valve", "label": "Mitral valve", "aliases": ["bicuspid valve", "left atrioventricular valve"], "importance": "secondary", "function": "Controls one-way flow from the left atrium to the left ventricle.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "left_ventricle", "label": "Left ventricle", "aliases": ["LV", "left ventricular chamber"], "importance": "primary", "function": "Pumps oxygenated blood through the aortic valve into the aorta.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "aortic_valve", "label": "Aortic valve", "aliases": [], "importance": "secondary", "function": "Controls flow from the left ventricle into the aorta.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "aorta", "label": "Aorta", "aliases": ["ascending aorta", "aortic arch"], "importance": "primary", "function": "Carries oxygenated blood from the left ventricle to systemic circulation.", "source_ids": ["ncbi-heart-anatomy"]},
+    {"id": "interventricular_septum", "label": "Interventricular septum", "aliases": ["ventricular septum", "septum"], "importance": "secondary", "function": "Separates the right and left ventricles.", "source_ids": ["ncbi-heart-anatomy"]}
+  ]
+}

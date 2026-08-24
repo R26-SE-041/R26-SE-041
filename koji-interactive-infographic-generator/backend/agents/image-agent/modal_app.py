@@ -21,12 +21,12 @@ from __future__ import annotations
 import base64
 import io
 import os
-from typing import Any
+from typing import Any, Literal
 
 import modal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -56,8 +56,14 @@ image = (
         "fastapi[standard]>=0.115.0",
         "pydantic>=2.9.0",
         "Pillow>=10.4.0",
+        "peft>=0.13.0",
     )
     .add_local_python_source("shared")
+    .add_local_dir(
+        "anatomy",
+        remote_path="/root/anatomy",
+        ignore=["**/__pycache__/**", "**/*.pyc"],
+    )
 )
 
 app = modal.App("image-agent", image=image)
@@ -212,15 +218,32 @@ web_app.add_middleware(
 )
 
 
+class EnhancedPromptPayload(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    final_prompt: str = Field(min_length=1, max_length=30_000)
+    anatomy_spec: dict[str, Any] = Field(default_factory=lambda: {"is_anatomy": False})
+
+
 class GenerateRequest(BaseModel):
-    prompt: str
+    prompt: str | None = Field(default=None, max_length=30_000)
+    enhanced_prompt_json: EnhancedPromptPayload | None = None
     speed_mode: str = "pro"  # "normal" | "pro" | "promax"
     seed: int | None = None
+    regeneration_feedback: str | None = Field(default=None, max_length=2000)
+    memory_context: str | None = Field(default=None, max_length=2000)
+    domain: Literal["generic", "anatomy"] = "generic"
+    organ: str | None = Field(default=None, max_length=80)
+    view: str | None = Field(default=None, max_length=80)
+    use_skill_rules: bool = True
 
 
 @web_app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "model": FLUX_MODEL_ID}
+    return {
+        "status": "ok",
+        "model": FLUX_MODEL_ID,
+        "variants": ["base"],
+    }
 
 
 @web_app.post("/generate")
@@ -230,7 +253,33 @@ def generate(req: GenerateRequest) -> dict:
         # CPU-side preflight avoids allocating an expensive GPU container for a
         # prompt that the generation method will reject again.
         from shared.safety import assess_prompt, blocked_error
-        safety = assess_prompt(req.prompt)
+        enhanced_payload = req.enhanced_prompt_json
+        if enhanced_payload:
+            generation_prompt = enhanced_payload.final_prompt.strip()
+            anatomy_spec = enhanced_payload.anatomy_spec
+        else:
+            generation_prompt = (req.prompt or "").strip()
+            anatomy_spec = {"is_anatomy": req.domain == "anatomy"}
+        if not generation_prompt:
+            raise HTTPException(status_code=422, detail={"error": "PromptRequired"})
+
+        domain = "anatomy" if anatomy_spec.get("is_anatomy") else req.domain
+        organ = anatomy_spec.get("organ") or req.organ
+        view = anatomy_spec.get("view") or req.view
+        if enhanced_payload and domain == "anatomy":
+            from anatomy import build_anatomy_prompt, validate_anatomy_spec
+
+            validated_spec = validate_anatomy_spec(anatomy_spec)
+            canonical_prompt = build_anatomy_prompt(validated_spec)
+            if generation_prompt != canonical_prompt:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"error": "EnhancedPromptSpecMismatch"},
+                )
+            generation_prompt = canonical_prompt
+
+        feedback = (req.regeneration_feedback or "").strip()
+        safety = assess_prompt("\n".join(filter(None, [generation_prompt, feedback])))
         if not safety.allowed:
             return {
                 "image_base64": None,
@@ -244,7 +293,25 @@ def generate(req: GenerateRequest) -> dict:
             agent = ImageAgentA100()
         else:  # "normal" → A10G (same as original)
             agent = ImageAgentA10G()
-        result = agent.generate.remote({"prompt": req.prompt, "seed": req.seed})
+        if domain == "anatomy" and req.use_skill_rules and not enhanced_payload:
+            generation_prompt = (
+                f"{generation_prompt}\n\n"
+                "Anatomy generation requirements: create one isolated, centered human organ in the requested "
+                "standard anatomical view on a light neutral background. Preserve clear structure boundaries "
+                "and empty side margins. Do not include text, labels, letters, numbers, arrows, legends, "
+                "captions, borders, a torso, decorative objects, or callout lines."
+            )
+        memory_context = (req.memory_context or "").strip()
+        if memory_context:
+            generation_prompt = (
+                f"{generation_prompt}\n\nValidated relevant generation preferences: {memory_context}"
+            )
+        if feedback:
+            generation_prompt = (
+                f"{generation_prompt}\n\nUser-requested corrections for this retry: {feedback}. "
+                "Preserve all correct educational content and the original learning objective."
+            )
+        result = agent.generate.remote({"prompt": generation_prompt, "seed": req.seed})
 
         if result.get("error"):
             return {
@@ -257,8 +324,19 @@ def generate(req: GenerateRequest) -> dict:
         if not image_bytes:
             return {"image_base64": None, "error": "Empty image output"}
 
+        encoded = base64.b64encode(image_bytes).decode("utf-8")
         return {
-            "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
+            "image_base64": encoded,
+            "base_image_base64": encoded,
+            "model_variant": "base",
+            "generation_metadata": {
+                "domain": domain,
+                "organ": organ,
+                "view": view,
+                "seed": req.seed,
+                "input_contract": "enhanced_prompt_json" if enhanced_payload else "direct_prompt",
+                "skill_rules_applied": domain == "anatomy" and req.use_skill_rules,
+            },
             "safety": result.get("safety"),
             "error": None,
         }

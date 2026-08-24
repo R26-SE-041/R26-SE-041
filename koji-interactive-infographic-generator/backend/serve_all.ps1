@@ -1,5 +1,7 @@
 # serve_all.ps1
-# Runs the 4 lightweight agents and orchestrator via `modal serve` (dev tunnel).
+# Runs the prompt, image, and interactive agents plus the orchestrator via
+# `modal serve` (dev tunnel). Evaluation/reflection are disabled in the
+# frontend flow and the eval agent can be started manually when needed.
 # threed-agent uses `modal deploy` since it needs CUDA extension builds.
 #
 # Usage: Right-click -> "Run with PowerShell"  OR  .\serve_all.ps1
@@ -14,7 +16,6 @@ $serveAgents = @(
     "agents/prompt-agent/modal_app.py",
     "agents/image-agent/modal_app.py",
     "agents/interactive-agent/modal_app.py",
-    "agents/eval-agent/modal_app.py",
     "orchestrator/modal_app.py"
 )
 
@@ -40,5 +41,6 @@ Write-Host "Started (deploy): threed-agent"
 
 Write-Host ""
 Write-Host "All agents launching."
-Write-Host "4 agents + backend orchestrator in serve (dev) mode - close windows to stop."
+Write-Host "3 agents + backend orchestrator in serve (dev) mode - close windows to stop."
+Write-Host "Evaluation/reflection are disabled. Start eval-agent manually only when required."
 Write-Host "threed-agent deploying to Modal cloud - stays live even after window close."

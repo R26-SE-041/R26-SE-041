@@ -13,25 +13,20 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import InteractiveCanvas from "./components/InteractiveCanvas";
+import FeedbackControls, { createOutputId, FeedbackReason } from "./components/FeedbackControls";
+import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
 import ThreeDViewer from "./components/ThreeDViewer";
 import Icon, { IconName, StatusDot } from "./components/Icon";
 import { ColorPalette, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
+import {
+  PROMPT_AGENT_URL,
+  IMAGE_AGENT_URL,
+  INTERACTIVE_AGENT_URL,
+  THREED_AGENT_URL,
+  BACKEND_URL,
+} from "./config";
 
-const PROMPT_AGENT_URL =
-  process.env.EXPO_PUBLIC_PROMPT_AGENT_URL ??
-  "https://kojithan-y--prompt-agent-api-dev.modal.run";
-const IMAGE_AGENT_URL =
-  process.env.EXPO_PUBLIC_IMAGE_AGENT_URL ??
-  "https://kojithan-y--image-agent-api-dev.modal.run";
-const INTERACTIVE_AGENT_URL =
-  process.env.EXPO_PUBLIC_INTERACTIVE_AGENT_URL ??
-  "https://kojithan-y--interactive-agent-api-dev.modal.run";
-const THREED_AGENT_URL =
-  process.env.EXPO_PUBLIC_THREED_AGENT_URL ??
-  "https://kojithan-y--threed-agent-api.modal.run";
-const BACKEND_HEALTH_URL =
-  process.env.EXPO_PUBLIC_BACKEND_HEALTH_URL ??
-  "https://kojithan-y--image-gen-orchestrator-api-dev.modal.run";
+const BACKEND_HEALTH_URL = BACKEND_URL;
 
 type Stage = "idle" | "enhancing" | "generating" | "done";
 type Mode = "direct" | "enhance";
@@ -40,6 +35,48 @@ type ThreeDStage = "idle" | "converting" | "done";
 type Health = "ok" | "error" | "checking";
 type AgentKey = "prompt" | "image" | "interactive" | "threed";
 type ProcessKey = AgentKey;
+export interface AnatomySpec {
+  is_anatomy: boolean;
+  organ?: string;
+  view?: string;
+  view_description?: string;
+  required_structures?: string[];
+  focus_structures?: string[];
+}
+interface EnhancedPromptPayload {
+  schema_version: "1.0";
+  final_prompt: string;
+  anatomy_spec: AnatomySpec;
+}
+export interface AnatomyAnnotation {
+  structure_id: string;
+  label: string;
+  anchor_x: number;
+  anchor_y: number;
+  label_x: number;
+  label_y: number;
+  confidence: number;
+  verified: boolean;
+}
+interface RetryLink { feedbackId: string; outputId: string }
+
+const PROMPT_NEGATIVE: FeedbackReason[] = [
+  { code: "meaning_changed", label: "Meaning changed" }, { code: "not_visual", label: "Not visual enough" },
+  { code: "too_verbose", label: "Too verbose" }, { code: "factually_incorrect", label: "Factually incorrect" },
+  { code: "wrong_level", label: "Wrong learner level" },
+];
+const PROMPT_POSITIVE: FeedbackReason[] = [
+  { code: "clear", label: "Clear" }, { code: "accurate", label: "Accurate" }, { code: "well_structured", label: "Well structured" },
+];
+const IMAGE_NEGATIVE: FeedbackReason[] = [
+  { code: "bad_labels", label: "Bad labels" }, { code: "poor_layout", label: "Poor layout" },
+  { code: "wrong_content", label: "Wrong content" }, { code: "wrong_style", label: "Wrong style" },
+  { code: "inaccurate_diagram", label: "Inaccurate diagram" },
+];
+const IMAGE_POSITIVE: FeedbackReason[] = [
+  { code: "clear_labels", label: "Clear labels" }, { code: "good_layout", label: "Good layout" },
+  { code: "accurate", label: "Accurate" }, { code: "matches_request", label: "Matches request" },
+];
 
 const THREED_POLL_INTERVAL_MS = 3_000;
 const THREED_MAX_WAIT_MS = 20 * 60 * 1_000;
@@ -87,11 +124,13 @@ function errorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function App() {
-  return <ThemeProvider><Home /></ThemeProvider>;
+interface AppProps { accessToken?: string }
+
+export default function App({ accessToken }: AppProps) {
+  return <ThemeProvider><Home accessToken={accessToken} /></ThemeProvider>;
 }
 
-function Home() {
+function Home({ accessToken }: AppProps) {
   const { colors, mode: themeMode, toggleTheme } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -100,7 +139,11 @@ function Home() {
   const [mode, setMode] = useState<Mode>("enhance");
   const [speedMode, setSpeedMode] = useState<SpeedMode>("pro");
   const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
+  const [enhancedPromptJson, setEnhancedPromptJson] = useState<EnhancedPromptPayload | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [anatomySpec, setAnatomySpec] = useState<AnatomySpec>({ is_anatomy: false });
+  const [anatomyAnnotations, setAnatomyAnnotations] = useState<AnatomyAnnotation[]>([]);
+  const [localizationError, setLocalizationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [threedStage, setThreedStage] = useState<ThreeDStage>("idle");
   const [glbBase64, setGlbBase64] = useState<string | null>(null);
@@ -115,6 +158,11 @@ function Home() {
   const [warmUntil, setWarmUntil] = useState<Record<AgentKey, number>>({ prompt: 0, image: 0, interactive: 0, threed: 0 });
   const [timings, setTimings] = useState<Partial<Record<ProcessKey, number>>>({});
   const [activeTimers, setActiveTimers] = useState<Partial<Record<ProcessKey, number>>>({});
+  const [sessionId] = useState(() => createOutputId("session"));
+  const [promptOutputId, setPromptOutputId] = useState<string | null>(null);
+  const [imageOutputId, setImageOutputId] = useState<string | null>(null);
+  const [promptRetryLink, setPromptRetryLink] = useState<RetryLink | null>(null);
+  const [imageRetryLink, setImageRetryLink] = useState<RetryLink | null>(null);
 
   const isLoading = stage === "enhancing" || stage === "generating";
   const displayedThreeDHealth: Health =
@@ -183,10 +231,32 @@ function Home() {
     }
   }
 
+  const recallMemory = async (agentName: string, query: string): Promise<string> => {
+    try {
+      const response = await fetch(`${BACKEND_HEALTH_URL}/memory/context`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ agent_name: agentName, query, limit: 5 }),
+      });
+      if (!response.ok) return "";
+      const data = await response.json().catch(() => ({}));
+      return typeof data.context === "string" ? data.context : "";
+    } catch {
+      return "";
+    }
+  };
+
   const reset = () => {
     setStage("idle");
     setEnhancedPrompt(null);
+    setEnhancedPromptJson(null);
     setImageBase64(null);
+    setAnatomySpec({ is_anatomy: false });
+    setAnatomyAnnotations([]);
+    setLocalizationError(null);
     setError(null);
     setThreedStage("idle");
     setGlbBase64(null);
@@ -194,31 +264,121 @@ function Home() {
     setThreedError(null);
     setTimings({});
     setActiveTimers({});
+    setPromptOutputId(null);
+    setImageOutputId(null);
+    setPromptRetryLink(null);
+    setImageRetryLink(null);
   };
 
-  const callEnhance = async (raw: string): Promise<string> => {
+  const callEnhance = async (raw: string, retryFeedback?: string): Promise<{ prompt: string; anatomy: AnatomySpec; payload: EnhancedPromptPayload }> => {
+    const retrievedMemory = await recallMemory("prompt-agent", raw);
     const response = await fetch(`${PROMPT_AGENT_URL}/enhance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw_prompt: raw, speed_mode: speedMode }),
+      body: JSON.stringify({ raw_prompt: raw, speed_mode: speedMode, retry_feedback: retryFeedback, retrieved_memory: retrievedMemory }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(errorMessage(data, `Enhance HTTP ${response.status}`));
     if (data.error && !data.enhanced_prompt) throw new Error(String(data.error));
-    return data.enhanced_prompt ?? raw;
+    const returnedPrompt = typeof data.enhanced_prompt === "string" ? data.enhanced_prompt.trim() : "";
+    const payload = data.enhanced_prompt_json;
+    if (
+      !payload || payload.schema_version !== "1.0" ||
+      typeof payload.final_prompt !== "string" || !payload.final_prompt.trim() ||
+      !payload.anatomy_spec || typeof payload.anatomy_spec.is_anatomy !== "boolean"
+    ) {
+      throw new Error("Prompt agent did not return the enhanced_prompt_json contract");
+    }
+    if (returnedPrompt && returnedPrompt !== payload.final_prompt.trim()) {
+      throw new Error("Prompt agent returned inconsistent enhanced prompt fields");
+    }
+    return {
+      prompt: payload.final_prompt.trim(),
+      anatomy: payload.anatomy_spec,
+      payload,
+    };
   };
 
-  const callGenerate = async (finalPrompt: string): Promise<string> => {
+  const callGenerate = async (
+    finalPrompt: string,
+    anatomy: AnatomySpec,
+    regenerationFeedback?: string,
+    enhancement?: EnhancedPromptPayload,
+  ): Promise<string> => {
+    const memoryContext = await recallMemory("image-agent", finalPrompt);
     const response = await fetch(`${IMAGE_AGENT_URL}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: finalPrompt, speed_mode: speedMode }),
+      body: JSON.stringify({
+        prompt: finalPrompt,
+        enhanced_prompt_json: enhancement,
+        speed_mode: speedMode,
+        domain: anatomy.is_anatomy ? "anatomy" : "generic",
+        organ: anatomy.organ,
+        view: anatomy.view,
+        regeneration_feedback: regenerationFeedback,
+        memory_context: memoryContext,
+      }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(errorMessage(data, `Generate HTTP ${response.status}`));
     if (data.error) throw new Error(String(data.error));
     if (!data.image_base64) throw new Error("Empty image response");
-    return data.image_base64;
+    return data.base_image_base64 ?? data.image_base64;
+  };
+
+  const localizeAnatomy = async (image: string, anatomy: AnatomySpec): Promise<void> => {
+    setAnatomyAnnotations([]);
+    setLocalizationError(null);
+    if (!anatomy.is_anatomy || !anatomy.organ) return;
+    try {
+      // Compatibility-safe catalog-free flow: use the already deployed
+      // /analyze API for each inner 4x4 cell. Each request is SAM2 segment →
+      // Qwen-VL identify, so it never imports or depends on an anatomy bundle.
+      const annotations: AnatomyAnnotation[] = [];
+      const seenLabels = new Set<string>();
+      for (let row = 1; row <= 4; row += 1) {
+        for (let column = 1; column <= 4; column += 1) {
+          const x = (column + 0.5) / 6;
+          const y = (row + 0.5) / 6;
+          const response = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image_base64: image,
+              interaction: { type: "point", coords: [x, y] },
+              mode: "identify",
+              speed_mode: speedMode,
+              enable_rag: false,
+            }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data.error || typeof data.response_text !== "string") continue;
+          const label = data.response_text.split("\n")[0].replace(/^[#*\-:\s]+/, "").trim().slice(0, 80);
+          const labelKey = label.toLocaleLowerCase();
+          if (label.length < 2 || seenLabels.has(labelKey)) continue;
+          seenLabels.add(labelKey);
+          const sideIndex = annotations.filter((item) => (item.anchor_x < 0.5) === (x < 0.5)).length;
+          annotations.push({
+            structure_id: `grid.${row}.${column}`,
+            label,
+            anchor_x: x,
+            anchor_y: y,
+            label_x: x < 0.5 ? 0.02 : 0.70,
+            label_y: Math.min(0.92, 0.08 + sideIndex * 0.11),
+            confidence: 0.9,
+            verified: true,
+          });
+        }
+      }
+      if (annotations.length === 0) {
+        throw new Error("No visible regions were identified from the 16 SAM2 grid prompts");
+      }
+      setAnatomyAnnotations(annotations);
+      markWarm("interactive");
+    } catch (caught) {
+      setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
+    }
   };
 
   const handleSubmit = async (selectedMode: Mode) => {
@@ -227,19 +387,86 @@ function Home() {
     setMode(selectedMode);
     try {
       let finalPrompt = prompt.trim();
+      let nextAnatomy: AnatomySpec = { is_anatomy: false };
+      let nextEnhancement: EnhancedPromptPayload | undefined;
       if (selectedMode === "enhance") {
         setStage("enhancing");
-        finalPrompt = await runTimed("prompt", () => callEnhance(finalPrompt));
+        const enhanced = await runTimed("prompt", () => callEnhance(finalPrompt));
+        finalPrompt = enhanced.prompt;
+        nextAnatomy = enhanced.anatomy;
+        nextEnhancement = enhanced.payload;
+        setAnatomySpec(nextAnatomy);
         markWarm("prompt");
         setEnhancedPrompt(finalPrompt);
+        setEnhancedPromptJson(enhanced.payload);
+        setPromptOutputId(createOutputId("prompt"));
       }
       setStage("generating");
-      setImageBase64(await runTimed("image", () => callGenerate(finalPrompt)));
+      const image = await runTimed("image", () => callGenerate(
+        finalPrompt,
+        nextAnatomy,
+        undefined,
+        nextEnhancement,
+      ));
+      setImageBase64(image);
+      await runTimed("interactive", () => localizeAnatomy(image, nextAnatomy));
+      setImageOutputId(createOutputId("image"));
       markWarm("image");
       setStage("done");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unknown error");
       setStage("idle");
+    }
+  };
+
+  const regenerateFromPromptFeedback = async (feedback: string, feedbackId: string, outputId: string) => {
+    setPromptRetryLink({ feedbackId, outputId });
+    setImageBase64(null);
+    setImageOutputId(null);
+    setImageRetryLink(null);
+    setThreedStage("idle");
+    setGlbBase64(null);
+    setError(null);
+    try {
+      setStage("enhancing");
+      const enhanced = await runTimed("prompt", () => callEnhance(prompt.trim(), feedback));
+      const nextPrompt = enhanced.prompt;
+      setAnatomySpec(enhanced.anatomy);
+      setEnhancedPrompt(nextPrompt);
+      setEnhancedPromptJson(enhanced.payload);
+      setPromptOutputId(createOutputId("prompt"));
+      markWarm("prompt");
+      setStage("generating");
+      const image = await runTimed("image", () => callGenerate(nextPrompt, enhanced.anatomy, undefined, enhanced.payload));
+      setImageBase64(image);
+      await runTimed("interactive", () => localizeAnatomy(image, enhanced.anatomy));
+      setImageOutputId(createOutputId("image"));
+      markWarm("image");
+      setStage("done");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Regeneration failed");
+      setStage("done");
+    }
+  };
+
+  const regenerateImageFromFeedback = async (feedback: string, feedbackId: string, outputId: string) => {
+    setImageRetryLink({ feedbackId, outputId });
+    setThreedStage("idle");
+    setGlbBase64(null);
+    setThreedError(null);
+    setError(null);
+    try {
+      setStage("generating");
+      const finalPrompt = enhancedPrompt || prompt.trim();
+      const image = await runTimed("image", () => callGenerate(finalPrompt, anatomySpec, feedback, enhancedPromptJson ?? undefined));
+      setImageBase64(image);
+      await runTimed("interactive", () => localizeAnatomy(image, anatomySpec));
+      setImageOutputId(createOutputId("image"));
+      markWarm("image");
+      setStage("done");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Image regeneration failed");
+      setStage("done");
     }
   };
 
@@ -370,6 +597,8 @@ function Home() {
               </Text>
             </View>
 
+            <PersonalMemoryPanel accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />
+
             <View style={[shared.card, styles.promptCard]}>
               <Text style={shared.label}>Your Prompt</Text>
               <TextInput
@@ -426,26 +655,69 @@ function Home() {
 
             {error && <ErrorBanner title="Failed" message={error} />}
 
-            {enhancedPrompt && stage !== "enhancing" && (
+            {enhancedPromptJson && stage !== "enhancing" && (
               <View style={shared.card}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="wand" size={15} /><Text style={styles.badge}>Enhanced Prompt</Text></View>
-                  <Text style={styles.modelTag}>Qwen 2.5-3B. {speed.promptGpu}</Text>
+                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="wand" size={15} /><Text style={styles.badge}>Final Image Prompt</Text></View>
+                  <Text style={styles.modelTag}>Qwen 2.5-3B enhancement</Text>
                 </View>
-                <Text style={styles.enhancedPrompt}>{`"${enhancedPrompt}"`}</Text>
+                <Text style={styles.enhancedPrompt}>{JSON.stringify(enhancedPromptJson, null, 2)}</Text>
+                {promptOutputId && stage === "done" && (
+                  <FeedbackControls
+                    key={promptOutputId}
+                    agentName="prompt-agent"
+                    accessToken={accessToken}
+                    apiUrl={BACKEND_HEALTH_URL}
+                    inputContext={{ raw_prompt: prompt }}
+                    negativeReasons={PROMPT_NEGATIVE}
+                    onRegenerate={regenerateFromPromptFeedback}
+                    outputId={promptOutputId}
+                    outputSnapshot={{ enhanced_prompt_json: enhancedPromptJson }}
+                    parentFeedbackId={promptRetryLink?.feedbackId}
+                    parentOutputId={promptRetryLink?.outputId}
+                    positiveReasons={PROMPT_POSITIVE}
+                    sessionId={sessionId}
+                  />
+                )}
               </View>
             )}
 
             {imageBase64 && stage === "done" && (
               <View style={styles.resultSection}>
+                {imageOutputId && (
+                  <View style={shared.card}>
+                    <Text style={styles.badge}>Generated Image</Text>
+                    <FeedbackControls
+                      key={imageOutputId}
+                      agentName="image-agent"
+                      accessToken={accessToken}
+                      apiUrl={BACKEND_HEALTH_URL}
+                      inputContext={{ prompt: enhancedPrompt || prompt }}
+                      negativeReasons={IMAGE_NEGATIVE}
+                      onRegenerate={regenerateImageFromFeedback}
+                      outputId={imageOutputId}
+                      outputSnapshot={{ prompt: enhancedPrompt || prompt }}
+                      parentFeedbackId={imageRetryLink?.feedbackId}
+                      parentOutputId={imageRetryLink?.outputId}
+                      positiveReasons={IMAGE_POSITIVE}
+                      sessionId={sessionId}
+                    />
+                  </View>
+                )}
                 <SectionTitle title="Interactive Image Analysis" subtitle="Tap any object or drag a box to segment with SAM 2 and explain with Qwen2.5-VL" />
+                {localizationError && <ErrorBanner title="Labels unavailable; clean image preserved" message={localizationError} />}
                 <InteractiveCanvas
+                  accessToken={accessToken}
+                  anatomyAnnotations={anatomyAnnotations}
+                  anatomyOrgan={anatomySpec.organ}
+                  feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
                   onOperationComplete={(duration) => {
                     setTimings((current) => ({ ...current, interactive: duration }));
                     markWarm("interactive");
                   }}
                   speedMode={speedMode}
+                  sessionId={sessionId}
                 />
 
                 <View style={styles.threeDSection}>

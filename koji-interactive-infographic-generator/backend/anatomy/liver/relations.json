@@ -1,0 +1,16 @@
+{
+  "organ":"liver","version":"1.0.0","relations":[
+    {"source":"falciform_ligament","relation":"anatomically_separates","target":"right_lobe"},
+    {"source":"falciform_ligament","relation":"anatomically_separates","target":"left_lobe"},
+    {"source":"gallbladder","relation":"lies_on_visceral_surface_of","target":"right_lobe"},
+    {"source":"hepatic_portal_vein","relation":"enters_at","target":"porta_hepatis"},
+    {"source":"proper_hepatic_artery","relation":"enters_at","target":"porta_hepatis"},
+    {"source":"common_hepatic_duct","relation":"exits_at","target":"porta_hepatis"},
+    {"source":"hepatic_portal_vein","relation":"delivers_blood_to","target":"right_lobe"},
+    {"source":"hepatic_portal_vein","relation":"delivers_blood_to","target":"left_lobe"},
+    {"source":"proper_hepatic_artery","relation":"delivers_blood_to","target":"right_lobe"},
+    {"source":"proper_hepatic_artery","relation":"delivers_blood_to","target":"left_lobe"},
+    {"source":"hepatic_veins","relation":"drain_into","target":"inferior_vena_cava"},
+    {"source":"caudate_lobe","relation":"lies_near","target":"inferior_vena_cava"}
+  ]
+}

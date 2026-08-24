@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduVision - Supervisor Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-soft: #eff6ff;
+      --accent-green: #10b981;
+      --accent-green-soft: #ecfdf5;
+      --accent-red: #ef4444;
+      --accent-red-soft: #fef2f2;
+      --accent-purple: #8b5cf6;
+      --accent-purple-soft: #f5f3ff;
+      --accent-amber: #f59e0b;
+      --accent-amber-soft: #fffbeb;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* Presentation Deck Container */
+    .deck-container {
+      width: 100%;
+      max-width: 1280px;
+      aspect-ratio: 16 / 9;
+      min-height: 720px;
+      position: relative;
+      perspective: 1000px;
+    }
+
+    /* Individual Slide */
+    .slide {
+      position: absolute;
+      inset: 0;
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 44px 56px;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--shadow-xl);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      transform: scale(0.98);
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+    }
+
+    .slide.active {
+      display: flex;
+      opacity: 1;
+      transform: scale(1);
+      z-index: 10;
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 14px;
+    }
+
+    .slide-eyebrow {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slide-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .slide-badge {
+      padding: 6px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    /* Slide Body Content */
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 20px;
+    }
+
+    /* Slide Footer */
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* UI Components */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      height: 100%;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card-accent-blue {
+      background: var(--primary-soft);
+      border-color: #bfdbfe;
+    }
+
+    .card-accent-green {
+      background: var(--accent-green-soft);
+      border-color: #a7f3d0;
+    }
+
+    .card-accent-red {
+      background: var(--accent-red-soft);
+      border-color: #fecaca;
+    }
+
+    .card-accent-purple {
+      background: var(--accent-purple-soft);
+      border-color: #ddd6fe;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #334155;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .feature-list li span.bullet {
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    /* Comparison Table */
+    .comp-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      font-size: 13.5px;
+    }
+
+    .comp-table th, .comp-table td {
+      padding: 12px 16px;
+      text-align: left;
+    }
+
+    .comp-table th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      border-bottom: 2px solid #cbd5e1;
+    }
+
+    .comp-table tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .comp-table tr:hover td {
+      background: #f1f5f9;
+    }
+
+    .comp-table td {
+      border-bottom: 1px solid #e2e8f0;
+      color: #1e293b;
+    }
+
+    .tag-fail {
+      display: inline-block;
+      padding: 3px 8px;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .tag-pass {
+      display: inline-block;
+      padding: 3px 8px;
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    /* Presentation Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(12px);
+      padding: 10px 20px;
+      border-radius: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .btn {
+      background: #334155;
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .slide-counter {
+      color: #cbd5e1;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 0 8px;
+    }
+
+    /* Speaker Notes Modal */
+    .notes-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #92400e;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+
+    .notes-box strong {
+      color: #78350f;
+    }
+
+    /* Code Pill */
+    .pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    /* Fullscreen indicator */
+    .keyboard-hint {
+      color: #64748b;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    /* Print / PDF Styles */
+    @media print {
+      body { background: transparent; padding: 0; }
+      .deck-container { max-width: 100%; aspect-ratio: auto; min-height: auto; }
+      .slide {
+        position: relative;
+        display: flex !important;
+        opacity: 1 !important;
+        transform: none !important;
+        page-break-after: always;
+        margin-bottom: 20px;
+        min-height: 700px;
+        box-shadow: none;
+        border: 1px solid #ccc;
+      }
+      .controls, .keyboard-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Slide Deck Main Shell -->
+  <div class="deck-container" id="deck">
+
+    <!-- ========================================================================= -->
+    <!-- SLIDE 1: TITLE & PROBLEM STATEMENT -->
+    <!-- ========================================================================= -->
+    <div class="slide active" id="slide-1">
+      <div class="slide-header">
+        <div>
+          <div class="slide-eyebrow">🎓 Research Presentation & Progress Review</div>
+          <h1 class="slide-title">EduVision: A Self-Improving Multi-Agent System</h1>
+        </div>
+        <div class="slide-badge">Slide 1 / 5</div>
+      </div>
+
+      <div class="slide-content">
+        <div style="background: linear-gradient(135deg, #1e3a8a, #0f172a); color: white; padding: 24px; border-radius: 14px; margin-bottom: 8px;">
+          <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #60a5fa;">
+            Curriculum-Grounded Multi-Modal Infographics & 3D Model Generation
+          </h2>
+          <p style="font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+            Transforming ambiguous educational topics into anatomically accurate, interactive SVG diagrams with explorable 3D geometry and self-improving memory.
+          </p>
+        </div>
+
+        <div class="grid-2">
+          <!-- The Problem -->
+          <div class="card card-accent-red">
+            <div class="card-title" style="color: #991b1b;">
+              <span>❌</span> The Research Problem
+            </div>
+            <ul class="feature-list">
+              <li><span class="bullet">•</span> <strong>Visual & Factual Hallucinations:</strong> Standard generative models (FLUX/Midjourney) generate artistic images with garbled text labels and anatomical errors.</li>
+              <li><span class="bullet">•</span> <strong>Static & Flat Output:</strong> Traditional outputs are static bitmaps with 0% student interactivity (cannot click parts or inspect in 3D).</li>
+              <li><span class="bullet">•</span> <strong>Zero Memory Retention:</strong> Baseline pipelines repeat the same errors across sessions without persistent learning.</li>
+            </ul>
+          </div>
+
+          <!-- Proposed Solution -->
+          <div class="card card-accent-green">
+            <div class="card-title" style="color: #166534;">
+              <span>✅</span> Our Proposed Multi-Agent Innovation
+            </div>
+            <ul class="feature-list">
+              <li><span class="bullet">•</span> <strong>Multi-Agent Pipeline:</strong> Specialized Prompt, Image (FLUX.1-dev), SAM-2 Segmentation, and 3D Mesh (Hunyuan3D) agents.</li>
+              <li><span class="bullet">•</span> <strong>Dual-Critic Reflexion:</strong> Multi-layer image & pedagogical critic with automated targeted retry loops.</li>
+              <li><span class="bullet">•</span> <strong>Continuous Feedback Memory:</strong> Supabase pgvector embedding memory (<span class="pill">memento.md</span>) that evolves over time.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>Project: <strong>R26-SE-041 (EduVision)</strong></span>
+        <span>Presenter: <strong>Koji</strong></span>
+        <span>Supervisor Progress Review</span>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- SLIDE 2: BASELINE VS PROPOSED COMPARISON -->
+    <!-- ========================================================================= -->
+    <div class="slide" id="slide-2">
+      <div class="slide-header">
+        <div>
+          <div class="slide-eyebrow">📊 Comparative Evaluation</div>
+          <h1 class="slide-title">Baseline vs. Proposed System Pipeline</h1>
+        </div>
+        <div class="slide-badge">Slide 2 / 5</div>
+      </div>
+
+      <div class="slide-content">
+        <p style="font-size: 14px; color: var(--text-muted);">
+          Empirical comparison between the standard unguided zero-shot diffusion baseline and our multi-agent architecture:
+        </p>
+
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th style="width: 20%;">Feature / Aspect</th>
+              <th style="width: 38%; color: #991b1b;">❌ Raw FLUX.1-dev (Baseline)</th>
+              <th style="width: 42%; color: #166534;">✅ EduVision Multi-Agent Pipeline (Proposed)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Input Understanding</strong></td>
+              <td><span class="tag-fail">Ambiguous</span> Raw user text without context expansion</td>
+              <td><span class="tag-pass">Qwen LLM + Context Compression</span> Disambiguates & enriches intent</td>
+            </tr>
+            <tr>
+              <td><strong>Domain Rules</strong></td>
+              <td><span class="tag-fail">None</span> Relies purely on pre-trained weights</td>
+              <td><span class="tag-pass">SKILL.md</span> Enforces visual hierarchy & clean color palettes</td>
+            </tr>
+            <tr>
+              <td><strong>Learning from Mistakes</strong></td>
+              <td><span class="tag-fail">Zero Memory</span> Repeats errors across multiple sessions</td>
+              <td><span class="tag-pass">memento.md + pgvector</span> Injects verified high-scoring prompt patterns</td>
+            </tr>
+            <tr>
+              <td><strong>Visual Modality</strong></td>
+              <td><span class="tag-fail">Flat 2D</span> Static bitmap image (PNG/JPEG)</td>
+              <td><span class="tag-pass">Multi-Modal</span> 2D Infographic + <strong>SVG Hotspots</strong> + <strong>3D GLTF Model</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Interactivity</strong></td>
+              <td><span class="tag-fail">0%</span> Non-clickable, no structural inspection</td>
+              <td><span class="tag-pass">100% Interactive</span> Click to inspect definitions, rotate 3D canvas</td>
+            </tr>
+            <tr>
+              <td><strong>Quality Control</strong></td>
+              <td><span class="tag-fail">Single-Pass</span> Take it or leave it, no self-correction</td>
+              <td><span class="tag-pass">Dual Critic + Reflexion</span> Auto-evaluates & retries if score &lt; 7.0</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="notes-box">
+          <strong>Key Takeaway for Supervisor:</strong> <em>"Raw FLUX.1-dev fails in educational contexts because it generates flat, unverified graphics. EduVision wraps the generator in an agentic loop with persistent memory and interactive multi-modal outputs."</em>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>EduVision Architecture Study</span>
+        <span>Ablation Benchmark: 100 Prompts × 5 Seeds</span>
+        <span>Slide 2 / 5</span>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- SLIDE 3: END-TO-END MULTI-AGENT ARCHITECTURE -->
+    <!-- ========================================================================= -->
+    <div class="slide" id="slide-3">
+      <div class="slide-header">
+        <div>
+          <div class="slide-eyebrow">🏗️ System Engineering & Data Flow</div>
+          <h1 class="slide-title">EduVision Multi-Agent Architecture</h1>
+        </div>
+        <div class="slide-badge">Slide 3 / 5</div>
+      </div>
+
+      <div class="slide-content">
+        <div class="grid-2" style="align-items: center;">
+          
+          <!-- Flowchart Graphic Box -->
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px; text-align: center;">
+            <div class="mermaid">
+flowchart TD
+    U([👤 User Query]) --> PA[1️⃣ Prompt Agent: Qwen]
+    D[(📚 SKILL.md & memento)] -.-> PA
+    PA --> IA[2️⃣ Image Agent: FLUX.1-dev]
+    D -.-> IA
+    IA --> CI[Candidate 2D Diagram]
+    CI --> DC{3️⃣ Dual Critic & Eval}
+    DC -- Low Score --> RL[🔁 Reflexion Retry]
+    RL -.-> PA
+    DC -- Approved --> AI[🌟 Approved 2D Image]
+    AI --> SA[4️⃣ Interactive Agent: SAM-2]
+    AI --> TA[5️⃣ 3D Agent: Hunyuan3D-2]
+    SA --> UI[📱 Interactive SVG Hotspots]
+    TA --> UI3D[🪐 3D Orbit Viewport]
+    UI --> FB[👍/👎 Feedback -> pgvector DB]
+    FB -.-> D
+
+    style U fill:#eff6ff,stroke:#3b82f6
+    style DC fill:#fef3c7,stroke:#f59e0b
+    style AI fill:#dcfce7,stroke:#10b981
+    style UI fill:#dcfce7,stroke:#16a34a
+    style UI3D fill:#dcfce7,stroke:#16a34a
+    style D fill:#faf5ff,stroke:#9333ea
+            </div>
+          </div>
+
+          <!-- Architecture Highlights -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="card card-accent-blue" style="padding: 14px;">
+              <div class="card-title" style="font-size: 15px; color: #1e40af;">
+                <span>1️⃣</span> Decoupled Micro-Agent Design (Modal Cloud)
+              </div>
+              <p style="font-size: 13px; color: #334155;">
+                Prompt, Image, Segmentation, 3D, and Evaluation agents run as isolated serverless GPU containers with typed contracts.
+              </p>
+            </div>
+
+            <div class="card card-accent-green" style="padding: 14px;">
+              <div class="card-title" style="font-size: 15px; color: #166534;">
+                <span>2️⃣</span> Synchronization Guarantee
+              </div>
+              <p style="font-size: 13px; color: #334155;">
+                The 3D Agent and SAM-2 segmenter <strong>only execute on the Dual-Critic approved 2D diagram</strong>, ensuring zero mismatch between 2D labels and 3D geometry.
+              </p>
+            </div>
+
+            <div class="card card-accent-purple" style="padding: 14px;">
+              <div class="card-title" style="font-size: 15px; color: #6b21a8;">
+                <span>3️⃣</span> Tiered Memory System
+              </div>
+              <p style="font-size: 13px; color: #334155;">
+                Separates fixed procedural rules (<span class="pill">SKILL.md</span>) from user feedback-evolved durable memory (<span class="pill">memento.md</span> via Supabase).
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>Framework: Modal Serverless + FastAPI + LangGraph</span>
+        <span>Client: Expo SDK 57 + Three.js</span>
+        <span>Slide 3 / 5</span>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- SLIDE 4: MULTI-TIERED IMAGE EVALUATION PIPELINE -->
+    <!-- ========================================================================= -->
+    <div class="slide" id="slide-4">
+      <div class="slide-header">
+        <div>
+          <div class="slide-eyebrow">🔬 Quality Assurance & Scientific Validation</div>
+          <h1 class="slide-title">Multi-Tiered Image Validation Pipeline</h1>
+        </div>
+        <div class="slide-badge">Slide 4 / 5</div>
+      </div>
+
+      <div class="slide-content">
+        <div class="grid-3">
+          
+          <!-- Engine 1: CLIPScore -->
+          <div class="card card-accent-blue">
+            <div class="card-title" style="color: #1e40af;">
+              <span>1️⃣</span> Quantitative Alignment
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: #2563eb; text-transform: uppercase;">CLIPScore Engine</div>
+            <ul class="feature-list" style="font-size: 13px;">
+              <li><span class="bullet">•</span> <strong>Model:</strong> <span class="pill">openai/clip-vit-base-patch16</span> via torchmetrics.</li>
+              <li><span class="bullet">•</span> <strong>Measurement:</strong> Computes sub-second cosine semantic similarity between generation prompt and image tensor.</li>
+              <li><span class="bullet">•</span> <strong>Role:</strong> Rapid quantitative sanity filter before expensive VLM analysis.</li>
+            </ul>
+          </div>
+
+          <!-- Engine 2: Qwen2.5-VL -->
+          <div class="card card-accent-purple">
+            <div class="card-title" style="color: #6b21a8;">
+              <span>2️⃣</span> Pedagogical & Visual VLM
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: #7c3aed; text-transform: uppercase;">Qwen2.5-VL-7B-Instruct</div>
+            <ul class="feature-list" style="font-size: 13px;">
+              <li><span class="bullet">•</span> <strong>Visual Alignment (0-10):</strong> Verifies image details match user prompt intent.</li>
+              <li><span class="bullet">•</span> <strong>Pedagogical Clarity (0-10):</strong> Assesses visual hierarchy and readability.</li>
+              <li><span class="bullet">•</span> <strong>Actionable Feedback:</strong> Returns structured guidance for Reflexion retries.</li>
+            </ul>
+          </div>
+
+          <!-- Engine 3: Anatomy Critic -->
+          <div class="card card-accent-green">
+            <div class="card-title" style="color: #166534;">
+              <span>3️⃣</span> Domain Anatomy Critic
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: #059669; text-transform: uppercase;">Spec-Based Verification</div>
+            <ul class="feature-list" style="font-size: 13px;">
+              <li><span class="bullet">•</span> <strong>Structure Recall:</strong> Checks mandatory anatomical organs / chambers.</li>
+              <li><span class="bullet">•</span> <strong>Orientation & Laterality:</strong> Inversion & connection validation.</li>
+              <li><span class="bullet">•</span> <strong>Clean Compliance:</strong> Rejects embedded burned-in text (<span class="pill">embedded_text_present == False</span>).</li>
+            </ul>
+          </div>
+
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 13.5px; color: #334155;">
+            <strong>Automated Approval Gate:</strong> Output passes only when <span class="pill">Visual &ge; 7.0</span>, <span class="pill">Pedagogical &ge; 7.0</span>, and <span class="pill">Anatomy Hard Failures == 0</span>.
+          </div>
+          <span class="tag-pass" style="font-size: 13px; padding: 6px 12px;">Max 2 Targeted Retries</span>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>Dual Critic & Reflexion Loop</span>
+        <span>Fail-Closed Moderation Enabled</span>
+        <span>Slide 4 / 5</span>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- SLIDE 5: PROGRESS & NEXT WEEK ACTION PLAN -->
+    <!-- ========================================================================= -->
+    <div class="slide" id="slide-5">
+      <div class="slide-header">
+        <div>
+          <div class="slide-eyebrow">🚀 Project Roadmap & Timeline</div>
+          <h1 class="slide-title">Current Milestones & Next Week Action Plan</h1>
+        </div>
+        <div class="slide-badge">Slide 5 / 5</div>
+      </div>
+
+      <div class="slide-content">
+        <div class="grid-2">
+          
+          <!-- Completed Milestones -->
+          <div class="card card-accent-green">
+            <div class="card-title" style="color: #166534;">
+              <span>✅</span> Completed Milestones
+            </div>
+            <ul class="feature-list">
+              <li><span class="bullet">✔</span> <strong>Multi-Agent Core Deployed:</strong> Prompt, FLUX Image, SAM-2, and 3D Hunyuan agents deployed on Modal cloud.</li>
+              <li><span class="bullet">✔</span> <strong>Tiered Memory Architecture:</strong> Integrated global & agent <span class="pill">SKILL.md</span> with Supabase pgvector retrieval.</li>
+              <li><span class="bullet">✔</span> <strong>Dual Critic & Reflexion Engine:</strong> Working CLIPScore + Qwen2.5-VL image critique with targeted retry logic.</li>
+              <li><span class="bullet">✔</span> <strong>Unified Interactive Frontend:</strong> Cross-platform Expo SDK 57 UI with Three.js 3D viewport and SVG viewer.</li>
+            </ul>
+          </div>
+
+          <!-- Next Week Action Plan -->
+          <div class="card card-accent-blue">
+            <div class="card-title" style="color: #1e40af;">
+              <span>🎯</span> Next Week Action Plan (Focus Areas)
+            </div>
+            <ul class="feature-list">
+              <li>
+                <span class="bullet">1.</span> 
+                <div>
+                  <strong>All-Component End-to-End Integration:</strong>
+                  <div style="font-size: 12.5px; color: #64748b;">Finalize asynchronous websocket/REST handoff between Modal orchestrator and frontend viewer.</div>
+                </div>
+              </li>
+              <li>
+                <span class="bullet">2.</span> 
+                <div>
+                  <strong>Component Architecture Optimization:</strong>
+                  <div style="font-size: 12.5px; color: #64748b;">Optimize 3D container cold-start times and apply GPU VRAM streaming optimizations.</div>
+                </div>
+              </li>
+              <li>
+                <span class="bullet">3.</span> 
+                <div>
+                  <strong>Output Accuracy & Threshold Tuning:</strong>
+                  <div style="font-size: 12.5px; color: #64748b;">Execute full 100-prompt ablation benchmark to calibrate Reflexion rejection thresholds.</div>
+                </div>
+              </li>
+              <li>
+                <span class="bullet">4.</span> 
+                <div>
+                  <strong>Research Paper Writing:</strong>
+                  <div style="font-size: 12.5px; color: #64748b;">Draft Methodology & System Architecture sections with empirical ablation tables.</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>EduVision Project Milestone</span>
+        <span>Target: PP2 Final Submission & Conference Paper</span>
+        <span>Slide 5 / 5</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interactive Controls Bar -->
+  <div class="controls">
+    <button class="btn" id="prevBtn" onclick="prevSlide()">◀ Previous</button>
+    <div class="slide-counter" id="slideIndicator">1 / 5</div>
+    <button class="btn" id="nextBtn" onclick="nextSlide()">Next ▶</button>
+    <button class="btn" style="background: #475569;" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+    <button class="btn" style="background: #2563eb;" onclick="window.print()">🖨️ Export PDF</button>
+  </div>
+
+  <div class="keyboard-hint">
+    Use <strong>Left / Right Arrow Keys</strong> or <strong>Spacebar</strong> to navigate slides.
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+
+    let currentSlide = 1;
+    const totalSlides = 5;
+
+    function showSlide(index) {
+      if (index < 1) index = 1;
+      if (index > totalSlides) index = totalSlides;
+      currentSlide = index;
+
+      document.querySelectorAll('.slide').forEach((slide, idx) => {
+        slide.classList.remove('active');
+        if (idx + 1 === currentSlide) {
+          slide.classList.add('active');
+        }
+      });
+
+      document.getElementById('slideIndicator').textContent = `${currentSlide} / ${totalSlides}`;
+      document.getElementById('prevBtn').disabled = currentSlide === 1;
+      document.getElementById('nextBtn').disabled = currentSlide === totalSlides;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) showSlide(currentSlide + 1);
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) showSlide(currentSlide - 1);
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => alert(`Fullscreen error: ${err.message}`));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        prevSlide();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    });
+
+    // Initialize
+    showSlide(1);
+  </script>
+</body>
+</html>

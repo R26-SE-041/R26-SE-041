@@ -1,0 +1,18 @@
+{
+  "organ":"kidneys","version":"1.0.0","aliases":["kidney","kidneys","renal","siruneeragam"],"trigger_word":"KDNANAT","structures":[
+    {"id":"right_kidney","label":"Right kidney","aliases":["right renal organ"],"importance":"primary","function":"Paired retroperitoneal organ that filters blood and contributes to urine formation and homeostasis.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"left_kidney","label":"Left kidney","aliases":["left renal organ"],"importance":"primary","function":"Paired retroperitoneal organ that filters blood and contributes to urine formation and homeostasis.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_capsule","label":"Renal capsule","aliases":["fibrous capsule"],"importance":"secondary","function":"Fibrous covering closely surrounding the kidney.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_cortex","label":"Renal cortex","aliases":["cortex"],"importance":"primary","function":"Outer renal parenchyma containing renal corpuscles and portions of renal tubules.","source_ids":["ncbi-kidney-anatomy","ncbi-nephron-histology"]},
+    {"id":"renal_medulla","label":"Renal medulla","aliases":["medulla"],"importance":"primary","function":"Inner renal region organized into renal pyramids.","source_ids":["ncbi-kidney-anatomy","ncbi-nephron-histology"]},
+    {"id":"renal_pyramids","label":"Renal pyramids","aliases":["medullary pyramids"],"importance":"primary","function":"Conical medullary structures that direct urine toward renal papillae.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_papillae","label":"Renal papillae","aliases":["papillae"],"importance":"secondary","function":"Apices of renal pyramids that drain urine into minor calyces.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"minor_calyces","label":"Minor calyces","aliases":["minor calyx"],"importance":"secondary","function":"Collect urine from renal papillae.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"major_calyces","label":"Major calyces","aliases":["major calyx"],"importance":"secondary","function":"Receive urine from groups of minor calyces and drain toward the renal pelvis.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_pelvis","label":"Renal pelvis","aliases":["pelvis of kidney"],"importance":"primary","function":"Funnel-shaped proximal collecting structure continuous with the ureter.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"ureter","label":"Ureter","aliases":["ureters"],"importance":"primary","function":"Conveys urine from the renal pelvis toward the urinary bladder.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_artery","label":"Renal artery","aliases":["renal arteries"],"importance":"primary","function":"Delivers arterial blood to the kidney through the renal hilum.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_vein","label":"Renal vein","aliases":["renal veins"],"importance":"primary","function":"Drains venous blood from the kidney through the renal hilum.","source_ids":["ncbi-kidney-anatomy"]},
+    {"id":"renal_hilum","label":"Renal hilum","aliases":["kidney hilum","hilus"],"importance":"secondary","function":"Medial gateway for renal vessels, nerves, lymphatics, and the renal pelvis.","source_ids":["ncbi-kidney-anatomy"]}
+  ]
+}

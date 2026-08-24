@@ -1,0 +1,8 @@
+{
+  "organ":"brain","version":"1.0.0","sources":[
+    {"id":"ncbi-cerebral-hemisphere","title":"Neuroanatomy, Cerebral Hemisphere","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK549789/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-brainstem","title":"Neuroanatomy, Brainstem","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK544297/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-cerebellum","title":"Neuroanatomy, Cerebellum","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK538167/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-brain-physiology","title":"Physiology, Brain","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK551718/","accessed":"2026-08-21","reviewed":true}
+  ]
+}

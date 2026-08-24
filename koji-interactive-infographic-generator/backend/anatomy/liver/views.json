@@ -1,0 +1,10 @@
+{
+  "organ":"liver","version":"1.0.0","default_view":"inferior_visceral","views":[{
+    "id":"inferior_visceral","label":"Inferior visceral view","aliases":["visceral surface","inferior view","underside view"],
+    "default_orientation":"landscape","allowed_detail_levels":["basic","intermediate","advanced"],
+    "orientation_note":"Inferior visceral surface with the patient's anatomical right on viewer-left and anterior toward the lower edge.",
+    "required_structures":["right_lobe","left_lobe","caudate_lobe","quadrate_lobe","gallbladder","porta_hepatis","hepatic_portal_vein","proper_hepatic_artery","common_hepatic_duct","inferior_vena_cava"],
+    "optional_structures":["falciform_ligament","hepatic_veins"],
+    "clean_image_rules":["single isolated liver","inferior visceral view","centered subject","light neutral background","clear surface anatomy","empty side margins","no embedded text","no labels","no arrows","no callout lines","no legend","no torso"]
+  }]
+}

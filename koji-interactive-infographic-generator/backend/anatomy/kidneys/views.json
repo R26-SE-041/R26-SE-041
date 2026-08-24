@@ -1,0 +1,10 @@
+{
+  "organ":"kidneys","version":"1.0.0","default_view":"paired_coronal_cutaway","views":[{
+    "id":"paired_coronal_cutaway","label":"Paired coronal cutaway","aliases":["front cutaway","coronal kidney section","paired kidneys cutaway"],
+    "default_orientation":"landscape","allowed_detail_levels":["basic","intermediate","advanced"],
+    "orientation_note":"Anterior paired view: the patient's right kidney appears viewer-left; at least one kidney is shown in coronal section with medial hilum and collecting system visible.",
+    "required_structures":["right_kidney","left_kidney","renal_capsule","renal_cortex","renal_medulla","renal_pyramids","renal_papillae","minor_calyces","major_calyces","renal_pelvis","ureter","renal_artery","renal_vein","renal_hilum"],
+    "optional_structures":[],
+    "clean_image_rules":["paired isolated kidneys","coronal cutaway","visible collecting system","centered subject","light neutral background","empty side margins","no embedded text","no labels","no arrows","no callout lines","no legend","no torso"]
+  }]
+}

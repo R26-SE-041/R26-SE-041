@@ -11,11 +11,12 @@ import {
   View,
 } from "react-native";
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
+import type { AnatomyAnnotation } from "../App";
+import AnatomyOverlay from "./AnatomyOverlay";
 import Icon, { IconName } from "./Icon";
-
-const INTERACTIVE_AGENT_URL =
-  process.env.EXPO_PUBLIC_INTERACTIVE_AGENT_URL ??
-  "https://kojithan-y--interactive-agent-api-dev.modal.run";
+import FeedbackControls, { createOutputId, FeedbackReason } from "./FeedbackControls";
+import ImageDownloadControls from "./ImageDownloadControls";
+import { INTERACTIVE_AGENT_URL } from "../config";
 
 type SelectionType = "point" | "box";
 type AnalysisMode = "identify" | "explain" | "ask";
@@ -29,10 +30,23 @@ interface InteractionCoords {
 interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
+  accessToken?: string;
+  anatomyAnnotations?: AnatomyAnnotation[];
+  anatomyOrgan?: string;
+  feedbackApiUrl: string;
   imageBase64: string;
   onOperationComplete?: (durationMs: number) => void;
   speedMode?: SpeedMode;
+  sessionId: string;
 }
+
+const NEGATIVE_REASONS: FeedbackReason[] = [
+  { code: "wrong_region", label: "Wrong region" }, { code: "incorrect_explanation", label: "Incorrect explanation" },
+  { code: "too_complex", label: "Too complex" }, { code: "not_useful", label: "Not useful" },
+];
+const POSITIVE_REASONS: FeedbackReason[] = [
+  { code: "grounded", label: "Grounded" }, { code: "clear", label: "Clear" }, { code: "helpful", label: "Helpful" },
+];
 
 function apiError(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
@@ -46,7 +60,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ imageBase64, onOperationComplete, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -65,6 +79,23 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
   const [aspectRatio, setAspectRatio] = useState(1);
   const dragStartRef = useRef<Point | null>(null);
+  const [outputId, setOutputId] = useState<string | null>(null);
+  const [retryLink, setRetryLink] = useState<{ feedbackId: string; outputId: string } | null>(null);
+  const [showAnatomyLabels, setShowAnatomyLabels] = useState(true);
+  const [selectedStructureId, setSelectedStructureId] = useState<string | null>(null);
+
+  const nearestStructure = (point: Point): string | null => {
+    let best: AnatomyAnnotation | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const item of anatomyAnnotations) {
+      const distance = Math.hypot(item.anchor_x - point.x, item.anchor_y - point.y);
+      if (distance < bestDistance) {
+        best = item;
+        bestDistance = distance;
+      }
+    }
+    return best && bestDistance <= 0.10 ? best.structure_id : null;
+  };
 
   const normalizeEvent = (event: GestureResponderEvent): Point => ({
     x: Math.max(0, Math.min(1, event.nativeEvent.locationX / canvasSize.width)),
@@ -78,6 +109,7 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
       const point = normalizeEvent(event);
       if (selectionType === "point") {
         setCurrentSelection({ type: "point", coords: [point.x, point.y] });
+        setSelectedStructureId(nearestStructure(point));
         return;
       }
       dragStartRef.current = point;
@@ -90,7 +122,7 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
     },
     onPanResponderRelease: (event) => finishBox(normalizeEvent(event)),
     onPanResponderTerminate: (event) => finishBox(normalizeEvent(event)),
-  }), [canvasSize, isLoading, selectionType]);
+  }), [anatomyAnnotations, canvasSize, isLoading, selectionType]);
 
   function finishBox(end: Point) {
     const start = dragStartRef.current;
@@ -121,9 +153,11 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
     setAnalysisResult(null);
     setAnalysisDuration(null);
     setError(null);
+    setOutputId(null);
+    setRetryLink(null);
   };
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (regenerationFeedback?: string) => {
     if (!currentSelection || isLoading) return;
     const startedAt = Date.now();
     setIsLoading(true);
@@ -131,6 +165,25 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
     setAnalysisResult(null);
     setAnalysisDuration(null);
     try {
+      let memoryContext = "";
+      try {
+        const memoryResponse = await fetch(`${feedbackApiUrl.replace(/\/$/, "")}/memory/context`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            agent_name: "interactive-agent",
+            query: customQuestion.trim() || `${analysisMode} selected educational image region`,
+            limit: 5,
+          }),
+        });
+        const memoryData = await memoryResponse.json().catch(() => ({}));
+        if (memoryResponse.ok && typeof memoryData.context === "string") memoryContext = memoryData.context;
+      } catch {
+        memoryContext = "";
+      }
       const response = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -140,6 +193,10 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           mode: analysisMode,
           question: analysisMode === "ask" ? customQuestion.trim() : undefined,
           speed_mode: speedMode,
+          regeneration_feedback: regenerationFeedback,
+          memory_context: memoryContext,
+          organ: anatomyOrgan,
+          structure_id: selectedStructureId,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -147,6 +204,7 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
       if (data.error) throw new Error(String(data.error));
       if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
       setAnalysisResult(data.response_text || "No analysis provided.");
+      setOutputId(createOutputId("interactive"));
       const duration = Date.now() - startedAt;
       setAnalysisDuration(duration);
       onOperationComplete?.(duration);
@@ -156,6 +214,11 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const regenerateFromFeedback = async (feedback: string, feedbackId: string, previousOutputId: string) => {
+    setRetryLink({ feedbackId, outputId: previousOutputId });
+    await runAnalysis(feedback);
   };
 
   const imageUri = highlightedImage ?? `data:image/png;base64,${imageBase64}`;
@@ -172,7 +235,14 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           <ModeButton active={selectionType === "box"} icon="box-select" label="Select Region" onPress={() => handleTypeChange("box")} />
         </View>
         <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
+        {anatomyAnnotations.length > 0 && (
+          <Pressable onPress={() => setShowAnatomyLabels((value) => !value)} style={styles.labelToggle}>
+            <Text style={styles.labelToggleText}>{showAnatomyLabels ? "Hide labels and grid" : "Show labels and grid"}</Text>
+          </Pressable>
+        )}
       </View>
+
+      <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
 
       <View
         {...panResponder.panHandlers}
@@ -189,6 +259,9 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           source={{ uri: imageUri }}
           style={StyleSheet.absoluteFill}
         />
+        {showAnatomyLabels && anatomyAnnotations.length > 0 && (
+          <AnatomyOverlay annotations={anatomyAnnotations} selectedStructureId={selectedStructureId} />
+        )}
         {selectionType === "point" && currentSelection?.type === "point" && (
           <View pointerEvents="none" style={[styles.pointMarker, { left: `${currentSelection.coords[0] * 100}%`, top: `${currentSelection.coords[1] * 100}%` }]} />
         )}
@@ -206,7 +279,7 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           {analysisMode === "ask" && (
             <TextInput
               onChangeText={setCustomQuestion}
-              onSubmitEditing={runAnalysis}
+              onSubmitEditing={() => void runAnalysis()}
               placeholder="e.g. What is the role of this organelle?"
               placeholderTextColor={colors.textDim}
               returnKeyType="send"
@@ -216,7 +289,7 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           )}
           <Pressable
             disabled={isLoading || (analysisMode === "ask" && !customQuestion.trim())}
-            onPress={runAnalysis}
+            onPress={() => void runAnalysis()}
             style={({ pressed }) => [shared.button, shared.primaryButton, pressed && styles.pressed, (isLoading || (analysisMode === "ask" && !customQuestion.trim())) && shared.disabled]}
           >
             {isLoading && <ActivityIndicator color="#fff" size="small" style={styles.spinner} />}
@@ -237,6 +310,23 @@ export default function InteractiveCanvas({ imageBase64, onOperationComplete, sp
           </View>
           <Text style={styles.resultText}>{analysisResult}</Text>
           {analysisDuration !== null && <View style={styles.inlineInfo}><Icon color={colors.textDim} name="clock" size={14} /><Text style={styles.durationText}>Completed in {formatDuration(analysisDuration)}</Text></View>}
+          {outputId && (
+            <FeedbackControls
+              key={outputId}
+              agentName="interactive-agent"
+              accessToken={accessToken}
+              apiUrl={feedbackApiUrl}
+              inputContext={{ interaction: currentSelection, mode: analysisMode, question: customQuestion || undefined }}
+              negativeReasons={NEGATIVE_REASONS}
+              onRegenerate={regenerateFromFeedback}
+              outputId={outputId}
+              outputSnapshot={{ response_text: analysisResult }}
+              parentFeedbackId={retryLink?.feedbackId}
+              parentOutputId={retryLink?.outputId}
+              positiveReasons={POSITIVE_REASONS}
+              sessionId={sessionId}
+            />
+          )}
         </View>
       )}
     </View>
@@ -266,6 +356,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   toolbarModes: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   toolbarLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginRight: 2, alignSelf: "center" },
   toolbarHint: { color: colors.textDim, fontSize: 11 },
+  labelToggle: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.cyan, borderRadius: 50, paddingHorizontal: 12, paddingVertical: 7 },
+  labelToggleText: { color: colors.cyan, fontSize: 12, fontWeight: "800" },
   modeButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
   modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.22)" },
   modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },

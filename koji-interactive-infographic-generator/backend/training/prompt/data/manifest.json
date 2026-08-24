@@ -1,0 +1,56 @@
+{
+  "dataset": "eduvision-five-organ-prompt-sft",
+  "version": "2.0.0",
+  "seed": 26041,
+  "organs": [
+    "brain",
+    "heart",
+    "kidneys",
+    "liver",
+    "lungs"
+  ],
+  "counts": {
+    "train": {
+      "total": 3600,
+      "by_organ": {
+        "brain": 560,
+        "liver": 560,
+        "lungs": 560,
+        "kidneys": 560,
+        "generic": 800,
+        "heart": 560
+      }
+    },
+    "validation": {
+      "total": 450,
+      "by_organ": {
+        "heart": 70,
+        "brain": 70,
+        "lungs": 70,
+        "liver": 70,
+        "kidneys": 70,
+        "generic": 100
+      }
+    },
+    "test": {
+      "total": 450,
+      "by_organ": {
+        "generic": 100,
+        "brain": 70,
+        "liver": 70,
+        "kidneys": 70,
+        "lungs": 70,
+        "heart": 70
+      }
+    }
+  },
+  "sha256": {
+    "train.jsonl": "b5f06736eca739549facd5da6f3d98e0fc8fb1c3cce5e3a34de9c5966609493c",
+    "validation.jsonl": "243fde2a61d912664b4b20fb146f077ec70efecc8b1b2d4dd4b427071b4f2842",
+    "test.jsonl": "fd9cee3f9ac9f0c69726c111bf7bed66b514ba5143db96f930830eb2f2b90c45"
+  },
+  "target_model": "Qwen/Qwen2.5-3B-Instruct",
+  "leakage_policy": "Prompts and template families are disjoint across train, validation, and test.",
+  "output_contract": "Anatomy requests return anatomy_spec only; deterministic application code builds FLUX prompts.",
+  "target_provenance": "Deterministically generated from versioned curated anatomy JSON; no teacher-model targets."
+}
