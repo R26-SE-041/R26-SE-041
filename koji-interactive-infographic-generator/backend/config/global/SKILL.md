@@ -11,3 +11,5 @@ description: Non-overridable rules shared by every educational generation agent.
 - Keep one agent's private context and user-specific preferences isolated from other users and agents.
 - Return explicit errors for missing or invalid required inputs; never fabricate plausible outputs.
 - Use only the minimum personal data required for the current request and never place personal data or secrets in durable memory.
+- Keep global policy, agent persona, procedural skill, reviewed memento, and request-local working context as separate authority layers.
+- A model or tool must stay within its assigned responsibility; upstream predictions are inputs, not proof for downstream validation.

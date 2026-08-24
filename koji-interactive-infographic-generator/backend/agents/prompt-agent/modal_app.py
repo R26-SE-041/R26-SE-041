@@ -85,6 +85,8 @@ image = (
     )
     .add_local_file("agents/prompt-agent/SKILL.md", PACKAGED_SKILL_PATH)
     .add_local_file("agents/prompt-agent/MEMENTO.md", PACKAGED_MEMENTO_PATH)
+    .add_local_file("agents/prompt-agent/PERSONA.md", f"{AGENT_CONFIG_PATH}/PERSONA.md")
+    .add_local_file("config/global/PERSONA.md", f"{GLOBAL_CONFIG_PATH}/PERSONA.md")
     .add_local_file("config/global/SKILL.md", f"{GLOBAL_CONFIG_PATH}/SKILL.md")
     .add_local_file("config/global/MEMENTO.md", f"{GLOBAL_CONFIG_PATH}/MEMENTO.md")
 )
@@ -154,6 +156,7 @@ class _PromptAgentBase:
             global_root=GLOBAL_CONFIG_PATH,
         )
         static_context = self.memory.load_static_context()
+        self.system_persona = static_context["system_persona"]
         self.skill_rules = static_context["skill_rules"]
         self.memento_rules = static_context["memento"]
 
@@ -170,6 +173,8 @@ class _PromptAgentBase:
             if Path(MEMENTO_PATH).exists():
                 self.memory.memento_path = Path(MEMENTO_PATH)
             static_context = self.memory.load_static_context()
+            if static_context["system_persona"]:
+                self.system_persona = static_context["system_persona"]
             if static_context["skill_rules"]:
                 self.skill_rules = static_context["skill_rules"]
             if static_context["memento"]:
@@ -521,7 +526,10 @@ class _PromptAgentBase:
             available_context_tokens=available_context_tokens,
         )
         context = controller.assemble("prompt_agent", {
-            "system": "You are an expert educational image prompt engineer.",
+            "system": "\n\n".join(filter(None, [
+                self.system_persona,
+                "Your active role is expert educational image prompt engineer.",
+            ])),
             "skill_rules": f"Enhancement Rules:\n{skill_rules}" if skill_rules else "",
             "memento": (
                 "\n\n".join(filter(None, [retrieved_memory, self.memento_rules, "\n".join(example_lines)]))

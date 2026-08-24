@@ -87,6 +87,8 @@ image = (
     )
     .add_local_file("agents/eval-agent/SKILL.md", f"{AGENT_CONFIG_PATH}/SKILL.md")
     .add_local_file("agents/eval-agent/MEMENTO.md", f"{AGENT_CONFIG_PATH}/MEMENTO.md")
+    .add_local_file("agents/eval-agent/PERSONA.md", f"{AGENT_CONFIG_PATH}/PERSONA.md")
+    .add_local_file("config/global/PERSONA.md", f"{GLOBAL_CONFIG_PATH}/PERSONA.md")
     .add_local_file("config/global/SKILL.md", f"{GLOBAL_CONFIG_PATH}/SKILL.md")
     .add_local_file("config/global/MEMENTO.md", f"{GLOBAL_CONFIG_PATH}/MEMENTO.md")
 )
@@ -232,7 +234,10 @@ class EvalAgent:
         from shared.token_budget import TokenBudgetController
 
         instructions = TokenBudgetController().assemble("eval_agent", {
-            "system": "You are evaluating an AI-generated educational image.",
+            "system": "\n\n".join(filter(None, [
+                self.agent_context["system_persona"],
+                "Your active role is evaluating an AI-generated educational image.",
+            ])),
             "skill_rules": self.agent_context["skill_rules"],
             "memento": self.agent_context["memento"],
             "generation_prompt": f'The image was generated from this prompt:\n"{prompt}"',

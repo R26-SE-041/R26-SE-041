@@ -45,6 +45,7 @@ class MemoryManager:
         *,
         agent_name: str = "prompt-agent",
         agents_root: str | Path | None = None,
+        persona_path: str | Path | None = None,
         memento_path: str | Path | None = None,
         global_root: str | Path | None = None,
     ) -> None:
@@ -67,6 +68,7 @@ class MemoryManager:
             self.skill_path = legacy_skill
         else:
             self.skill_path = preferred_skill
+        self.persona_path = Path(persona_path) if persona_path else agent_root / "PERSONA.md"
         self.memento_path = Path(memento_path) if memento_path else agent_root / "MEMENTO.md"
 
     @staticmethod
@@ -83,20 +85,64 @@ class MemoryManager:
         """Load this agent's reviewed durable notes, never another agent's."""
         return self._read(self.memento_path)
 
+    def load_system_persona(self) -> str:
+        """Load global and agent-local personas without crossing agent scope."""
+        return self._join_scoped(
+            "Global persona",
+            self._read(self.global_root / "PERSONA.md"),
+            "Active agent persona",
+            self._read(self.persona_path),
+        )
+
     def load_static_context(self) -> dict[str, str]:
-        """Return global + agent-local memory without changing existing callers."""
+        """Return ordered, scoped context for the common agent prompt pipeline.
+
+        The ordering is deliberate: persona and global policies have higher
+        authority than an agent's relevant skill and reviewed lessons. The
+        request/query stays request-local and is appended by each caller.
+        """
+        system_persona = self.load_system_persona()
+        global_persona = self._read(self.global_root / "PERSONA.md")
+        agent_persona = self._read(self.persona_path)
         global_skill = self._read(self.global_root / "SKILL.md")
         global_memento = self._read(self.global_root / "MEMENTO.md")
         local_skill = self.load_semantic_memory()
         local_memento = self.load_memento_memory()
+        policy_and_skill = self._join_scoped(
+            "Global policies",
+            global_skill,
+            "Relevant agent skill",
+            local_skill,
+        )
+        reviewed_lessons = self._join_scoped(
+            "Global lessons",
+            global_memento,
+            "Agent lessons",
+            local_memento,
+        )
         return {
+            "system_persona": system_persona,
+            "global_persona": global_persona,
+            "agent_persona": agent_persona,
             "global_skill_rules": global_skill,
             "agent_skill_rules": local_skill,
             "global_memento": global_memento,
             "agent_memento": local_memento,
-            "skill_rules": self._join_scoped("Global rules", global_skill, "Agent rules", local_skill),
-            "memento": self._join_scoped("Global lessons", global_memento, "Agent lessons", local_memento),
+            # Backward-compatible keys used by the deployed agents.
+            "skill_rules": policy_and_skill,
+            "memento": reviewed_lessons,
+            "system_context": self._join_blocks(
+                "System persona",
+                system_persona,
+                policy_and_skill,
+            ),
         }
+
+    @staticmethod
+    def _join_blocks(label: str, first: str, *blocks: str) -> str:
+        rendered = [f"## {label}\n{first}"] if first else []
+        rendered.extend(block.strip() for block in blocks if block.strip())
+        return "\n\n".join(rendered)
 
     @staticmethod
     def _join_scoped(first_label: str, first: str, second_label: str, second: str) -> str:

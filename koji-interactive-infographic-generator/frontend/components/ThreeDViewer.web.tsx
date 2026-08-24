@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
 import Icon from "./Icon";
+import ModelLighting from "./ModelLighting";
 
 interface Props { glbBase64: string; sizeKb?: number }
 
@@ -64,10 +65,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
           <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} /><Text style={styles.hint}>Preparing 3D viewer...</Text></View>
         ) : (
           <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={styles.canvasFill}>
-            <ambientLight intensity={1.5} />
-            <directionalLight position={[5, 8, 5]} intensity={1.8} />
-            <directionalLight position={[-5, 3, 2]} intensity={1.2} />
-            <directionalLight position={[0, -3, -4]} intensity={0.8} />
+            <ModelLighting />
             <Suspense fallback={<Fallback />}><Model url={objectUrl} /></Suspense>
             <OrbitControls enablePan={false} minDistance={1.5} maxDistance={8} />
           </Canvas>

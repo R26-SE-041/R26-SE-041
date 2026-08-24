@@ -31,6 +31,7 @@ SAM2_CACHE_PATH = "/model-cache/sam2"
 VLM_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 VLM_CACHE_PATH = "/model-cache/qwen-vl-7b"
 AGENT_CONFIG_PATH = "/root/agent-config/interactive-agent"
+GLOBAL_CONFIG_PATH = "/root/agent-config/global"
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,10 @@ image = (
     .add_local_python_source("shared")
     .add_local_file("agents/interactive-agent/SKILL.md", f"{AGENT_CONFIG_PATH}/SKILL.md")
     .add_local_file("agents/interactive-agent/MEMENTO.md", f"{AGENT_CONFIG_PATH}/MEMENTO.md")
+    .add_local_file("agents/interactive-agent/PERSONA.md", f"{AGENT_CONFIG_PATH}/PERSONA.md")
+    .add_local_file("config/global/PERSONA.md", f"{GLOBAL_CONFIG_PATH}/PERSONA.md")
+    .add_local_file("config/global/SKILL.md", f"{GLOBAL_CONFIG_PATH}/SKILL.md")
+    .add_local_file("config/global/MEMENTO.md", f"{GLOBAL_CONFIG_PATH}/MEMENTO.md")
 )
 
 app = modal.App("interactive-agent", image=image)
@@ -263,6 +268,7 @@ class _VLMAgentBase:
             agent_name="interactive-agent",
             skill_path=Path(AGENT_CONFIG_PATH) / "SKILL.md",
             memento_path=Path(AGENT_CONFIG_PATH) / "MEMENTO.md",
+            global_root=GLOBAL_CONFIG_PATH,
         )
         self.agent_context = memory.load_static_context()
         print("Qwen2.5-VL loaded successfully.")
@@ -310,7 +316,10 @@ class _VLMAgentBase:
             from shared.token_budget import TokenBudgetController
 
             prompt_text = TokenBudgetController().assemble("interactive_agent", {
-                "system": "Answer using visible evidence from the highlighted educational image.",
+                "system": "\n\n".join(filter(None, [
+                    self.agent_context["system_persona"],
+                    "Your active role is to answer using visible evidence from the highlighted educational image.",
+                ])),
                 "skill_rules": self.agent_context["skill_rules"],
                 "memento": self.agent_context["memento"],
                 "rag_context": (
