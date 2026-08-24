@@ -29,35 +29,22 @@ def adaptive_agent(state: AssessmentState) -> dict:
     if state.get("difficulty_mode") != "adaptive" and len(answers) > 1:
         return {"agent_logs": logs}
 
-    # ── Delta calculation ──────────────────────────
-    delta = 0.0
-
-    if last["is_correct"]:
-        if last["attempts"] == 1 and last.get("hints_used", 0) == 0:
-            delta = +0.10   # Perfect answer
-        elif last["attempts"] == 1:
-            delta = +0.07   # Correct on first try but used hints
-        else:
-            delta = +0.04   # Correct after retries
+    # ── Attempt-based difficulty logic ──────────────────────────
+    attempts = last.get("attempts", 1)
+    
+    if attempts == 1:
+        new_d = 0.8  # Hard
+        level_name = "Hard"
+    elif attempts in [2, 3]:
+        new_d = 0.5  # Medium
+        level_name = "Medium"
     else:
-        if last.get("hints_used", 0) >= 2:
-            delta = -0.15   # Struggled significantly
-        else:
-            delta = -0.10   # Simply wrong
+        new_d = 0.2  # Easy
+        level_name = "Easy"
 
-    # Speed modifier (correct + fast = more confident → increase more)
-    if last["is_correct"] and len(answers) > 2:
-        avg_time = sum(a["time_taken_sec"] for a in answers[:-1]) / (len(answers) - 1)
-        if avg_time > 0 and last["time_taken_sec"] < avg_time * 0.7:
-            delta *= 1.2    # 20% bonus for quick correct answer
-
-    # Clamp delta to avoid too-fast changes
-    delta = max(-0.20, min(0.20, delta))
-    new_d = max(0.0, min(1.0, d + delta))
-
-    logs.append(f"[AdaptiveAgent] Difficulty: {old_d:.2f} → {new_d:.2f} (Δ={delta:+.2f}) | "
-                f"correct={last['is_correct']} | attempts={last['attempts']} | hints={last.get('hints_used',0)}")
-    logger.info(f"[AdaptiveAgent] Difficulty updated: {old_d:.2f} → {new_d:.2f}")
+    logs.append(f"[AdaptiveAgent] Difficulty updated based on {attempts} attempt(s): {old_d:.2f} → {new_d:.2f} ({level_name}) | "
+                f"correct={last['is_correct']}")
+    logger.info(f"[AdaptiveAgent] Difficulty updated: {old_d:.2f} → {new_d:.2f} ({level_name})")
 
     return {
         "current_difficulty": new_d,

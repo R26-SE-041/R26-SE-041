@@ -12,7 +12,7 @@ router = APIRouter()
 db = DbService()
 
 
-@router.get("/{session_id}", response_model=AnalyticsResponse)
+@router.get("/{session_id}/report", response_model=AnalyticsResponse)
 def get_analytics(session_id: str):
     """
     Get the complete analytics report for a completed session.
@@ -36,6 +36,9 @@ def get_analytics(session_id: str):
     return AnalyticsResponse(
         session_id=session_id,
         final_score=report.get("final_score", 0.0),
+        total_marks_earned=report.get("total_marks_earned"),
+        total_marks_possible=report.get("total_marks_possible"),
+        question_marks_detail=report.get("question_marks_detail"),
         total_questions=report.get("total_questions", 0),
         total_answered=report.get("total_answered", 0),
         topic_scores=report.get("topic_scores", {}),

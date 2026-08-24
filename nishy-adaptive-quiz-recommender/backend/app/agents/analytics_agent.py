@@ -26,15 +26,44 @@ def analytics_agent(state: AssessmentState) -> dict:
             "agent_logs": logs
         }
 
-    # Final score
-    total_score = sum(a.get("score", 0.0) for a in answers)
-    final_score = round((total_score / len(answers)) * 100, 1)
+    ATTEMPT_MARKS = {1: 100, 2: 75, 3: 50, 4: 25}
+
+    weighted_scores = []
+    question_marks_detail = []
+
+    for i, a in enumerate(answers):
+        attempt = a.get("attempts", 1)
+        is_correct = a.get("is_correct", False)
+        pts = ATTEMPT_MARKS.get(attempt, 25) if is_correct else 0
+        weighted_scores.append(pts)
+
+        # Find matching question for topic/bloom/difficulty
+        q_id = a.get("q_id", "")
+        q_obj = next((q for q in questions if q.get("q_id") == q_id), {})
+        topic = q_obj.get("topic", "General")
+
+        question_marks_detail.append({
+            "q_num":      i + 1,
+            "topic":      topic,
+            "bloom":      q_obj.get("bloom_level", "remember"),
+            "difficulty": round(q_obj.get("difficulty", 0.5), 2),
+            "is_correct": is_correct,
+            "attempts":   attempt,
+            "hints_used": a.get("hints_used", 0),
+            "marks":      pts,
+            "max_marks":  100,
+        })
+
+    final_score = round(sum(weighted_scores) / len(weighted_scores), 1)
+    total_marks_earned = sum(weighted_scores)
+    total_marks_possible = len(weighted_scores) * 100
+
 
     # Difficulty progression
     diff_progression = []
     d = state.get("current_difficulty", 0.5)
     for a in answers:
-        if a["is_correct"]:
+        if a.get("is_correct"):
             d = min(1.0, d + 0.1)
         else:
             d = max(0.0, d - 0.1)
@@ -55,24 +84,27 @@ def analytics_agent(state: AssessmentState) -> dict:
     total_time_sec = sum(a.get("time_taken_sec", 0) for a in answers)
 
     report = {
-        "final_score":            final_score,
-        "total_questions":        len(questions),
-        "total_answered":         len(answers),
-        "topic_scores":           state.get("topic_scores", {}),
-        "bloom_scores":           state.get("bloom_scores", {}),
-        "difficulty_progression": diff_progression,
-        "avg_attempts":           round(avg_attempts, 2),
-        "avg_hints_used":         round(avg_hints, 2),
-        "total_time_sec":         total_time_sec,
-        "total_time_min":         round(total_time_sec / 60, 1),
-        "weak_topics":            state.get("weak_topics", []),
-        "strong_topics":          state.get("strong_topics", []),
-        "recommendations":        state.get("recommendations", []),
-        # Research metrics (put in paper!)
-        "avg_grounding_score":    round(avg_grounding, 3),
-        "flagged_questions_count": flagged_count,
-        "flagged_questions_pct":   flagged_pct,
-        "agent_logs":             logs
+        "final_score":             final_score,
+        "total_marks_earned":      total_marks_earned,
+        "total_marks_possible":    total_marks_possible,
+        "question_marks_detail":   question_marks_detail,
+        "total_questions":         len(questions),
+        "total_answered":          len(answers),
+        "topic_scores":            state.get("topic_scores", {}),
+        "bloom_scores":            state.get("bloom_scores", {}),
+        "difficulty_progression":  diff_progression,
+        "avg_attempts":            round(avg_attempts, 2),
+        "avg_hints_used":          round(avg_hints, 2),
+        "total_time_sec":          total_time_sec,
+        "total_time_min":          round(total_time_sec / 60, 1),
+        "weak_topics":             state.get("weak_topics", []),
+        "strong_topics":           state.get("strong_topics", []),
+        "recommendations":         state.get("recommendations", []),
+        # Research metrics
+        "avg_grounding_score":     round(avg_grounding, 3),
+        "flagged_questions_count":  flagged_count,
+        "flagged_questions_pct":    flagged_pct,
+        "agent_logs":              logs
     }
 
     logs.append(f"[AnalyticsAgent] Final score={final_score}% | grounding={avg_grounding:.3f} | flagged={flagged_pct}%")

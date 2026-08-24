@@ -51,13 +51,13 @@ def route_after_evaluation(state: AssessmentState) -> str:
     """After evaluation: continue quiz loop or finish."""
     if state.get("error"):
         return "error_handler"
-    answered = len(state.get("answers", []))
-    total = len(state.get("questions", []))
-    # Check if current question can be retried
+    # Check if current question can be retried (up to 4 attempts: 3 hints + reveal)
     last_answer = state["answers"][-1] if state.get("answers") else None
-    if last_answer and not last_answer["is_correct"] and last_answer["attempts"] < 3:
-        return "quiz_generate"  # Same question, retry with hint
-    if answered < state.get("num_questions", 0):
+    if last_answer and not last_answer["is_correct"] and last_answer["attempts"] < 4:
+        return "quiz_generate"  # Same question, retry with progressive hint
+    
+    current_idx = state.get("current_q_index", 0)
+    if current_idx < state.get("num_questions", 0):
         return "adaptive"       # Move to next question
     return "recommendation"     # All questions done
 

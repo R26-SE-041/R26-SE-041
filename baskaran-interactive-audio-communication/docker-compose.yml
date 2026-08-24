@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  # ── ChromaDB ───────────────────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.15
+    container_name: voicelearn-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/.chroma/index
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voicelearn-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    env_file:
+      - ./backend/.env
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app  # Hot reload in dev
+      - ./backend/local_documents:/app/local_documents
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Next.js Frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voicelearn-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+    driver: local

@@ -1,0 +1,87 @@
+name: Deploy Modal Endpoints
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/modal_endpoints/**"
+
+jobs:
+  deploy-whisper:
+    name: Deploy Whisper STT
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install modal
+      - name: Deploy Whisper endpoint
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy backend/modal_endpoints/whisper_stt.py
+
+  deploy-prompt-enhancer:
+    name: Deploy Prompt Enhancer
+    runs-on: ubuntu-latest
+    needs: deploy-whisper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install modal
+      - name: Deploy Prompt Enhancer endpoint
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy backend/modal_endpoints/prompt_enhancer.py
+
+  deploy-rag:
+    name: Deploy RAG Generator
+    runs-on: ubuntu-latest
+    needs: deploy-whisper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install modal
+      - name: Deploy RAG Generator endpoint
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy backend/modal_endpoints/rag_generator.py
+
+  deploy-localizer:
+    name: Deploy Localizer
+    runs-on: ubuntu-latest
+    needs: deploy-whisper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install modal
+      - name: Deploy Localizer endpoint
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy backend/modal_endpoints/localizer.py
+
+  deploy-tts:
+    name: Deploy TTS
+    runs-on: ubuntu-latest
+    needs: deploy-localizer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install modal
+      - name: Deploy TTS endpoint
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy backend/modal_endpoints/tts.py
