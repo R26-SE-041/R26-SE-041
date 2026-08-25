@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from .loader import get_structure, get_view, load_organ, validate_anatomy_spec
+from .loader import (
+    DETAIL_LEVELS,
+    GRADE_ALLOWED_DETAIL,
+    GRADE_DEFAULT_DETAIL,
+    GRADE_LEVELS,
+    ORIENTATIONS,
+    get_structure,
+    get_view,
+    list_supported_organs,
+    load_organ,
+    validate_anatomy_spec,
+)
 
 
 DETAIL_INSTRUCTIONS = {
@@ -29,8 +41,12 @@ def _labels(organ: str, structure_ids: list[str]) -> str:
     return ", ".join(get_structure(organ, structure_id)["label"] for structure_id in structure_ids)
 
 
-def build_anatomy_prompt(spec: dict[str, Any]) -> str:
-    """Build a stable prompt. Validation is always repeated at this trust boundary."""
+def compile_anatomy_prompt(spec: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Validate an anatomy specification and compile its canonical FLUX prompt.
+
+    Keeping both operations behind one trust boundary prevents callers from
+    accidentally generating from an unvalidated model response.
+    """
     validated = validate_anatomy_spec(spec)
     if not validated.get("is_anatomy"):
         raise ValueError("An anatomy prompt requires is_anatomy=true")
@@ -72,4 +88,90 @@ def build_anatomy_prompt(spec: dict[str, Any]) -> str:
         "isolated centered organ with clear boundaries",
         ", ".join(clean_rules),
     ])
-    return ". ".join(part.strip().rstrip(".") for part in parts if part.strip()) + "."
+    prompt = ". ".join(part.strip().rstrip(".") for part in parts if part.strip()) + "."
+    return validated, prompt
+
+
+def build_anatomy_prompt(spec: dict[str, Any]) -> str:
+    """Backward-compatible prompt-only wrapper around the compiler."""
+    return compile_anatomy_prompt(spec)[1]
+
+
+def _clean_phrase(value: Any, max_length: int) -> str:
+    clean = re.sub(r"[^a-zA-Z0-9 ,()'/-]+", " ", str(value or ""))
+    return re.sub(r"\s+", " ", clean).strip(" ,-/")[:max_length]
+
+
+def compile_general_anatomy_prompt(spec: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Compile a conservative label-free prompt for an uncatalogued human organ."""
+    if not spec.get("is_anatomy"):
+        raise ValueError("A general anatomy prompt requires is_anatomy=true")
+    organ = _clean_phrase(spec.get("organ"), 80)
+    if not organ:
+        raise ValueError("A general anatomy prompt requires an organ or anatomical subject")
+    minimal_prompt = bool(spec.get("_minimal_prompt")) or spec.get("prompt_profile") == "minimal"
+    view_description = _clean_phrase(spec.get("view_description"), 240)
+    grade_level = str(spec.get("grade_level") or "general_audience").strip().lower()
+    if grade_level not in GRADE_LEVELS:
+        grade_level = "general_audience"
+    detail_level = str(spec.get("detail_level") or GRADE_DEFAULT_DETAIL[grade_level]).strip().lower()
+    if detail_level not in DETAIL_LEVELS or detail_level not in GRADE_ALLOWED_DETAIL[grade_level]:
+        detail_level = GRADE_DEFAULT_DETAIL[grade_level]
+    orientation = str(spec.get("orientation") or "portrait").strip().lower()
+    if orientation not in ORIENTATIONS:
+        orientation = "portrait"
+    structures: list[str] = []
+    for value in spec.get("required_structures") or []:
+        clean = _clean_phrase(value, 80)
+        if clean and clean.casefold() not in {item.casefold() for item in structures}:
+            structures.append(clean)
+        if len(structures) == 8:
+            break
+    validated = {
+        "is_anatomy": True,
+        "catalog_verified": False,
+        "organ": organ,
+        "view_description": view_description,
+        "grade_level": grade_level,
+        "required_structures": structures,
+        "focus_structures": structures,
+        "detail_level": detail_level,
+        "orientation": orientation,
+        "show_flow": bool(spec.get("show_flow", False)),
+        "knowledge_version": "general-anatomy-1.0",
+        "prompt_profile": "minimal" if minimal_prompt else "detailed",
+    }
+    parts = [
+        "EDUANAT",
+        f"medically accurate educational illustration of one isolated human {organ}",
+        f"anatomical viewpoint or section: {view_description}" if view_description else "standard educational anatomical view",
+    ]
+    if minimal_prompt and not view_description and not structures and not validated["show_flow"]:
+        parts.extend([
+            "centered on a white or very light neutral background",
+            "no labels, no text, no arrows, no callouts, no border, no watermark",
+        ])
+        return validated, ". ".join(part.strip().rstrip(".") for part in parts) + "."
+    if structures:
+        parts.append(f"show only the explicitly requested structures: {', '.join(structures)}")
+    if validated["show_flow"]:
+        parts.append("use anatomically consistent color differentiation for the requested flow without arrows or text")
+    parts.extend([
+        f"for {grade_level.replace('_', ' ')} learners",
+        DETAIL_INSTRUCTIONS[detail_level],
+        ORIENTATION_INSTRUCTIONS[orientation],
+        "preserve the requested anatomical direction, section, laterality, and visible surfaces",
+        "do not add unrelated organs, torso, or anatomical structures not requested",
+        "centered composition with clear anatomical boundaries",
+        ", ".join(MANDATORY_CLEAN_RULES),
+    ])
+    prompt = ". ".join(part.strip().rstrip(".") for part in parts if part.strip()) + "."
+    return validated, prompt
+
+
+def compile_any_anatomy_prompt(spec: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Use catalog validation when available, otherwise the conservative compiler."""
+    organ = re.sub(r"[^a-z0-9]+", "_", str(spec.get("organ") or "").casefold()).strip("_")
+    if organ in set(list_supported_organs()):
+        return compile_anatomy_prompt(spec)
+    return compile_general_anatomy_prompt(spec)

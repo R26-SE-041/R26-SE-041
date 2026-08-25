@@ -19,6 +19,22 @@ LESSONS: dict[str, dict[str, str]] = {
         "factually_incorrect": "Do not add facts unless they are supported by the request or reliable educational context.",
         "wrong_level": "Match terminology and detail to the learner level stated by the user.",
     },
+    "prompt-anatomy": {
+        "wrong_view": "Preserve the user's requested anatomical view, section, direction, and laterality exactly.",
+        "missing_structure": "Preserve every explicitly requested anatomical structure in the specification.",
+        "extra_structure": "Do not add neighboring organs or anatomical structures the user did not request.",
+        "labels_requested": "Keep the generated anatomy base image free of text, labels, arrows, and callouts.",
+        "background_not_white": "Compile anatomy prompts with a white or very light neutral background.",
+        "inaccurate_anatomy": "Prefer medically accurate anatomy and avoid unsupported structural claims.",
+        "wrong_detail_level": "Match anatomical detail and terminology to the requested learner level.",
+    },
+    "prompt-generic": {
+        "subject_changed": "Preserve the user's requested subject and action during prompt enhancement.",
+        "wrong_style": "Preserve the visual style explicitly requested by the user.",
+        "poor_composition": "Add concise composition guidance only when it improves the requested image.",
+        "missing_detail": "Retain every explicit visual detail from the user's request.",
+        "too_verbose": "Keep generic image prompts concise and avoid decorative prompt padding.",
+    },
     "image-agent": {
         "bad_labels": "For labeled diagrams, prioritize legible text, clear leader lines, and non-overlapping label placement.",
         "poor_layout": "Use clear visual hierarchy, balanced spacing, and an unambiguous reading order.",

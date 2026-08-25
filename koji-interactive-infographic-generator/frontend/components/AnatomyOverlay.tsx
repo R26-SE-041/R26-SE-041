@@ -26,7 +26,7 @@ function labelBoxWidth(label: string): number {
   return Math.min(LABEL_MAX_WIDTH, Math.max(LABEL_MIN_WIDTH, label.length * CHAR_WIDTH + LABEL_PADDING_X * 2));
 }
 
-export default function AnatomyOverlay({ annotations, selectedStructureId, showGridPrompts = true }: AnatomyOverlayProps) {
+export default function AnatomyOverlay({ annotations, selectedStructureId, showGridPrompts = false }: AnatomyOverlayProps) {
   // Defense-in-depth: only render annotations that passed all quality gates.
   // App.tsx already filters upstream, but this component should be self-protecting.
   const verified = annotations.filter((item) => item.verified === true);

@@ -94,7 +94,7 @@ class ExperimentConfig(BaseModel):
     persist_run: bool = False
     seed: int | None = Field(default=None, ge=0, le=2_147_483_647)
     skill_rules_override: str | None = Field(default=None, max_length=20_000)
-    prompt_model_variant: Literal["base", "anatomy_lora", "heart_lora"] = "base"
+    prompt_model_variant: Literal["base", "anatomy_lora"] = "base"
     # FLUX.1-dev is intentionally the only image-generation pipeline.
     image_model_variant: Literal["base"] = "base"
     interactive_model_variant: Literal["base"] = "base"
@@ -105,9 +105,6 @@ class GenerateRequest(BaseModel):
     prompt: str
     experiment: ExperimentConfig | None = None
     speed_mode: Literal["normal", "pro", "promax"] = "pro"
-    skill_compression_mode: Literal["auto", "always", "off"] = "auto"
-    skill_token_budget: int = Field(default=150, ge=40, le=600)
-    available_context_tokens: int | None = Field(default=None, ge=100, le=32_768)
 
     @field_validator("prompt")
     @classmethod
@@ -136,18 +133,28 @@ class GenerateResponse(BaseModel):
     error: str | None                  # None = full success; non-None = partial/full failure
     retry_count: int
     config_id: str | None
-    skill_compression: dict
     safety: dict
     anatomy_spec: dict = Field(default_factory=lambda: {"is_anatomy": False})
+    routing: dict = Field(default_factory=dict)
     model_variants: dict[str, str] = Field(default_factory=dict)
 
 
 FeedbackAgent = Literal[
-    "prompt-agent", "image-agent", "interactive-agent", "eval-agent", "threed-agent"
+    "prompt-agent", "prompt-anatomy", "prompt-generic",
+    "image-agent", "interactive-agent", "eval-agent", "threed-agent"
 ]
 
 FEEDBACK_REASON_CODES: dict[str, set[str]] = {
     "prompt-agent": {"meaning_changed", "not_visual", "too_verbose", "factually_incorrect", "wrong_level", "clear", "accurate", "well_structured"},
+    "prompt-anatomy": {
+        "wrong_view", "missing_structure", "extra_structure", "labels_requested",
+        "background_not_white", "inaccurate_anatomy", "wrong_detail_level",
+        "view_preserved", "structures_preserved", "concise", "accurate",
+    },
+    "prompt-generic": {
+        "subject_changed", "wrong_style", "poor_composition", "missing_detail", "too_verbose",
+        "subject_preserved", "good_style", "good_composition", "concise",
+    },
     "image-agent": {"bad_labels", "poor_layout", "wrong_content", "wrong_style", "inaccurate_diagram", "clear_labels", "good_layout", "accurate", "matches_request"},
     "interactive-agent": {"wrong_region", "incorrect_explanation", "too_complex", "not_useful", "grounded", "clear", "helpful"},
     "eval-agent": {"wrong_score", "missed_error", "unhelpful_feedback", "well_calibrated", "actionable"},
@@ -265,9 +272,6 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     experiment_config = req.experiment.model_dump() if req.experiment else {}
     state = initial_state(raw_prompt=req.prompt, experiment_config=experiment_config)
     state["speed_mode"] = req.speed_mode
-    state["skill_compression_mode"] = req.skill_compression_mode
-    state["skill_token_budget"] = req.skill_token_budget
-    state["available_context_tokens"] = req.available_context_tokens
 
     try:
         final_state = graph.invoke(state)
@@ -299,9 +303,9 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         error=final_state.get("error"),
         retry_count=final_state.get("retry_count", 0),
         config_id=experiment_config.get("config_id") if experiment_config else None,
-        skill_compression=final_state.get("skill_compression") or {},
         safety=final_state.get("safety") or {},
         anatomy_spec=final_state.get("anatomy_spec") or {"is_anatomy": False},
+        routing=final_state.get("routing") or {},
         model_variants=final_state.get("model_variants") or {},
     )
 

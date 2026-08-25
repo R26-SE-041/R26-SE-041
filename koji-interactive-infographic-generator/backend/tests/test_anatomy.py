@@ -6,9 +6,13 @@ from anatomy import (
     AnatomyKnowledgeError,
     build_anatomy_prompt,
     build_anatomy_extraction_schema,
+    compile_anatomy_prompt,
+    compile_any_anatomy_prompt,
+    compile_general_anatomy_prompt,
     canonicalize_structure,
     detect_requested_structures,
     detect_supported_organ,
+    extract_requested_view,
     get_view,
     list_supported_organs,
     load_organ,
@@ -104,6 +108,17 @@ class AnatomyKnowledgeTests(unittest.TestCase):
         self.assertEqual(preserve_requested_view("top side of eye"), "top side of eye")
         self.assertEqual(preserve_requested_view("brain"), "")
 
+    def test_runtime_view_extraction_is_concise(self) -> None:
+        self.assertEqual(
+            extract_requested_view("posterior view of the heart for a biology student"),
+            "posterior view",
+        )
+        self.assertEqual(
+            extract_requested_view("create an oblique posterior view from above of the pancreas"),
+            "oblique posterior view from above",
+        )
+        self.assertEqual(extract_requested_view("cross section view of brain"), "cross section view")
+
     def test_focus_must_be_required(self) -> None:
         with self.assertRaisesRegex(AnatomyKnowledgeError, "focus_structures"):
             validate_anatomy_spec({
@@ -139,6 +154,67 @@ class AnatomyKnowledgeTests(unittest.TestCase):
         self.assertEqual(first, second)
         for phrase in ("HRTANAT", "Aorta", "Left ventricle", "white or very light neutral background", "no labels", "no arrows", "no watermark"):
             self.assertIn(phrase, first)
+
+    def test_compiler_validates_and_builds_at_one_trust_boundary(self) -> None:
+        validated, prompt = compile_anatomy_prompt({
+            "is_anatomy": True,
+            "organ": "heart",
+            "view": "front cutaway",
+            "required_structures": ["Aorta", "left ventricle"],
+            "focus_structures": ["left ventricle"],
+        })
+        self.assertEqual(validated["view"], "anterior_cutaway")
+        self.assertEqual(validated["required_structures"], ["aorta", "left_ventricle"])
+        self.assertIn("Aorta", prompt)
+        self.assertIn("no labels", prompt)
+
+    def test_unsupported_organ_uses_general_anatomy_compiler(self) -> None:
+        validated, prompt = compile_general_anatomy_prompt({
+            "is_anatomy": True,
+            "catalog_verified": False,
+            "organ": "pancreas",
+            "view_description": "posterior cross-section",
+            "required_structures": ["pancreatic duct"],
+            "grade_level": "high_school",
+        })
+        self.assertFalse(validated["catalog_verified"])
+        self.assertEqual(validated["organ"], "pancreas")
+        self.assertIn("posterior cross-section", prompt)
+        self.assertIn("white or very light neutral background", prompt)
+        self.assertIn("no labels", prompt)
+        self.assertIn("do not add unrelated organs", prompt)
+
+    def test_bare_anatomy_subject_uses_concise_prompt(self) -> None:
+        validated, prompt = compile_general_anatomy_prompt({
+            "is_anatomy": True,
+            "organ": "intestine",
+            "_minimal_prompt": True,
+        })
+        self.assertEqual(validated["organ"], "intestine")
+        self.assertEqual(validated["prompt_profile"], "minimal")
+        self.assertIn("one isolated human intestine", prompt)
+        self.assertIn("white or very light neutral background", prompt)
+        self.assertIn("no labels", prompt)
+        self.assertNotIn("general audience", prompt)
+        self.assertNotIn("portrait composition", prompt)
+        self.assertNotIn("laterality", prompt)
+        revalidated, recompiled = compile_general_anatomy_prompt(validated)
+        self.assertEqual(revalidated["prompt_profile"], "minimal")
+        self.assertEqual(recompiled, prompt)
+
+    def test_any_anatomy_compiler_selects_catalog_or_general_path(self) -> None:
+        verified, _ = compile_any_anatomy_prompt({
+            "is_anatomy": True,
+            "organ": "heart",
+            "required_structures": ["aorta"],
+        })
+        general, _ = compile_any_anatomy_prompt({
+            "is_anatomy": True,
+            "organ": "spleen",
+            "required_structures": [],
+        })
+        self.assertNotIn("catalog_verified", verified)
+        self.assertFalse(general["catalog_verified"])
 
     def test_all_organs_build_valid_prompts(self) -> None:
         for organ in list_supported_organs():

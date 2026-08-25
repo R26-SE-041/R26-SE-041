@@ -44,13 +44,27 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
     """Call prompt-agent /enhance and merge results into state."""
     url = os.environ["PROMPT_AGENT_URL"].rstrip("/") + "/enhance"
     config = state.get("experiment_config") or {}
-    examples = state.get("memento_examples") or []
-    if config.get("enable_memento", True) and not examples and state.get("retry_count", 0) == 0:
+    examples: list[dict[str, Any]] = []
+    anatomy_memory = ""
+    generic_memory = ""
+    if config.get("enable_memento", True):
         try:
             from shared.memory import MemoryManager
-            examples = MemoryManager().recall(state["raw_prompt"], limit=3)
+
+            def render_memories(agent_name: str) -> str:
+                memories = MemoryManager(agent_name=agent_name).recall_scoped(
+                    state["raw_prompt"], limit=3,
+                )
+                return "\n".join(
+                    str(item.get("content") or "").strip()
+                    for item in memories if item.get("content")
+                )
+
+            anatomy_memory = render_memories("prompt-anatomy")
+            generic_memory = render_memories("prompt-generic")
         except Exception:
-            examples = []
+            anatomy_memory = ""
+            generic_memory = ""
     try:
         resp = requests.post(
             url,
@@ -59,13 +73,12 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
                 "speed_mode": state.get("speed_mode", "pro"),
                 "retry_feedback": state.get("retry_feedback"),
                 "memento_examples": examples,
+                "anatomy_memory": anatomy_memory,
+                "generic_memory": generic_memory,
                 "use_memento": config.get("enable_memento", True),
                 "use_skill_rules": config.get("enable_skill_rules", True),
                 "skill_rules_override": config.get("skill_rules_override"),
                 "seed": config.get("seed"),
-                "skill_compression_mode": state.get("skill_compression_mode", "auto"),
-                "skill_token_budget": state.get("skill_token_budget", 150),
-                "available_context_tokens": state.get("available_context_tokens"),
                 "model_variant": config.get("prompt_model_variant", "base"),
             },
             timeout=90,
@@ -75,14 +88,15 @@ def prompt_node(state: PipelineState) -> dict[str, Any]:
 
         return {
             "enhanced_prompt": data.get("enhanced_prompt"),
+            "enhanced_prompt_json": data.get("enhanced_prompt_json"),
             "anatomy_spec": data.get("anatomy_spec") or {"is_anatomy": False},
+            "routing": data.get("routing") or {},
             "model_variants": {
                 **(state.get("model_variants") or {}),
                 "prompt": data.get("model_variant", config.get("prompt_model_variant", "base")),
             },
             "prompt_parse_error": data.get("prompt_parse_error", False),
             "memento_examples": examples,
-            "skill_compression": data.get("skill_compression") or {},
             "safety": data.get("safety") or {},
             # Carry forward agent-level error without aborting pipeline
             "error": data.get("error"),
@@ -118,6 +132,7 @@ def image_node(state: PipelineState) -> dict[str, Any]:
             url,
             json={
                 "prompt": best_prompt,
+                "enhanced_prompt_json": state.get("enhanced_prompt_json"),
                 "speed_mode": state.get("speed_mode", "pro"),
                 "seed": (
                     int(config["seed"]) + int(state.get("retry_count", 0))

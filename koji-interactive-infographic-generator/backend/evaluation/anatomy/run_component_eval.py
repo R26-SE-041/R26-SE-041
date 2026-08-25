@@ -58,7 +58,7 @@ def run_case(
             "raw_prompt": raw_prompt,
             "seed": seed,
             "speed_mode": "pro",
-            "model_variant": "heart_lora" if use_lora else "base",
+            "model_variant": "anatomy_lora" if use_lora else "base",
             "use_skill_rules": True,
             "use_memento": True,
         })
@@ -68,7 +68,7 @@ def run_case(
         "prompt": final_prompt,
         "seed": seed,
         "speed_mode": "pro",
-        "model_variant": "heart_lora" if use_lora else "base",
+        "model_variant": "anatomy_lora" if use_lora else "base",
         "domain": "anatomy" if use_pipeline else "generic",
         "organ": "heart",
         "view": "anterior_cutaway",
@@ -85,7 +85,7 @@ def run_case(
             "organ": "heart",
             "view": "anterior_cutaway",
             "speed_mode": "pro",
-            "model_variant": "heart_lora" if use_lora else "base",
+            "model_variant": "anatomy_lora" if use_lora else "base",
         })
         annotations = localized.get("annotations") or []
     expected = get_view("heart", "anterior_cutaway")["required_structures"]

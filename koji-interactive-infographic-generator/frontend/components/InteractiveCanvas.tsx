@@ -237,7 +237,7 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
         <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
         {anatomyAnnotations.length > 0 && (
           <Pressable onPress={() => setShowAnatomyLabels((value) => !value)} style={styles.labelToggle}>
-            <Text style={styles.labelToggleText}>{showAnatomyLabels ? "Hide labels and grid" : "Show labels and grid"}</Text>
+            <Text style={styles.labelToggleText}>{showAnatomyLabels ? "Hide labels" : "Show labels"}</Text>
           </Pressable>
         )}
       </View>
@@ -294,7 +294,11 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
           >
             {isLoading && <ActivityIndicator color="#fff" size="small" style={styles.spinner} />}
             {!isLoading && <Icon color="#ffffff" name="search" size={17} />}
-            <Text style={shared.buttonText}>{isLoading ? "SAM 2 and Qwen2.5-VL analyzing..." : "Analyze Selected Region"}</Text>
+            <Text style={shared.buttonText}>
+              {isLoading
+                ? selectionType === "point" ? "SAM 2 and Qwen2.5-VL analyzing..." : "Qwen2.5-VL analyzing selected region..."
+                : "Analyze Selected Region"}
+            </Text>
           </Pressable>
         </View>
       )}
@@ -306,7 +310,9 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
         <View style={[shared.card, styles.resultPanel]}>
           <View style={styles.resultHeader}>
             <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="search" size={15} /><Text style={styles.badge}>Qwen2.5-VL Visual Explanation</Text></View>
-            <Text style={styles.modelTag}>SAM 2 + Qwen2.5-VL-7B. {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}</Text>
+            <Text style={styles.modelTag}>
+              {selectionType === "point" ? "SAM 2 + Qwen2.5-VL-7B" : "Direct region + Qwen2.5-VL-7B"}. {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}
+            </Text>
           </View>
           <Text style={styles.resultText}>{analysisResult}</Text>
           {analysisDuration !== null && <View style={styles.inlineInfo}><Icon color={colors.textDim} name="clock" size={14} /><Text style={styles.durationText}>Completed in {formatDuration(analysisDuration)}</Text></View>}

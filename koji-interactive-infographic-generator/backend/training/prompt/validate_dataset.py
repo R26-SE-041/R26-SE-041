@@ -82,7 +82,13 @@ def validate(data_dir: Path) -> dict[str, Any]:
             required = spec.get("required_structures") or []
             if not required or not set(required).issubset(known[organ]["ids"]):
                 raise ValueError(f"{row['id']}: non-canonical structures")
-            if validate_anatomy_spec(spec) != spec:
+            normalized = validate_anatomy_spec(spec)
+            # Dataset v2 predates the optional open-ended view description.
+            # An absent value and the runtime-normalized empty string are
+            # equivalent; preserve the frozen dataset and its published hashes.
+            if "view_description" not in spec and normalized.get("view_description") == "":
+                normalized.pop("view_description")
+            if normalized != spec:
                 raise ValueError(f"{row['id']}: anatomy target is not normalized")
         prompt_sets[split] = prompts
         family_sets[split] = families

@@ -22,6 +22,20 @@ VIEW_INTENT = re.compile(
     r"transverse|axial|longitudinal|oblique|internal|external|inside|outside|underside)\b",
     re.I,
 )
+ANATOMICAL_VIEW_PHRASE = re.compile(
+    r"\b(?:"
+    r"(?:(?:oblique|direct|slightly)\s+)?"
+    r"(?:anterior|posterior|lateral|medial|superior|inferior|dorsal|ventral|"
+    r"sagittal|coronal|frontal|transverse|axial|longitudinal|internal|external|"
+    r"front|back|rear|top|bottom|upper|lower)"
+    r"(?:[- ](?:cross[- ]?section(?:al)?|cutaway|section))?"
+    r"(?:\s+(?:view|surface|section|cutaway|side))?"
+    r"(?:\s+from\s+(?:above|below|the\s+left|the\s+right))?"
+    r"|(?:cross[- ]?section(?:al)?|cutaway|cut[- ]?open)"
+    r"(?:\s+(?:view|section))?"
+    r")\b",
+    re.I,
+)
 GRADE_DEFAULT_DETAIL = {
     "primary_school": "basic",
     "middle_school": "intermediate",
@@ -107,6 +121,13 @@ def preserve_requested_view(text: str) -> str:
     """Preserve open-ended user view wording when spatial intent is explicit."""
     clean = re.sub(r"\s+", " ", text).strip()
     return clean[:240] if VIEW_INTENT.search(clean) else ""
+
+
+def extract_requested_view(text: str) -> str:
+    """Return only the concise anatomical view phrase from a larger request."""
+    clean = re.sub(r"\s+", " ", text).strip()
+    match = ANATOMICAL_VIEW_PHRASE.search(clean)
+    return match.group(0).strip()[:120] if match else ""
 
 
 @lru_cache(maxsize=32)

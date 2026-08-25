@@ -21,7 +21,7 @@ from typing import Any, Literal, Optional
 import modal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ image = (
     .pip_install(
         "torch>=2.4.0",
         "torchvision>=0.19.0",
-        "transformers>=4.49.0",
+        "transformers>=4.49.0,<5",
         "accelerate>=0.34.0",
         "huggingface_hub>=0.26.0",
         "safetensors>=0.4.5",
@@ -61,6 +61,11 @@ image = (
         "requests>=2.32.0",
     )
     .add_local_python_source("shared")
+    .add_local_dir(
+        "anatomy",
+        remote_path="/root/anatomy",
+        ignore=["**/__pycache__/**", "**/*.pyc"],
+    )
     .add_local_file("agents/interactive-agent/SKILL.md", f"{AGENT_CONFIG_PATH}/SKILL.md")
     .add_local_file("agents/interactive-agent/MEMENTO.md", f"{AGENT_CONFIG_PATH}/MEMENTO.md")
     .add_local_file("agents/interactive-agent/PERSONA.md", f"{AGENT_CONFIG_PATH}/PERSONA.md")
@@ -372,6 +377,101 @@ class _VLMAgentBase:
             return {"response_text": None, "error": f"VLMAnalysisFailed: {exc}"}
 
     @modal.method()
+    def auto_label(
+        self,
+        original_bytes: bytes,
+        crop_bytes: list[bytes],
+        region_ids: list[str],
+        organ: str,
+        view: str,
+    ) -> dict[str, Any]:
+        """Name marker-grounded anatomy points in one constrained multi-image call."""
+        import json
+        import torch
+        from PIL import Image
+        from qwen_vl_utils import process_vision_info
+        from lmformatenforcer import CharacterLevelParserConfig, JsonSchemaParser
+        from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+        from shared.json_utils import strip_json_fence
+
+        try:
+            if not crop_bytes or len(crop_bytes) != len(region_ids) or len(crop_bytes) > 4:
+                raise ValueError("Automatic labeling requires one to four crops with matching region IDs")
+            images = [Image.open(io.BytesIO(original_bytes)).convert("RGB")]
+            images.extend(Image.open(io.BytesIO(value)).convert("RGB") for value in crop_bytes)
+            output_schema = {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["regions"],
+                "properties": {
+                    "regions": {
+                        "type": "array",
+                        "maxItems": len(region_ids),
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["region_id", "label", "confidence", "visible"],
+                            "properties": {
+                                "region_id": {"type": "string", "enum": region_ids},
+                                "label": {"type": "string", "maxLength": 80},
+                                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                                "visible": {"type": "boolean"},
+                            },
+                        },
+                    },
+                },
+            }
+            instruction = (
+                f"The original image shows human {organ or 'anatomy'}"
+                + (f" in {view} view. " if view else ". ")
+                + f"Image 1 is the complete clean image and provides global context. Images 2 onward are "
+                f"overlapping context crops {', '.join(region_ids)}, in that exact order. Each crop contains a cyan ring. "
+                "Identify only the specific human anatomical structure directly under the empty CENTER of that "
+                "ring; the ring itself is an interface marker, not anatomy. Use the surrounding crop and Image 1 "
+                "only as context. Never name a nearby structure that does not pass through the ring center. "
+                "If the ring center is background, a boundary between structures, ambiguous, or has no specific "
+                "structure, omit it. Return at most the 8 clearest unique structures. Return each anatomical "
+                "label at most once, using the crop where it is clearest. Use concise anatomical names only. "
+                "Return JSON only matching: "
+                + json.dumps(output_schema, separators=(",", ":"))
+            )
+            content: list[dict[str, Any]] = []
+            for image_value in images:
+                content.append({"type": "image", "image": image_value})
+            content.append({"type": "text", "text": instruction})
+            messages = [{"role": "user", "content": content}]
+            text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            image_inputs, video_inputs = process_vision_info(messages)
+            inputs = self.processor(
+                text=[text], images=image_inputs, videos=video_inputs,
+                padding=True, return_tensors="pt",
+            ).to("cuda")
+            parser = JsonSchemaParser(
+                output_schema,
+                config=CharacterLevelParserConfig(
+                    max_consecutive_whitespaces=1,
+                    force_json_field_order=True,
+                    max_json_array_length=len(region_ids),
+                ),
+            )
+            prefix_fn = build_transformers_prefix_allowed_tokens_fn(self.processor.tokenizer, parser)
+            with torch.no_grad():
+                generated = self.model.generate(
+                    **inputs,
+                    max_new_tokens=768,
+                    do_sample=False,
+                    prefix_allowed_tokens_fn=prefix_fn,
+                    pad_token_id=self.processor.tokenizer.eos_token_id,
+                )
+            raw = self.processor.decode(
+                generated[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True,
+            )
+            parsed = json.loads(strip_json_fence(raw))
+            return {"payload": parsed, "error": None}
+        except Exception as exc:
+            return {"payload": None, "error": f"AutoLabelingFailed: {exc}"}
+
+    @modal.method()
     def localize_structure(
         self,
         image_bytes: bytes,
@@ -566,6 +666,31 @@ def create_highlighted_image(image_bytes: bytes, mask_bytes: bytes) -> bytes:
     return buf.read()
 
 
+def create_box_highlighted_image(image_bytes: bytes, coords: list[float]) -> tuple[bytes, list[float]]:
+    """Highlight the user's rectangle directly, without semantic segmentation."""
+    from PIL import Image, ImageDraw
+
+    if len(coords) != 4:
+        raise ValueError("Box interaction requires [x1, y1, x2, y2]")
+    values = [max(0.0, min(1.0, float(value))) for value in coords]
+    x1, x2 = sorted((values[0], values[2]))
+    y1, y2 = sorted((values[1], values[3]))
+    if x2 - x1 < 0.005 or y2 - y1 < 0.005:
+        raise ValueError("Selected region is too small")
+
+    image_value = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+    width, height = image_value.size
+    box = [round(x1 * width), round(y1 * height), round(x2 * width), round(y2 * height)]
+    overlay = Image.new("RGBA", image_value.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    stroke_width = max(3, round(min(width, height) * 0.006))
+    draw.rectangle(box, fill=(0, 225, 255, 55), outline=(0, 255, 255, 255), width=stroke_width)
+    highlighted = Image.alpha_composite(image_value, overlay).convert("RGB")
+    buffer = io.BytesIO()
+    highlighted.save(buffer, format="PNG")
+    return buffer.getvalue(), [x1, y1, x2, y2]
+
+
 # ── FastAPI Application ───────────────────────────────────────────────────────
 
 web_app = FastAPI(
@@ -603,7 +728,8 @@ def health() -> dict:
         "status": "ok",
         "segmentation_model": SAM2_MODEL_ID,
         "vlm_model": VLM_MODEL_ID,
-        "labeling_pipeline": "sam2_6x6_inner_4x4_then_qwen_vl",
+        "automatic_labeling": "four_batches_full_image_plus_four_marker_crops_qwen_vl",
+        "manual_interaction": "tap_sam2_then_qwen_vl; box_direct_to_qwen_vl",
     }
 
 
@@ -614,27 +740,27 @@ def analyze(req: AnalyzeRequest) -> dict:
         image_bytes = base64.b64decode(req.image_base64)
 
         # 2. Call SAM2 agent — A100 for Pro Max, A10G for Normal/Pro
-        if req.speed_mode == "promax":
-            sam_agent = SAM2AgentA100()
+        mask_bytes: bytes | None = None
+        if req.interaction.type == "point":
+            sam_agent = SAM2AgentA100() if req.speed_mode == "promax" else SAM2AgentA10G()
+            sam_res = sam_agent.segment.remote(
+                image_bytes=image_bytes,
+                interaction_type="point",
+                coords=req.interaction.coords,
+            )
+            if sam_res.get("error") or not sam_res.get("mask_bytes"):
+                return {
+                    "mask_base64": None,
+                    "response_text": None,
+                    "error": sam_res.get("error") or "Segmentation produced no mask",
+                }
+            mask_bytes = sam_res["mask_bytes"]
+            highlighted_bytes = create_highlighted_image(image_bytes, mask_bytes)
+            interaction_bbox = sam_res.get("bbox")
         else:
-            sam_agent = SAM2AgentA10G()
-        sam_res = sam_agent.segment.remote(
-            image_bytes=image_bytes,
-            interaction_type=req.interaction.type,
-            coords=req.interaction.coords,
-        )
-
-        if sam_res.get("error") or not sam_res.get("mask_bytes"):
-            return {
-                "mask_base64": None,
-                "response_text": None,
-                "error": sam_res.get("error") or "Segmentation produced no mask",
-            }
-
-        mask_bytes = sam_res["mask_bytes"]
-
-        # 3. Create composite highlighted image
-        highlighted_bytes = create_highlighted_image(image_bytes, mask_bytes)
+            highlighted_bytes, interaction_bbox = create_box_highlighted_image(
+                image_bytes, req.interaction.coords,
+            )
 
         # 4. Call VLM agent — A10G for Normal, A100 for Pro, H100 for Pro Max
         if req.speed_mode == "normal":
@@ -679,17 +805,17 @@ def analyze(req: AnalyzeRequest) -> dict:
 
         if vlm_res.get("error"):
             return {
-                "mask_base64": base64.b64encode(mask_bytes).decode("utf-8"),
+                "mask_base64": base64.b64encode(mask_bytes).decode("utf-8") if mask_bytes else None,
                 "highlighted_base64": base64.b64encode(highlighted_bytes).decode("utf-8"),
                 "response_text": None,
                 "error": vlm_res["error"],
             }
 
         response_payload = {
-            "mask_base64": base64.b64encode(mask_bytes).decode("utf-8"),
+            "mask_base64": base64.b64encode(mask_bytes).decode("utf-8") if mask_bytes else None,
             "highlighted_base64": base64.b64encode(highlighted_bytes).decode("utf-8"),
             "response_text": vlm_res["response_text"],
-            "bbox": sam_res.get("bbox"),
+            "bbox": interaction_bbox,
             "identified_concept": identified_concept or None,
             "rag_sources": [chunk.get("source") for chunk in rag_chunks],
             "error": None,
@@ -1040,6 +1166,74 @@ def localize_structures(req: LocalizeStructuresRequest) -> dict:
     except Exception as exc:
         return {"annotations": [], "organ": req.organ, "view": req.view,
                 "error": str(exc)}
+
+
+class AutoLabelsRequest(BaseModel):
+    """Automatic anatomy labels without segmentation."""
+
+    image_base64: str
+    organ: str = Field(default="anatomy", max_length=80)
+    view: str = Field(default="", max_length=160)
+    speed_mode: Literal["normal", "pro", "promax"] = "pro"
+
+
+@web_app.post("/auto-labels")
+def auto_labels(req: AutoLabelsRequest) -> dict:
+    """Label 16 inner-grid targets in four grounded Qwen-VL batches."""
+    try:
+        from anatomy.auto_labeling import build_auto_label_assets, validate_auto_labels
+
+        image_bytes = base64.b64decode(req.image_base64, validate=True)
+        if not image_bytes:
+            raise HTTPException(status_code=422, detail={"error": "EmptyImage"})
+        assets = build_auto_label_assets(image_bytes)
+        if req.speed_mode == "normal":
+            vlm_agent = VLMAgentA10G()
+        elif req.speed_mode == "promax":
+            vlm_agent = VLMAgentH100()
+        else:
+            vlm_agent = VLMAgentA100()
+        raw_regions: list[dict[str, Any]] = []
+        batch_errors: list[str] = []
+        batch_size = 4
+        for start in range(0, len(assets["regions"]), batch_size):
+            batch_regions = assets["regions"][start:start + batch_size]
+            result = vlm_agent.auto_label.remote(
+                original_bytes=assets["original_bytes"],
+                crop_bytes=assets["crop_bytes"][start:start + batch_size],
+                region_ids=[region["region_id"] for region in batch_regions],
+                organ=req.organ,
+                view=req.view,
+            )
+            if result.get("error"):
+                batch_errors.append(str(result["error"]))
+                continue
+            payload = result.get("payload")
+            if isinstance(payload, dict) and isinstance(payload.get("regions"), list):
+                raw_regions.extend(item for item in payload["regions"] if isinstance(item, dict))
+        annotations, diagnostics = validate_auto_labels(
+            {"regions": raw_regions}, assets["regions"], assets["image_size"],
+        )
+        total_batches = (len(assets["regions"]) + batch_size - 1) // batch_size
+        diagnostics["completed_batches"] = total_batches - len(batch_errors)
+        diagnostics["failed_batches"] = len(batch_errors)
+        if len(batch_errors) == total_batches:
+            return {"annotations": [], "diagnostics": diagnostics, "error": "; ".join(batch_errors)}
+        return {
+            "annotations": _place_labels(annotations),
+            "diagnostics": diagnostics,
+            "warnings": batch_errors,
+            "content_bbox": [0, 0, assets["image_size"][0], assets["image_size"][1]],
+            "error": None,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return {
+            "annotations": [],
+            "diagnostics": {"accepted_labels": 0},
+            "error": f"AutoLabelingFailed: {exc}",
+        }
 
 
 class GridLabelsRequest(BaseModel):

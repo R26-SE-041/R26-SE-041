@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import Icon from "./Icon";
 import { ColorPalette, useAppTheme } from "../theme";
 
-export type FeedbackAgent = "prompt-agent" | "image-agent" | "interactive-agent" | "eval-agent" | "threed-agent";
+export type FeedbackAgent = "prompt-agent" | "prompt-anatomy" | "prompt-generic" | "image-agent" | "interactive-agent" | "eval-agent" | "threed-agent";
 export interface FeedbackReason { code: string; label: string }
 
 interface FeedbackControlsProps {

@@ -227,8 +227,8 @@ class EnhancedPromptPayload(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str | None = Field(default=None, max_length=30_000)
     enhanced_prompt_json: EnhancedPromptPayload | None = None
-    speed_mode: str = "pro"  # "normal" | "pro" | "promax"
-    seed: int | None = None
+    speed_mode: Literal["normal", "pro", "promax"] = "pro"
+    seed: int | None = Field(default=None, ge=0, le=2_147_483_647)
     regeneration_feedback: str | None = Field(default=None, max_length=2000)
     memory_context: str | None = Field(default=None, max_length=2000)
     domain: Literal["generic", "anatomy"] = "generic"
@@ -267,16 +267,17 @@ def generate(req: GenerateRequest) -> dict:
         organ = anatomy_spec.get("organ") or req.organ
         view = anatomy_spec.get("view") or req.view
         if enhanced_payload and domain == "anatomy":
-            from anatomy import build_anatomy_prompt, validate_anatomy_spec
+            from anatomy import compile_any_anatomy_prompt
 
-            validated_spec = validate_anatomy_spec(anatomy_spec)
-            canonical_prompt = build_anatomy_prompt(validated_spec)
+            validated_spec, canonical_prompt = compile_any_anatomy_prompt(anatomy_spec)
             if generation_prompt != canonical_prompt:
                 raise HTTPException(
                     status_code=422,
                     detail={"error": "EnhancedPromptSpecMismatch"},
                 )
             generation_prompt = canonical_prompt
+            organ = validated_spec["organ"]
+            view = validated_spec.get("view") or validated_spec.get("view_description") or req.view
 
         feedback = (req.regeneration_feedback or "").strip()
         safety = assess_prompt("\n".join(filter(None, [generation_prompt, feedback])))
@@ -293,14 +294,6 @@ def generate(req: GenerateRequest) -> dict:
             agent = ImageAgentA100()
         else:  # "normal" → A10G (same as original)
             agent = ImageAgentA10G()
-        if domain == "anatomy" and req.use_skill_rules and not enhanced_payload:
-            generation_prompt = (
-                f"{generation_prompt}\n\n"
-                "Anatomy generation requirements: create one isolated, centered human organ in the requested "
-                "standard anatomical view on a light neutral background. Preserve clear structure boundaries "
-                "and empty side margins. Do not include text, labels, letters, numbers, arrows, legends, "
-                "captions, borders, a torso, decorative objects, or callout lines."
-            )
         memory_context = (req.memory_context or "").strip()
         if memory_context:
             generation_prompt = (
@@ -310,6 +303,17 @@ def generate(req: GenerateRequest) -> dict:
             generation_prompt = (
                 f"{generation_prompt}\n\nUser-requested corrections for this retry: {feedback}. "
                 "Preserve all correct educational content and the original learning objective."
+            )
+        if domain == "anatomy":
+            # Keep this last so recalled preferences and retry notes cannot
+            # override the non-negotiable clean-base-image contract.
+            generation_prompt = (
+                f"{generation_prompt}\n\n"
+                "FINAL ANATOMY OUTPUT RULES: preserve the requested anatomical view and subject; show one "
+                "isolated human anatomical subject on a white or very light neutral background; do not render "
+                "text, labels, letters, numbers, arrows, legends, captions, callouts, borders, watermarks, "
+                "decorative objects, a torso, or unrelated anatomy. These rules override conflicting correction "
+                "notes or recalled preferences."
             )
         result = agent.generate.remote({"prompt": generation_prompt, "seed": req.seed})
 
@@ -335,7 +339,7 @@ def generate(req: GenerateRequest) -> dict:
                 "view": view,
                 "seed": req.seed,
                 "input_contract": "enhanced_prompt_json" if enhanced_payload else "direct_prompt",
-                "skill_rules_applied": domain == "anatomy" and req.use_skill_rules,
+                "anatomy_output_rules_applied": domain == "anatomy",
             },
             "safety": result.get("safety"),
             "error": None,

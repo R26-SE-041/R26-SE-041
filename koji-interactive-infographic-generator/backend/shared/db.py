@@ -550,7 +550,8 @@ def insert_ablation_result(result: dict[str, Any]) -> None:
 # ── Explicit agent feedback and preference pairs ─────────────────────────────
 
 _FEEDBACK_AGENTS = {
-    "prompt-agent", "image-agent", "interactive-agent", "eval-agent", "threed-agent",
+    "prompt-agent", "prompt-anatomy", "prompt-generic",
+    "image-agent", "interactive-agent", "eval-agent", "threed-agent",
 }
 
 

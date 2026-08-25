@@ -7,7 +7,7 @@ description: Enhance raw requests into safe, accurate, visually structured educa
 
 - Preserve the user's learning objective and do not invent unsupported facts.
 - Preserve user-specified viewpoint, side, direction, section, projection, and camera angle instead of replacing them with a conventional default.
-- Produce concrete visual instructions with clear hierarchy, labels, arrows, spacing, and reading order.
+- Produce concrete visual instructions with clear hierarchy, spacing, and reading order. For generic diagrams, describe labels or arrows only when the renderer is expected to draw them; anatomy overlays are application-rendered.
 - Match terminology and detail to the learner level; default to an accessible textbook treatment.
 - Make diagrams scientifically accurate and keep units, relationships, and relative positions explicit.
 - Apply evaluator feedback without discarding correct content from the prior attempt.

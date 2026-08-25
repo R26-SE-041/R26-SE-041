@@ -63,3 +63,37 @@ def build_generic_enhancement_schema() -> dict[str, Any]:
             },
         },
     }
+
+
+def build_general_anatomy_schema() -> dict[str, Any]:
+    """Constrain unsupported-organ intent without pretending catalog verification."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["anatomy_spec"],
+        "properties": {
+            "anatomy_spec": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "is_anatomy", "catalog_verified", "organ", "view_description",
+                    "grade_level", "required_structures", "detail_level", "orientation",
+                    "show_flow",
+                ],
+                "properties": {
+                    "is_anatomy": {"type": "boolean", "enum": [True]},
+                    "catalog_verified": {"type": "boolean", "enum": [False]},
+                    "organ": {"type": "string", "minLength": 1, "maxLength": 80},
+                    "view_description": {"type": "string", "maxLength": 240},
+                    "grade_level": {"type": "string", "enum": sorted(GRADE_LEVELS)},
+                    "required_structures": {
+                        "type": "array", "maxItems": 8, "uniqueItems": True,
+                        "items": {"type": "string", "minLength": 1, "maxLength": 80},
+                    },
+                    "detail_level": {"type": "string", "enum": sorted(DETAIL_LEVELS)},
+                    "orientation": {"type": "string", "enum": sorted(ORIENTATIONS)},
+                    "show_flow": {"type": "boolean"},
+                },
+            },
+        },
+    }
