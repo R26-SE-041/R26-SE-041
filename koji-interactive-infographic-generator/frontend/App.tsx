@@ -403,6 +403,7 @@ function Home({ accessToken }: AppProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image_base64: image,
+          domain: "anatomy",
           organ: anatomy.organ,
           view: anatomy.view_description || anatomy.view || "",
           speed_mode: speedMode,

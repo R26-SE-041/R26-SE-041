@@ -1,6 +1,10 @@
 # Production deployment for all services changed by the feedback-memory system.
 # Run from any directory: powershell -ExecutionPolicy Bypass -File .\deploy_all.ps1
 
+param(
+    [switch]$IncludeSupabaseServices
+)
+
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
@@ -10,14 +14,22 @@ $targets = @(
     "agents/prompt-agent/modal_app.py",
     "agents/image-agent/modal_app.py",
     "agents/interactive-agent/modal_app.py",
-    "agents/eval-agent/modal_app.py",
-    "orchestrator/modal_app.py",
-    "agents/skill-generator/modal_app.py"
+    "agents/threed-agent/modal_app.py",
+    "agents/eval-agent/modal_app.py"
 )
+
+if ($IncludeSupabaseServices) {
+    $targets += @(
+        "orchestrator/modal_app.py",
+        "agents/skill-generator/modal_app.py"
+    )
+}
 
 $venvPython = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
 $modalCommand = Get-Command modal -ErrorAction SilentlyContinue
+$pyCommand = Get-Command py -ErrorAction SilentlyContinue
 $useVenvPython = $false
+$usePyLauncher = $false
 if (Test-Path -LiteralPath $venvPython) {
     try {
         & $venvPython --version *> $null
@@ -28,7 +40,20 @@ if (Test-Path -LiteralPath $venvPython) {
     }
 }
 
-if (-not $useVenvPython -and -not $modalCommand) {
+if (-not $useVenvPython -and $pyCommand) {
+    try {
+        & $pyCommand.Source -3.14 -m modal --version *> $null
+        $usePyLauncher = $LASTEXITCODE -eq 0
+        if ($usePyLauncher) {
+            $env:PYTHONPATH = Join-Path $PSScriptRoot "..\.venv\Lib\site-packages"
+        }
+    }
+    catch {
+        $usePyLauncher = $false
+    }
+}
+
+if (-not $useVenvPython -and -not $usePyLauncher -and -not $modalCommand) {
     throw "Modal CLI was not found. Activate/install the project environment before deploying."
 }
 
@@ -40,6 +65,9 @@ try {
         if ($useVenvPython) {
             & $venvPython -m modal deploy $target
         }
+        elseif ($usePyLauncher) {
+            & $pyCommand.Source -3.14 -m modal deploy $target
+        }
         else {
             & $modalCommand.Source deploy $target
         }
@@ -49,7 +77,7 @@ try {
         Write-Host "Deployed $target" -ForegroundColor Green
     }
     Write-Host ""
-    Write-Host "All feedback-memory services deployed successfully." -ForegroundColor Green
+    Write-Host "All requested Modal services deployed successfully." -ForegroundColor Green
 }
 finally {
     Pop-Location

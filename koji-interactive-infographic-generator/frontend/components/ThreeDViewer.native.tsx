@@ -9,6 +9,7 @@ import * as Sharing from "expo-sharing";
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
 import Icon from "./Icon";
 import ModelLighting from "./ModelLighting";
+import { configureModelRenderer } from "./configureModelRenderer";
 
 interface Props { glbBase64: string; sizeKb?: number }
 
@@ -88,7 +89,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         {!scene ? (
           <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} size="large" /><Text style={styles.hint}>{loadError ?? "Preparing 3D viewer..."}</Text></View>
         ) : (
-          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={styles.canvasFill}>
+          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)} style={styles.canvasFill}>
             <ModelLighting />
             <Model pitch={pitch} scene={scene} yaw={yaw} zoom={zoom} />
           </Canvas>

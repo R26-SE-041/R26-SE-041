@@ -917,13 +917,13 @@ class LocalizeStructuresRequest(BaseModel):
 
 @web_app.post("/localize-structures")
 def localize_structures(req: LocalizeStructuresRequest) -> dict:
-    # Retained only for older clients.  New clients use /grid-labels, which has
-    # no anatomy catalog dependency and cannot raise ModuleNotFoundError here.
+    # Retained only to give older clients an actionable migration error.
+    # Automatic anatomy labeling has one supported implementation: /auto-labels.
     return {
         "annotations": [],
         "organ": req.organ,
         "view": req.view,
-        "error": "DeprecatedEndpoint: use /grid-labels",
+        "error": "DeprecatedEndpoint: use /auto-labels",
     }
 
     try:
@@ -1172,6 +1172,7 @@ class AutoLabelsRequest(BaseModel):
     """Automatic anatomy labels without segmentation."""
 
     image_base64: str
+    domain: Literal["anatomy"]
     organ: str = Field(default="anatomy", max_length=80)
     view: str = Field(default="", max_length=160)
     speed_mode: Literal["normal", "pro", "promax"] = "pro"
@@ -1236,91 +1237,9 @@ def auto_labels(req: AutoLabelsRequest) -> dict:
         }
 
 
-class GridLabelsRequest(BaseModel):
-    """Catalog-free anatomy labels generated from SAM2 masks and Qwen-VL."""
-
-    image_base64: str
-    organ: str = "anatomy"
-    speed_mode: str = "pro"
-
-
-def _grid_bbox_iou(first: list[float], second: list[float]) -> float:
-    left, top = max(first[0], second[0]), max(first[1], second[1])
-    right, bottom = min(first[2], second[2]), min(first[3], second[3])
-    overlap = max(0.0, right - left) * max(0.0, bottom - top)
-    first_area = max(0.0, first[2] - first[0]) * max(0.0, first[3] - first[1])
-    second_area = max(0.0, second[2] - second[0]) * max(0.0, second[3] - second[1])
-    union = first_area + second_area - overlap
-    return overlap / union if union else 0.0
-
-
-@web_app.post("/grid-labels")
-def grid_labels(req: GridLabelsRequest) -> dict:
-    """Segment 16 inner grid centres and let Qwen-VL name each unique mask."""
-    try:
-        image_bytes = base64.b64decode(req.image_base64, validate=True)
-        if not image_bytes:
-            raise HTTPException(status_code=422, detail={"error": "EmptyImage"})
-
-        sam_agent = SAM2AgentA100() if req.speed_mode == "promax" else SAM2AgentA10G()
-        vlm_agent = VLMAgentA10G() if req.speed_mode == "normal" else (VLMAgentH100() if req.speed_mode == "promax" else VLMAgentA100())
-        candidates: list[dict] = []
-        for row in range(1, 5):
-            for column in range(1, 5):
-                x, y = (column + 0.5) / 6, (row + 0.5) / 6
-                result = sam_agent.segment.remote(image_bytes=image_bytes, interaction_type="point", coords=[x, y])
-                bbox = result.get("bbox")
-                if result.get("error") or not isinstance(bbox, list) or len(bbox) != 4:
-                    continue
-                try:
-                    clean_bbox = [max(0.0, min(1.0, float(value))) for value in bbox]
-                except (TypeError, ValueError):
-                    continue
-                if clean_bbox[2] <= clean_bbox[0] or clean_bbox[3] <= clean_bbox[1]:
-                    continue
-                area = (clean_bbox[2] - clean_bbox[0]) * (clean_bbox[3] - clean_bbox[1])
-                if area < 0.0015 or area > 0.65 or any(_grid_bbox_iou(clean_bbox, item["bbox"]) >= 0.80 for item in candidates):
-                    continue
-                candidates.append({"bbox": clean_bbox, "x": x, "y": y, "grid_index": len(candidates), "grid_row": row, "grid_column": column, "mask_bytes": result.get("mask_bytes")})
-
-        annotations: list[dict] = []
-        seen_labels: set[str] = set()
-        for candidate in candidates:
-            if not candidate["mask_bytes"]:
-                continue
-            highlighted = create_highlighted_image(image_bytes, candidate["mask_bytes"])
-            identified = vlm_agent.analyze.remote(image_bytes=image_bytes, highlighted_image_bytes=highlighted, mode="identify")
-            text = (identified.get("response_text") or "").strip()
-            label = text.splitlines()[0].strip("#*-: ")[:80]
-            normalized = label.casefold()
-            if identified.get("error") or len(label) < 2 or normalized in seen_labels:
-                continue
-            seen_labels.add(normalized)
-            bbox = candidate["bbox"]
-            annotations.append({
-                "structure_id": f"grid.{candidate['grid_row']}.{candidate['grid_column']}",
-                "label": label,
-                "anchor_x": (bbox[0] + bbox[2]) / 2,
-                "anchor_y": (bbox[1] + bbox[3]) / 2,
-                "bbox": bbox,
-                "confidence": 0.90,
-                "verified": True,
-                "grounding": "sam2_6x6_inner_4x4_qwen_vl",
-                "grid_index": candidate["grid_index"],
-                "grid_row": candidate["grid_row"],
-                "grid_column": candidate["grid_column"],
-            })
-        return {"annotations": _place_labels(annotations), "grid": {"size": 6, "inner_cells": 16, "unique_masks": len(candidates)}, "error": None}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        return {"annotations": [], "error": f"GridLabelingFailed: {exc}"}
-
-
 
 @app.function(
     image=image,
-    secrets=[modal.Secret.from_name("supabase-secret")],
 )
 @modal.asgi_app()
 def api() -> FastAPI:

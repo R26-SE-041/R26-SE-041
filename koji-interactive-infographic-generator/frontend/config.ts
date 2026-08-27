@@ -8,19 +8,19 @@
 
 export const PROMPT_AGENT_URL =
   process.env.EXPO_PUBLIC_PROMPT_AGENT_URL ??
-  "https://kojithan-y--prompt-agent-api.modal.run";
+  "https://ikojikn--prompt-agent-api.modal.run";
 
 export const IMAGE_AGENT_URL =
   process.env.EXPO_PUBLIC_IMAGE_AGENT_URL ??
-  "https://kojithan-y--image-agent-api.modal.run";
+  "https://ikojikn--image-agent-api.modal.run";
 
 export const INTERACTIVE_AGENT_URL =
   process.env.EXPO_PUBLIC_INTERACTIVE_AGENT_URL ??
-  "https://kojithan-y--interactive-agent-api.modal.run";
+  "https://ikojikn--interactive-agent-api.modal.run";
 
 export const THREED_AGENT_URL =
   process.env.EXPO_PUBLIC_THREED_AGENT_URL ??
-  "https://kojithan-y--threed-agent-api.modal.run";
+  "https://ikojikn--threed-agent-api.modal.run";
 
 export const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_HEALTH_URL ??
@@ -28,4 +28,4 @@ export const BACKEND_URL =
 
 export const EVAL_AGENT_URL =
   process.env.EXPO_PUBLIC_EVAL_AGENT_URL ??
-  "https://kojithan-y--eval-agent-api.modal.run";
+  "https://ikojikn--eval-agent-api.modal.run";
