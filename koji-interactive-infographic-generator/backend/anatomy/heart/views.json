@@ -1,18 +1,6 @@
-{
-  "organ": "heart",
-  "version": "1.0.0",
-  "default_view": "anterior_cutaway",
-  "views": [
-    {
-      "id": "anterior_cutaway",
-      "label": "Anterior cutaway",
-      "aliases": ["front cutaway", "internal front view", "cutaway"],
-      "default_orientation": "portrait",
-      "allowed_detail_levels": ["basic", "intermediate", "advanced"],
-      "orientation_note": "Anterior cutaway: the patient's anatomical right appears on the viewer's left and the patient's anatomical left appears on the viewer's right.",
-      "required_structures": ["superior_vena_cava", "inferior_vena_cava", "right_atrium", "right_ventricle", "pulmonary_trunk", "pulmonary_arteries", "pulmonary_veins", "left_atrium", "left_ventricle", "aorta"],
-      "optional_structures": ["tricuspid_valve", "pulmonary_valve", "mitral_valve", "aortic_valve", "interventricular_septum"],
-      "clean_image_rules": ["single isolated heart", "centered subject", "light neutral background", "clear internal boundaries", "empty side margins", "no embedded text", "no labels", "no arrows", "no callout lines", "no legend", "no torso"]
-    }
-  ]
-}
+{"organ":"heart","version":"1.1.0","default_view":"anterior_cutaway","views":[
+{"id":"anterior_cutaway","label":"Anterior cutaway","aliases":["front cutaway","internal front view","cutaway","cross section","internal view","dissected view","transparent view"],"default_orientation":"portrait","allowed_detail_levels":["basic","intermediate","advanced"],"orientation_note":"Anterior cutaway: anatomical right appears viewer-left and anatomical left viewer-right.","required_structures":["superior_vena_cava","inferior_vena_cava","right_atrium","right_ventricle","pulmonary_trunk","pulmonary_arteries","pulmonary_veins","left_atrium","left_ventricle","aorta"],"optional_structures":["tricuspid_valve","pulmonary_valve","mitral_valve","aortic_valve","interventricular_septum"],"clean_image_rules":["single isolated heart","light neutral background","no labels","no torso"]},
+{"id":"anterior_external","label":"Anterior external view","aliases":["anterior view","front view","ventral view","external surface view","isolated organ view","three-quarter view","3/4 view","oblique view"],"default_orientation":"portrait","allowed_detail_levels":["basic","intermediate","advanced"],"orientation_note":"Anterior external view: anatomical right appears viewer-left.","required_structures":["superior_vena_cava","inferior_vena_cava","right_atrium","right_ventricle","pulmonary_trunk","pulmonary_arteries","left_ventricle","aorta"],"optional_structures":["left_atrium","pulmonary_veins"],"clean_image_rules":["single isolated heart","external surface","light neutral background","no labels","no torso"]},
+{"id":"posterior_external","label":"Posterior external view","aliases":["posterior view","back view","dorsal view","posterior surface"],"default_orientation":"portrait","allowed_detail_levels":["basic","intermediate","advanced"],"orientation_note":"Posterior external view: anatomical left appears viewer-left.","required_structures":["superior_vena_cava","inferior_vena_cava","pulmonary_arteries","pulmonary_veins","left_atrium","left_ventricle","right_atrium","right_ventricle","aorta"],"optional_structures":["pulmonary_trunk"],"clean_image_rules":["single isolated heart","posterior surface","light neutral background","no labels","no torso"]},
+{"id":"transverse_section","label":"Transverse section","aliases":["transverse view","axial view","axial section","horizontal cross section"],"default_orientation":"square","allowed_detail_levels":["intermediate","advanced"],"orientation_note":"Transverse section viewed from below using radiological orientation; patient's right appears viewer-left.","required_structures":["right_ventricle","left_ventricle","interventricular_septum"],"optional_structures":["right_atrium","left_atrium","tricuspid_valve","mitral_valve"],"clean_image_rules":["single transverse heart section","light neutral background","no labels","no torso"]}
+]}

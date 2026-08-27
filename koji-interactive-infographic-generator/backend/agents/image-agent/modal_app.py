@@ -243,6 +243,7 @@ def health() -> dict:
         "status": "ok",
         "model": FLUX_MODEL_ID,
         "variants": ["base"],
+        "prompt_policies": ["generic-preserve-intent-v1", "anatomy-clean-base-v1"],
     }
 
 
@@ -294,27 +295,14 @@ def generate(req: GenerateRequest) -> dict:
             agent = ImageAgentA100()
         else:  # "normal" → A10G (same as original)
             agent = ImageAgentA10G()
-        memory_context = (req.memory_context or "").strip()
-        if memory_context:
-            generation_prompt = (
-                f"{generation_prompt}\n\nValidated relevant generation preferences: {memory_context}"
-            )
-        if feedback:
-            generation_prompt = (
-                f"{generation_prompt}\n\nUser-requested corrections for this retry: {feedback}. "
-                "Preserve all correct educational content and the original learning objective."
-            )
-        if domain == "anatomy":
-            # Keep this last so recalled preferences and retry notes cannot
-            # override the non-negotiable clean-base-image contract.
-            generation_prompt = (
-                f"{generation_prompt}\n\n"
-                "FINAL ANATOMY OUTPUT RULES: preserve the requested anatomical view and subject; show one "
-                "isolated human anatomical subject on a white or very light neutral background; do not render "
-                "text, labels, letters, numbers, arrows, legends, captions, callouts, borders, watermarks, "
-                "decorative objects, a torso, or unrelated anatomy. These rules override conflicting correction "
-                "notes or recalled preferences."
-            )
+        from shared.image_policies import select_image_policy
+
+        policy = select_image_policy(domain)
+        generation_prompt = policy.apply(
+            generation_prompt,
+            memory_context=req.memory_context or "",
+            feedback=feedback,
+        )
         result = agent.generate.remote({"prompt": generation_prompt, "seed": req.seed})
 
         if result.get("error"):
@@ -335,6 +323,7 @@ def generate(req: GenerateRequest) -> dict:
             "model_variant": "base",
             "generation_metadata": {
                 "domain": domain,
+                "policy_id": policy.policy_id,
                 "organ": organ,
                 "view": view,
                 "seed": req.seed,

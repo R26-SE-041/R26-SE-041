@@ -34,7 +34,8 @@ _HUMAN_ORGAN = re.compile(
     r"heart|hypothalamus|intestines?|kidneys?|larynx|liver|lungs?|lymph nodes?|"
     r"ovaries?|pancreas|parathyroid|penis|pituitary gland|placenta|prostate|"
     r"rectum|salivary glands?|skin|small bowel|spinal cord|spleen|stomach|"
-    r"testes?|thymus|thyroid|tongue|tonsils?|trachea|ureters?|urethra|uterus|vagina)\b",
+    r"testes?|thymus|thyroid|tongue|tonsils?|trachea|ureters?|urethra|uterus|vagina|"
+    r"vulva|cervix|endometrium|breasts?|mammary glands?)\b",
     re.I,
 )
 _ANATOMICAL_STRUCTURE = re.compile(
@@ -42,14 +43,16 @@ _ANATOMICAL_STRUCTURE = re.compile(
     r"aorta|arter(?:y|ies)|veins?|capillar(?:y|ies)|blood vessels?|"
     r"atri(?:um|a)|ventricles?|mitral valve|tricuspid valve|heart valves?|"
     r"cerebellum|cerebrum|cortex|brainstem|medulla|hippocampus|amygdala|neurons?|"
-    r"cornea|retina|iris|pupil|lens|optic nerve|sclera|macula|"
+    r"cornea|retina|iris|pupil|lens|optic nerve|sclera|macula|eyelids?|eyebrows?|"
     r"renal artery|nephrons?|alveoli|bronchioles?|hepatic vein|pancreatic duct|"
     r"bones?|skeleton|skull|mandible|spine|vertebrae?|ribs?|rib cage|pelvis|"
     r"femur|tibia|fibula|patella|humerus|radius|ulna|scapula|clavicle|"
     r"muscles?|tendons?|ligaments?|joints?|cartilage|nerves?|"
-    r"head|neck|shoulders?|arms?|elbows?|wrists?|hands?|fingers?|"
-    r"chest|abdomen|back|hips?|legs?|knees?|ankles?|feet|foot|toes?|"
+    r"head|face|scalp|hair|neck|shoulders?|arms?|forearms?|elbows?|wrists?|hands?|palms?|fingers?|thumbs?|"
+    r"chest|torso|abdomen|back|waist|hips?|buttocks?|groin|legs?|thighs?|calves?|knees?|ankles?|heels?|feet|foot|toes?|"
+    r"nose|nostrils?|mouth|lips?|teeth|tooth|gums?|jaw|cheeks?|chin|"
     r"nasal cavity|sinuses?|pharynx|epiglottis|vocal cords?|"
+    r"tissues?|organs?|body parts?|human body|"
     r"blood cells?|red blood cells?|white blood cells?|platelets?"
     r")\b",
     re.I,

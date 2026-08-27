@@ -127,6 +127,19 @@ def compile_general_anatomy_prompt(spec: dict[str, Any]) -> tuple[dict[str, Any]
             structures.append(clean)
         if len(structures) == 8:
             break
+    focus_structures: list[str] = []
+    required_keys = {item.casefold() for item in structures}
+    for value in spec.get("focus_structures") or []:
+        clean = _clean_phrase(value, 80)
+        if (
+            clean
+            and clean.casefold() in required_keys
+            and clean.casefold() not in {item.casefold() for item in focus_structures}
+        ):
+            focus_structures.append(clean)
+    use_minimal_template = bool(
+        minimal_prompt and not view_description and not structures and not spec.get("show_flow", False)
+    )
     validated = {
         "is_anatomy": True,
         "catalog_verified": False,
@@ -134,26 +147,30 @@ def compile_general_anatomy_prompt(spec: dict[str, Any]) -> tuple[dict[str, Any]
         "view_description": view_description,
         "grade_level": grade_level,
         "required_structures": structures,
-        "focus_structures": structures,
+        "focus_structures": focus_structures,
         "detail_level": detail_level,
         "orientation": orientation,
         "show_flow": bool(spec.get("show_flow", False)),
         "knowledge_version": "general-anatomy-1.0",
-        "prompt_profile": "minimal" if minimal_prompt else "detailed",
+        "prompt_profile": "minimal" if use_minimal_template else "detailed",
     }
     parts = [
         "EDUANAT",
         f"medically accurate educational illustration of one isolated human {organ}",
         f"anatomical viewpoint or section: {view_description}" if view_description else "standard educational anatomical view",
     ]
-    if minimal_prompt and not view_description and not structures and not validated["show_flow"]:
+    if use_minimal_template:
         parts.extend([
+            "cross-sectional cutaway medical textbook diagram revealing the internal anatomy and major structures",
+            "clearly differentiated anatomical tissues with realistic spatial relationships",
             "centered on a white or very light neutral background",
             "no labels, no text, no arrows, no callouts, no border, no watermark",
         ])
         return validated, ". ".join(part.strip().rstrip(".") for part in parts) + "."
     if structures:
-        parts.append(f"show only the explicitly requested structures: {', '.join(structures)}")
+        parts.append(f"show the required visible structures: {', '.join(structures)}")
+    if focus_structures:
+        parts.append(f"visually emphasize: {', '.join(focus_structures)}")
     if validated["show_flow"]:
         parts.append("use anatomically consistent color differentiation for the requested flow without arrows or text")
     parts.extend([

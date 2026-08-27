@@ -13,10 +13,12 @@ from anatomy import (
     detect_requested_structures,
     detect_supported_organ,
     extract_requested_view,
+    get_general_required_structures,
     get_view,
     list_supported_organs,
     load_organ,
     preserve_requested_view,
+    select_anatomy_view,
     validate_anatomy_spec,
 )
 
@@ -118,6 +120,28 @@ class AnatomyKnowledgeTests(unittest.TestCase):
             "oblique posterior view from above",
         )
         self.assertEqual(extract_requested_view("cross section view of brain"), "cross section view")
+        self.assertEqual(
+            extract_requested_view("ear crossview"),
+            "lateral cross-sectional cutaway view",
+        )
+        self.assertEqual(
+            extract_requested_view("ear crosssection"),
+            "lateral cross-sectional cutaway view",
+        )
+        self.assertEqual(extract_requested_view("eye insideview"), "internal cutaway view")
+        self.assertEqual(extract_requested_view("heart backside view"), "posterior view")
+
+    def test_general_ear_defaults_cover_cross_section(self) -> None:
+        structures = get_general_required_structures("ear")
+        self.assertIn("tympanic membrane", structures)
+        self.assertIn("cochlea", structures)
+        self.assertIn("auditory nerve", structures)
+
+    def test_catalog_view_selection_and_defaults(self) -> None:
+        self.assertEqual(select_anatomy_view("heart", "posterior view")["id"], "posterior_external")
+        self.assertEqual(select_anatomy_view("brain", "coronal view")["id"], "coronal_section")
+        self.assertEqual(select_anatomy_view("lungs", "internal cutaway view")["id"], "airway_cutaway")
+        self.assertEqual(select_anatomy_view("liver", "")["id"], "inferior_visceral")
 
     def test_focus_must_be_required(self) -> None:
         with self.assertRaisesRegex(AnatomyKnowledgeError, "focus_structures"):
@@ -184,15 +208,18 @@ class AnatomyKnowledgeTests(unittest.TestCase):
         self.assertIn("no labels", prompt)
         self.assertIn("do not add unrelated organs", prompt)
 
-    def test_bare_anatomy_subject_uses_concise_prompt(self) -> None:
+    def test_bare_anatomy_subject_uses_internal_cutaway_prompt(self) -> None:
         validated, prompt = compile_general_anatomy_prompt({
             "is_anatomy": True,
-            "organ": "intestine",
+            "organ": "eye",
             "_minimal_prompt": True,
         })
-        self.assertEqual(validated["organ"], "intestine")
+        self.assertEqual(validated["organ"], "eye")
         self.assertEqual(validated["prompt_profile"], "minimal")
-        self.assertIn("one isolated human intestine", prompt)
+        self.assertIn("one isolated human eye", prompt)
+        self.assertIn("cross-sectional cutaway", prompt)
+        self.assertIn("internal anatomy and major structures", prompt)
+        self.assertIn("realistic spatial relationships", prompt)
         self.assertIn("white or very light neutral background", prompt)
         self.assertIn("no labels", prompt)
         self.assertNotIn("general audience", prompt)

@@ -114,14 +114,12 @@ class EvalAgent:
     @modal.enter()
     def load_models(self) -> None:
         import torch
-        from torchmetrics.multimodal.clip_score import CLIPScore
-        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        from transformers import AutoProcessor, CLIPModel, CLIPProcessor, Qwen2_5_VLForConditionalGeneration
 
         # ── CLIPScore ────────────────────────────────────────────────────────
         # Loaded onto GPU; pre-warmed so the first request is fast
-        self.clip_metric = CLIPScore(
-            model_name_or_path=CLIP_MODEL_ID
-        ).to("cuda")
+        self.clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID)
+        self.clip_model = CLIPModel.from_pretrained(CLIP_MODEL_ID).to("cuda").eval()
 
         # ── Qwen2.5-VL-7B ────────────────────────────────────────────────────
         self.vlm_processor = AutoProcessor.from_pretrained(
@@ -167,18 +165,24 @@ class EvalAgent:
         from PIL import Image
 
         pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        arr = np.array(pil_img)                           # (H, W, 3), dtype uint8
-        tensor = torch.tensor(arr, dtype=torch.uint8)     # explicit uint8 cast
-        tensor = tensor.permute(2, 0, 1).unsqueeze(0)     # (1, 3, H, W)
-
-        try:
-            with torch.no_grad():
-                score = self.clip_metric(tensor.to("cuda"), [prompt])
-            val = float(score.item())
-        finally:
-            self.clip_metric.reset()
-
-        return val
+        inputs = self.clip_processor(
+            text=[prompt],
+            images=[pil_img],
+            return_tensors="pt",
+            padding=True,
+        ).to("cuda")
+        with torch.no_grad():
+            image_output = self.clip_model.get_image_features(pixel_values=inputs["pixel_values"])
+            text_output = self.clip_model.get_text_features(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+            )
+            image_features = getattr(image_output, "pooler_output", image_output)
+            text_features = getattr(text_output, "pooler_output", text_output)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            score = 100.0 * (image_features * text_features).sum(dim=-1)
+        return float(torch.clamp(score, min=0.0).item())
 
     def _vlm_infer(self, prompt: str) -> str:
         """Run a single Qwen2.5-VL text-only inference call (used for JSON correction retries)."""
@@ -262,10 +266,7 @@ class EvalAgent:
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": data_uri},
-                    },
+                    {"type": "image", "image": data_uri},
                     {
                         "type": "text",
                         "text": (
@@ -406,15 +407,22 @@ class EvalAgent:
                     vlm_score = round((visual_score + pedagogical_score) / 2, 2)
                 vlm_feedback = parsed.get("feedback") or "No feedback returned"
                 if enable_anatomy_critic and anatomy_spec.get("is_anatomy"):
-                    from anatomy import canonicalize_structure
+                    from anatomy import canonicalize_structure, list_supported_organs
 
                     organ = str(anatomy_spec.get("organ") or "")
                     expected = [str(value) for value in anatomy_spec.get("required_structures") or []]
                     detected: list[str] = []
-                    for value in parsed.get("detected_structures") or []:
-                        canonical = canonicalize_structure(organ, str(value))
-                        if canonical and canonical not in detected:
-                            detected.append(canonical)
+                    if organ.casefold().replace(" ", "_") in set(list_supported_organs()):
+                        for value in parsed.get("detected_structures") or []:
+                            canonical = canonicalize_structure(organ, str(value))
+                            if canonical and canonical not in detected:
+                                detected.append(canonical)
+                    else:
+                        expected_lookup = {value.casefold().replace("_", " "): value for value in expected}
+                        for value in parsed.get("detected_structures") or []:
+                            canonical = expected_lookup.get(str(value).casefold().replace("_", " "))
+                            if canonical and canonical not in detected:
+                                detected.append(canonical)
                     expected_set = set(expected)
                     detected_set = set(detected)
                     missing = sorted(expected_set - detected_set)
@@ -467,7 +475,8 @@ class EvalAgent:
 
 # ── FastAPI web app ───────────────────────────────────────────────────────────
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 web_app = FastAPI(
@@ -475,6 +484,27 @@ web_app = FastAPI(
     description="Evaluates generated images via Qwen2.5-VL-7B and CLIPScore",
     version="1.0.0",
 )
+
+web_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@web_app.options("/{path:path}")
+def cors_preflight(path: str) -> Response:
+    """Keep browser preflight available even behind method-aware proxies."""
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept",
+            "Access-Control-Max-Age": "600",
+        },
+    )
 
 
 class EvalRequest(BaseModel):

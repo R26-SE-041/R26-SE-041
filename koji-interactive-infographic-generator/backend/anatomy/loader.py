@@ -36,6 +36,16 @@ ANATOMICAL_VIEW_PHRASE = re.compile(
     r")\b",
     re.I,
 )
+COMPACT_VIEW_ALIASES = (
+    (re.compile(r"\bcross\s*view\b", re.I), "lateral cross-sectional cutaway view"),
+    (re.compile(r"\bcrosssection(?:al)?\b", re.I), "lateral cross-sectional cutaway view"),
+    (re.compile(r"\bside\s*view\b", re.I), "lateral view"),
+    (re.compile(r"\binside\s*view\b|\binterior\s*view\b", re.I), "internal cutaway view"),
+    (re.compile(r"\bfront\s*view\b", re.I), "anterior view"),
+    (re.compile(r"\bback\s*view\b|\bbackside\s*view\b", re.I), "posterior view"),
+    (re.compile(r"\btop\s*view\b", re.I), "superior view"),
+    (re.compile(r"\bbottom\s*view\b", re.I), "inferior view"),
+)
 GRADE_DEFAULT_DETAIL = {
     "primary_school": "basic",
     "middle_school": "intermediate",
@@ -83,6 +93,19 @@ def list_supported_organs() -> list[str]:
     )
 
 
+@lru_cache(maxsize=1)
+def _load_general_defaults() -> dict[str, Any]:
+    return _read_json(ANATOMY_ROOT / "general_defaults.json")
+
+
+def get_general_required_structures(subject: str) -> list[str]:
+    """Return reviewed fallback structures for an uncatalogued anatomy subject."""
+    entry = _load_general_defaults().get(_normalize(subject))
+    if not isinstance(entry, dict) or not isinstance(entry.get("required_structures"), list):
+        return []
+    return [str(value) for value in entry["required_structures"][:8] if str(value).strip()]
+
+
 def detect_supported_organ(text: str) -> str | None:
     """Conservatively route explicit supported-organ requests."""
     normalized = f" {_normalize(text).replace('_', ' ')} "
@@ -126,6 +149,9 @@ def preserve_requested_view(text: str) -> str:
 def extract_requested_view(text: str) -> str:
     """Return only the concise anatomical view phrase from a larger request."""
     clean = re.sub(r"\s+", " ", text).strip()
+    for alias, canonical in COMPACT_VIEW_ALIASES:
+        if alias.search(clean):
+            return canonical
     match = ANATOMICAL_VIEW_PHRASE.search(clean)
     return match.group(0).strip()[:120] if match else ""
 
@@ -249,6 +275,20 @@ def get_view(organ: str, view_id: str) -> dict[str, Any]:
         }:
             return item
     raise AnatomyKnowledgeError(f"Unknown view '{view_id}' for organ '{organ}'")
+
+
+def select_anatomy_view(organ: str, requested_view: str = "") -> dict[str, Any]:
+    """Select the closest catalog view, falling back to the organ default."""
+    knowledge = load_organ(organ)
+    request_id = _normalize(requested_view)
+    if request_id:
+        for view in knowledge["views"]["views"]:
+            candidates = [view["id"], view["label"], *(view.get("aliases") or [])]
+            for candidate in candidates:
+                candidate_id = _normalize(str(candidate))
+                if candidate_id and (candidate_id in request_id or request_id in candidate_id):
+                    return view
+    return get_view(organ, knowledge["views"]["default_view"])
 
 
 def validate_anatomy_spec(spec: dict[str, Any]) -> dict[str, Any]:

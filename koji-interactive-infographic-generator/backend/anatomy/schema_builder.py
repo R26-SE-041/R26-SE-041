@@ -77,7 +77,7 @@ def build_general_anatomy_schema() -> dict[str, Any]:
                 "additionalProperties": False,
                 "required": [
                     "is_anatomy", "catalog_verified", "organ", "view_description",
-                    "grade_level", "required_structures", "detail_level", "orientation",
+                    "grade_level", "required_structures", "focus_structures", "detail_level", "orientation",
                     "show_flow",
                 ],
                 "properties": {
@@ -87,6 +87,10 @@ def build_general_anatomy_schema() -> dict[str, Any]:
                     "view_description": {"type": "string", "maxLength": 240},
                     "grade_level": {"type": "string", "enum": sorted(GRADE_LEVELS)},
                     "required_structures": {
+                        "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": True,
+                        "items": {"type": "string", "minLength": 1, "maxLength": 80},
+                    },
+                    "focus_structures": {
                         "type": "array", "maxItems": 8, "uniqueItems": True,
                         "items": {"type": "string", "minLength": 1, "maxLength": 80},
                     },

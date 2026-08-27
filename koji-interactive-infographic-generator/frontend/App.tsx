@@ -24,6 +24,7 @@ import {
   INTERACTIVE_AGENT_URL,
   THREED_AGENT_URL,
   BACKEND_URL,
+  EVAL_AGENT_URL,
 } from "./config";
 
 const BACKEND_HEALTH_URL = BACKEND_URL;
@@ -32,7 +33,7 @@ type Stage = "idle" | "enhancing" | "preview" | "generating" | "done";
 export type SpeedMode = "normal" | "pro" | "promax";
 type ThreeDStage = "idle" | "converting" | "done";
 type Health = "ok" | "error" | "checking";
-type AgentKey = "prompt" | "image" | "interactive" | "threed";
+type AgentKey = "prompt" | "image" | "eval" | "interactive" | "threed";
 type ProcessKey = AgentKey;
 export interface AnatomySpec {
   is_anatomy: boolean;
@@ -61,6 +62,23 @@ export interface AnatomyAnnotation {
   verified: boolean;
 }
 interface RetryLink { feedbackId: string; outputId: string }
+interface EvaluationResult {
+  clipScore: number | null;
+  vlmScore: number | null;
+  visualScore: number;
+  pedagogicalScore: number;
+  feedback: string;
+  anatomyHardFailures: string[];
+}
+interface QualityControlledImage {
+  image: string;
+  prompt: string;
+  anatomy: AnatomySpec;
+  payload: EnhancedPromptPayload;
+  evaluation: EvaluationResult | null;
+  retryCount: number;
+  warning: string | null;
+}
 
 const ANATOMY_PROMPT_NEGATIVE: FeedbackReason[] = [
   { code: "wrong_view", label: "Wrong view" }, { code: "missing_structure", label: "Missing structure" },
@@ -182,10 +200,11 @@ function Home({ accessToken }: AppProps) {
   const [promptHealth, setPromptHealth] = useState<Health>("checking");
   const [imageHealth, setImageHealth] = useState<Health>("checking");
   const [interactiveHealth, setInteractiveHealth] = useState<Health>("checking");
+  const [evalHealth, setEvalHealth] = useState<Health>("checking");
   const [threedHealth, setThreedHealth] = useState<Health>("checking");
   const [backendHealth, setBackendHealth] = useState<Health>("checking");
   const [now, setNow] = useState(Date.now());
-  const [warmUntil, setWarmUntil] = useState<Record<AgentKey, number>>({ prompt: 0, image: 0, interactive: 0, threed: 0 });
+  const [warmUntil, setWarmUntil] = useState<Record<AgentKey, number>>({ prompt: 0, image: 0, eval: 0, interactive: 0, threed: 0 });
   const [timings, setTimings] = useState<Partial<Record<ProcessKey, number>>>({});
   const [activeTimers, setActiveTimers] = useState<Partial<Record<ProcessKey, number>>>({});
   const [sessionId] = useState(() => createOutputId("session"));
@@ -193,14 +212,14 @@ function Home({ accessToken }: AppProps) {
   const [imageOutputId, setImageOutputId] = useState<string | null>(null);
   const [promptRetryLink, setPromptRetryLink] = useState<RetryLink | null>(null);
   const [imageRetryLink, setImageRetryLink] = useState<RetryLink | null>(null);
+  const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
+  const [evaluationRetries, setEvaluationRetries] = useState(0);
+  const [evaluationWarning, setEvaluationWarning] = useState<string | null>(null);
 
   const isLoading = stage === "enhancing" || stage === "generating";
-  const displayedThreeDHealth: Health =
-    backendHealth === "checking" || threedHealth === "checking"
-      ? "checking"
-      : backendHealth === "ok" && threedHealth === "ok"
-        ? "ok"
-        : "error";
+  // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
+  // must not incorrectly mark a healthy 3D service as offline.
+  const displayedThreeDHealth: Health = threedHealth;
   const speed = useMemo(
     () => SPEED_MODES.find((item) => item.id === speedMode) ?? SPEED_MODES[1],
     [speedMode],
@@ -208,9 +227,9 @@ function Home({ accessToken }: AppProps) {
 
   useEffect(() => {
     let mounted = true;
-    const check = async (url: string, setter: (health: Health) => void) => {
+    const check = async (url: string, setter: (health: Health) => void, timeoutMs = 5_000) => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${url}/health`, {
           headers: { Accept: "application/json" },
@@ -229,7 +248,8 @@ function Home({ accessToken }: AppProps) {
       void check(PROMPT_AGENT_URL, setPromptHealth);
       void check(IMAGE_AGENT_URL, setImageHealth);
       void check(INTERACTIVE_AGENT_URL, setInteractiveHealth);
-      void check(THREED_AGENT_URL, setThreedHealth);
+      void check(EVAL_AGENT_URL, setEvalHealth, 30_000);
+      void check(THREED_AGENT_URL, setThreedHealth, 30_000);
       void check(BACKEND_HEALTH_URL, setBackendHealth);
     };
     checkAll();
@@ -298,6 +318,9 @@ function Home({ accessToken }: AppProps) {
     setImageOutputId(null);
     setPromptRetryLink(null);
     setImageRetryLink(null);
+    setEvaluation(null);
+    setEvaluationRetries(0);
+    setEvaluationWarning(null);
   };
 
   const handlePromptChange = (value: string) => {
@@ -393,6 +416,149 @@ function Home({ accessToken }: AppProps) {
     return data.base_image_base64 ?? data.image_base64;
   };
 
+  const callEvaluate = async (
+    image: string,
+    finalPrompt: string,
+    anatomy: AnatomySpec,
+  ): Promise<EvaluationResult> => {
+    const request: RequestInit = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image_base64: image,
+        enhanced_prompt: finalPrompt,
+        raw_prompt: prompt.trim(),
+        anatomy_spec: anatomy,
+        enable_anatomy_critic: anatomy.is_anatomy,
+      }),
+    };
+    let response: Response;
+    try {
+      response = await fetch(`${EVAL_AGENT_URL}/evaluate`, request);
+    } catch {
+      // A Modal dev endpoint can briefly drop transport while a cold container
+      // becomes ready. Retry once; HTTP errors remain visible without retrying.
+      response = await fetch(`${EVAL_AGENT_URL}/evaluate`, request);
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(errorMessage(data, `Evaluate HTTP ${response.status}`));
+    const numericScore = (value: unknown): number | null =>
+      typeof value === "number" && Number.isFinite(value) ? value : null;
+    const visual = numericScore(data.visual_score) ?? numericScore(data.vlm_score);
+    const pedagogical = numericScore(data.pedagogical_score) ?? numericScore(data.vlm_score);
+    if (visual === null || pedagogical === null) {
+      throw new Error(typeof data.error === "string" ? data.error : "Evaluation scores were unavailable");
+    }
+    return {
+      clipScore: numericScore(data.clip_score),
+      vlmScore: numericScore(data.vlm_score),
+      visualScore: visual,
+      pedagogicalScore: pedagogical,
+      feedback: typeof data.vlm_feedback === "string" ? data.vlm_feedback.trim() : "",
+      anatomyHardFailures: Array.isArray(data.anatomy_hard_failures)
+        ? data.anatomy_hard_failures.filter((item: unknown): item is string => typeof item === "string")
+        : [],
+    };
+  };
+
+  const evaluationPassed = (result: EvaluationResult): boolean =>
+    result.visualScore >= 7 && result.pedagogicalScore >= 7 && result.anatomyHardFailures.length === 0;
+
+  const evaluationRank = (result: EvaluationResult): number =>
+    result.visualScore + result.pedagogicalScore - (result.anatomyHardFailures.length > 0 ? 20 : 0);
+
+  const retryFeedbackFor = (result: EvaluationResult): string => {
+    const corrections: string[] = [];
+    if (result.visualScore < 7) corrections.push("Improve composition, clarity, lighting, and visual legibility");
+    if (result.pedagogicalScore < 7) corrections.push("Correct factual content and match the learner's level");
+    if (result.anatomyHardFailures.length) {
+      corrections.push(`Correct these anatomy failures: ${result.anatomyHardFailures.join("; ")}`);
+    }
+    if (result.feedback) corrections.push(`Evaluator notes: ${result.feedback}`);
+    return corrections.join(". ").slice(0, 2000);
+  };
+
+  const generateWithQualityControl = async (
+    initialPrompt: string,
+    initialAnatomy: AnatomySpec,
+    initialPayload: EnhancedPromptPayload,
+    initialFeedback?: string,
+  ): Promise<QualityControlledImage> => {
+    let currentPrompt = initialPrompt;
+    let currentAnatomy = initialAnatomy;
+    let currentPayload = initialPayload;
+    let correction = initialFeedback;
+    let best: QualityControlledImage | null = null;
+
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+      if (attempt > 0 && !currentAnatomy.is_anatomy) {
+        let enhanced: Awaited<ReturnType<typeof callEnhance>>;
+        try {
+          enhanced = await callEnhance(prompt.trim(), correction);
+        } catch (caught) {
+          if (best) return {
+            ...best,
+            retryCount: attempt - 1,
+            warning: caught instanceof Error ? `Prompt retry stopped: ${caught.message}` : "Prompt retry stopped",
+          };
+          throw caught;
+        }
+        currentPrompt = enhanced.prompt;
+        currentAnatomy = enhanced.anatomy;
+        currentPayload = enhanced.payload;
+        markWarm("prompt");
+      }
+
+      let image: string;
+      try {
+        image = await callGenerate(currentPrompt, currentAnatomy, correction, currentPayload);
+      } catch (caught) {
+        if (best) return {
+          ...best,
+          retryCount: attempt - 1,
+          warning: caught instanceof Error ? `Image retry stopped: ${caught.message}` : "Image retry stopped",
+        };
+        throw caught;
+      }
+      markWarm("image");
+      let evaluated: EvaluationResult;
+      try {
+        evaluated = await runTimed("eval", () => callEvaluate(image, currentPrompt, currentAnatomy));
+        markWarm("eval");
+      } catch (caught) {
+        if (best) return {
+          ...best,
+          retryCount: attempt,
+          warning: caught instanceof Error ? `Evaluation retry stopped: ${caught.message}` : "Evaluation retry stopped",
+        };
+        return {
+          image,
+          prompt: currentPrompt,
+          anatomy: currentAnatomy,
+          payload: currentPayload,
+          evaluation: null,
+          retryCount: attempt,
+          warning: caught instanceof Error ? caught.message : "Evaluation unavailable",
+        };
+      }
+
+      const candidate: QualityControlledImage = {
+        image,
+        prompt: currentPrompt,
+        anatomy: currentAnatomy,
+        payload: currentPayload,
+        evaluation: evaluated,
+        retryCount: attempt,
+        warning: null,
+      };
+      if (!best || evaluationRank(evaluated) > evaluationRank(best.evaluation!)) best = candidate;
+      if (evaluationPassed(evaluated)) return candidate;
+      correction = retryFeedbackFor(evaluated);
+    }
+
+    return { ...best!, retryCount: 2, warning: "Quality threshold was not reached; showing the best of three attempts." };
+  };
+
   const localizeAnatomy = async (image: string, anatomy: AnatomySpec): Promise<void> => {
     setAnatomyAnnotations([]);
     setLocalizationError(null);
@@ -455,17 +621,21 @@ function Home({ accessToken }: AppProps) {
     setError(null);
     try {
       setStage("generating");
-      const image = await runTimed("image", () => callGenerate(
+      const result = await runTimed("image", () => generateWithQualityControl(
         enhancedPrompt,
         anatomySpec,
-        undefined,
         enhancedPromptJson,
       ));
-      setImageBase64(image);
+      setEnhancedPrompt(result.prompt);
+      setEnhancedPromptJson(result.payload);
+      setAnatomySpec(result.anatomy);
+      setImageBase64(result.image);
+      setEvaluation(result.evaluation);
+      setEvaluationRetries(result.retryCount);
+      setEvaluationWarning(result.warning);
       setImageOutputId(createOutputId("image"));
-      markWarm("image");
       setStage("done");
-      void runTimed("interactive", () => localizeAnatomy(image, anatomySpec)).catch((caught) => {
+      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).catch((caught) => {
         setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
       });
     } catch (caught) {
@@ -479,6 +649,9 @@ function Home({ accessToken }: AppProps) {
     setImageBase64(null);
     setImageOutputId(null);
     setImageRetryLink(null);
+    setEvaluation(null);
+    setEvaluationRetries(0);
+    setEvaluationWarning(null);
     setThreedStage("idle");
     setGlbBase64(null);
     setError(null);
@@ -507,12 +680,19 @@ function Home({ accessToken }: AppProps) {
     try {
       setStage("generating");
       const finalPrompt = enhancedPrompt || prompt.trim();
-      const image = await runTimed("image", () => callGenerate(finalPrompt, anatomySpec, feedback, enhancedPromptJson ?? undefined));
-      setImageBase64(image);
+      const payload = enhancedPromptJson;
+      if (!payload) throw new Error("Validated prompt payload is unavailable");
+      const result = await runTimed("image", () => generateWithQualityControl(finalPrompt, anatomySpec, payload, feedback));
+      setEnhancedPrompt(result.prompt);
+      setEnhancedPromptJson(result.payload);
+      setAnatomySpec(result.anatomy);
+      setImageBase64(result.image);
+      setEvaluation(result.evaluation);
+      setEvaluationRetries(result.retryCount);
+      setEvaluationWarning(result.warning);
       setImageOutputId(createOutputId("image"));
-      markWarm("image");
       setStage("done");
-      void runTimed("interactive", () => localizeAnatomy(image, anatomySpec)).catch((caught) => {
+      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).catch((caught) => {
         setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
       });
     } catch (caught) {
@@ -529,16 +709,21 @@ function Home({ accessToken }: AppProps) {
     setThreedError(null);
     setGlbBase64(null);
     try {
-      const response = await fetch(`${THREED_AGENT_URL}/convert/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image_base64: imageBase64,
-          speed_mode: speedMode,
-          texture: true,
-          num_inference_steps: speedMode === "promax" ? 50 : 30,
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${THREED_AGENT_URL}/convert/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image_base64: imageBase64,
+            speed_mode: speedMode,
+            texture: true,
+            num_inference_steps: speedMode === "promax" ? 50 : 30,
+          }),
+        });
+      } catch {
+        throw new Error(`Could not reach 3D Agent at ${THREED_AGENT_URL}. Check that threed-agent is served or deployed.`);
+      }
       const started = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorMessage(started, `3D Convert HTTP ${response.status}`));
       if (!started.call_id) throw new Error("3D agent did not return a job ID");
@@ -546,9 +731,16 @@ function Home({ accessToken }: AppProps) {
       const deadline = Date.now() + THREED_MAX_WAIT_MS;
       while (Date.now() < deadline) {
         await delay(THREED_POLL_INTERVAL_MS);
-        const resultResponse = await fetch(
-          `${THREED_AGENT_URL}/convert/result/${encodeURIComponent(started.call_id)}`,
-        );
+        let resultResponse: Response;
+        try {
+          resultResponse = await fetch(
+            `${THREED_AGENT_URL}/convert/result/${encodeURIComponent(started.call_id)}`,
+          );
+        } catch {
+          // Polling is idempotent; tolerate a transient Modal connection drop.
+          await delay(THREED_POLL_INTERVAL_MS);
+          continue;
+        }
         if (resultResponse.status === 202) continue;
         const data = await resultResponse.json().catch(() => ({}));
         if (!resultResponse.ok) throw new Error(errorMessage(data, `3D Result HTTP ${resultResponse.status}`));
@@ -576,7 +768,7 @@ function Home({ accessToken }: AppProps) {
 
   const loadingLabel = stage === "enhancing"
     ? `Enhancing with Qwen 2.5-3B on ${speed.promptGpu}...`
-    : `Generating with FLUX.1-dev on ${speed.imageGpu}...`;
+    : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -609,6 +801,7 @@ function Home({ accessToken }: AppProps) {
               <View style={[shared.wrap, styles.healthWrap]}>
                 <HealthPill label="Prompt Agent" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
                 <HealthPill label="Image Agent" now={now} status={imageHealth} warmUntil={warmUntil.image} />
+                <HealthPill label="Eval Agent" now={now} status={evalHealth} warmUntil={warmUntil.eval} />
                 <HealthPill label="Interactive Agent" now={now} status={interactiveHealth} warmUntil={warmUntil.interactive} />
                 <HealthPill label="3D Agent" now={now} status={displayedThreeDHealth} warmUntil={warmUntil.threed} />
               </View>
@@ -740,6 +933,18 @@ function Home({ accessToken }: AppProps) {
 
             {imageBase64 && stage === "done" && (
               <View style={styles.resultSection}>
+                {evaluationWarning && <ErrorBanner title="Quality-control notice" message={evaluationWarning} />}
+                {evaluation && (
+                  <View style={[shared.card, styles.qualityCard]}>
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.badge}>Quality evaluation</Text>
+                      <Text style={styles.modelTag}>{evaluationPassed(evaluation) ? "Approved" : "Best attempt"}</Text>
+                    </View>
+                    <Text style={styles.qualityScore}>Visual {evaluation.visualScore.toFixed(1)}/10 · Educational {evaluation.pedagogicalScore.toFixed(1)}/10 · Retries {evaluationRetries}/2</Text>
+                    {!!evaluation.anatomyHardFailures.length && <Text style={styles.errorMessage}>Anatomy failures: {evaluation.anatomyHardFailures.join("; ")}</Text>}
+                    {!!evaluation.feedback && <Text style={styles.hint}>{evaluation.feedback}</Text>}
+                  </View>
+                )}
                 {imageOutputId && (
                   <View style={shared.card}>
                     <Text style={styles.badge}>Generated Image</Text>
@@ -877,6 +1082,7 @@ function PerformanceInsights({ activeTimers, now, timings }: { activeTimers: Par
   const items: Array<{ key: ProcessKey; label: string }> = [
     { key: "prompt", label: "Prompt enhancement" },
     { key: "image", label: "Image generation" },
+    { key: "eval", label: "Quality evaluation" },
     { key: "interactive", label: "Interactive analysis" },
     { key: "threed", label: "3D generation" },
   ];
@@ -958,6 +1164,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   modelTag: { color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, overflow: "hidden" },
   enhancedPrompt: { color: colors.textMuted, fontStyle: "italic", lineHeight: 22, marginTop: 14 },
   resultSection: { gap: 16 },
+  qualityCard: { gap: 10 },
+  qualityScore: { color: colors.text, fontSize: 14, fontWeight: "800", lineHeight: 21 },
   sectionTitle: { alignItems: "center", gap: 5, marginTop: 4 },
   sectionHeading: { color: colors.text, fontWeight: "900", fontSize: 22, textAlign: "center" },
   sectionSubtitle: { color: colors.textMuted, textAlign: "center", lineHeight: 20, fontSize: 13 },

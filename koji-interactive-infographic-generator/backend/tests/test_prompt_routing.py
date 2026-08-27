@@ -18,6 +18,12 @@ class PromptRoutingTests(unittest.TestCase):
             "optic nerve",
             "show the mitral valve",
             "spleen for a medical student",
+            "nose",
+            "teeth",
+            "shoulder",
+            "human torso",
+            "eyelid",
+            "breast anatomy",
         ):
             with self.subTest(prompt=prompt):
                 decision = deterministic_route(prompt)
