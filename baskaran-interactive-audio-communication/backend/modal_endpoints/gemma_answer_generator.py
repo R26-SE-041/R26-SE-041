@@ -41,9 +41,59 @@ class AnswerRequest(BaseModel):
 
 def _messages(payload: AnswerRequest, *, document_only: bool) -> list[dict[str, str]]:
     language_note = {
-        "tamil": "Answer in Tamil Unicode script.",
-        "sinhala": "Answer in Sinhala Unicode script.",
-    }.get(payload.language.lower(), "Answer in English.")
+        "tamil": (
+            "ABSOLUTE RULE — LANGUAGE: Your entire response MUST be written in Tamil script (தமிழ்) only. "
+            "You are STRICTLY FORBIDDEN from using any Latin/English letters in your answer. "
+            "Every word — including muscle names, bone names, nerve names, and action terms — "
+            "must be written in Tamil Unicode script. "
+            "Use these transliterations and translations:\n"
+            "MUSCLES: Pectoralis major=பெக்டோரலிஸ் மேஜர், Deltoid=டெல்டாய்டு, "
+            "Biceps brachii=பைசெப்ஸ் பிராக்கை, Triceps brachii=ட்ரைசெப்ஸ் பிராக்கை, "
+            "Quadriceps femoris=குவாட்ரிசெப்ஸ் ஃபெமோரிஸ், "
+            "Rectus femoris=ரெக்டஸ் ஃபெமோரிஸ், Vastus lateralis=வாஸ்டஸ் லேட்டரலிஸ், "
+            "Vastus medialis=வாஸ்டஸ் மீடியலிஸ், Vastus intermedius=வாஸ்டஸ் இன்டர்மீடியஸ்.\n"
+            "BONES: humerus=ஹியூமரஸ், clavicle=கண்ணெலும்பு, scapula=தோள்பட்டை எலும்பு, "
+            "sternum=மார்பெலும்பு, radius=ரேடியஸ், ulna=அல்னா, femur=தொடை எலும்பு, "
+            "tibia=திபியா, fibula=ஃபிபுலா, pelvis=இடுப்பு எலும்பு, ribs=விலா எலும்புகள்.\n"
+            "NERVES: medial pectoral nerve=மீடியல் பெக்டோரல் நரம்பு, "
+            "lateral pectoral nerve=லேட்டரல் பெக்டோரல் நரம்பு, "
+            "axillary nerve=அக்ஸிலரி நரம்பு, musculocutaneous nerve=மஸ்குலோகுட்டேனியஸ் நரம்பு, "
+            "radial nerve=ரேடியல் நரம்பு, femoral nerve=ஃபெமோரல் நரம்பு, "
+            "brachial plexus=பிராக்கியல் ப்ளெக்ஸஸ்.\n"
+            "ACTIONS: flexion=வளைவு, extension=நீட்டல், adduction=உட்கவர்வு, abduction=விலகல், "
+            "medial rotation=உட்சுழற்சி, lateral rotation=புறச்சுழற்சி, "
+            "elevation=உயர்வு, depression=தாழ்வு, nerve supply=நரம்பு வழங்கல், "
+            "origin=தோற்றம், insertion=செருகல், attachment=இணைப்பு, "
+            "action=செயல், function=செயல்பாடு, head=தலை, part=பகுதி.\n"
+            "ZERO English letters are permitted. This is absolute."
+        ),
+        "sinhala": (
+            "ABSOLUTE RULE — LANGUAGE: Your entire response MUST be written in Sinhala script (සිංහල) only. "
+            "You are STRICTLY FORBIDDEN from using any Latin/English letters in your answer. "
+            "Every word — including muscle names, bone names, nerve names, and action terms — "
+            "must be written in Sinhala Unicode script. "
+            "Use these transliterations and translations:\n"
+            "MUSCLES: Pectoralis major=පෙක්ටොරාලිස් මේජර්, Deltoid=ඩෙල්ටොයිඩ්, "
+            "Biceps brachii=බයිසෙප්ස් බ්‍රේකී, Triceps brachii=ට්‍රයිසෙප්ස් බ්‍රේකී, "
+            "Quadriceps femoris=ක්වාඩ්‍රිසෙප්ස් ෆෙමොරිස්, "
+            "Rectus femoris=රෙක්ටස් ෆෙමොරිස්, Vastus lateralis=වාස්ටස් ලේටරාලිස්, "
+            "Vastus medialis=වාස්ටස් මීඩියාලිස්, Vastus intermedius=වාස්ටස් ඉන්ටර්මීඩියස්.\n"
+            "BONES: humerus=හියුමරස්, clavicle=කලාවිකල අස්ථිය, scapula=ස්කැපියුලා, "
+            "sternum=ස්ටර්නම්, radius=රේඩියස්, ulna=අල්නා, femur=කලවා අස්ථිය, "
+            "tibia=ටිබියා, fibula=ෆිබියුලා, pelvis=ශ්‍රෝණිය, ribs=ඉළ ඇට.\n"
+            "NERVES: medial pectoral nerve=මධ්‍ය පෙක්ටොරල් ස්නායුව, "
+            "lateral pectoral nerve=පාර්ශ්ව පෙක්ටොරල් ස්නායුව, "
+            "axillary nerve=ඇක්සිලරි ස්නායුව, musculocutaneous nerve=මස්කියුලොකියුටේනියස් ස්නායුව, "
+            "radial nerve=රේඩියල් ස්නායුව, femoral nerve=ෆෙමොරල් ස්නායුව, "
+            "brachial plexus=බ්‍රේකියල් ප්ලෙක්සස්.\n"
+            "ACTIONS: flexion=නැමීම, extension=දිගු කිරීම, adduction=ඇදීම, abduction=ඉවත් කිරීම, "
+            "medial rotation=අභ්‍යන්තර භ්‍රමණය, lateral rotation=පාර්ශ්ව භ්‍රමණය, "
+            "elevation=ඉහළ යාම, depression=පහළ යාම, nerve supply=ස්නායු සැපයුම, "
+            "origin=ආරම්භය, insertion=ඇතුළු වීම, attachment=සම්බන්ධතාව, "
+            "action=ක්‍රියාව, function=කාර්යය, head=හිස, part=කොටස.\n"
+            "ZERO English letters are permitted. This is absolute."
+        ),
+    }.get(payload.language.lower(), "Answer clearly and completely in English.")
     policy = payload.tutor_instructions.strip()
     memory = payload.memento or {}
     memory_text = "\n".join(

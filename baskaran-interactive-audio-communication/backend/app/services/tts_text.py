@@ -25,6 +25,20 @@ _PAREN_ENGLISH_RE = re.compile(r"\(\s*[A-Za-z][A-Za-z0-9 ,'\-]*\s*\)")
 # words).  We strip them as whole "English runs" so no stray spaces remain.
 _ENGLISH_RUN_RE = re.compile(r"[A-Za-z][A-Za-z0-9''\-]*(?:\s+[A-Za-z][A-Za-z0-9''\-]*)*")
 
+# Common punctuation normalisation map shared by both helpers.
+_PUNCT_MAP = str.maketrans(
+    {
+        "\u2013": ", ",  # en-dash
+        "\u2014": ", ",  # em-dash
+        "\u2026": ". ",  # ellipsis
+        "\u2022": ". ",  # bullet •
+        "\u25cf": ". ",  # ●
+        "\u25aa": ". ",  # ▪
+        "\u25e6": ". ",  # ◦
+        "|":      ", ",
+    }
+)
+
 
 def _strip_english_tokens(text: str) -> str:
     """Remove all Latin-script (English) words from text.
@@ -55,6 +69,43 @@ def _strip_english_tokens(text: str) -> str:
     return value
 
 
+def prepare_english_tts_text(text: str) -> str:
+    """Return speech-friendly English text for Kokoro / English TTS models.
+
+    Strips markdown formatting, HTML, URLs, and code fences so the TTS
+    model receives plain readable prose.  Latin/English words are kept
+    intact — only non-speakable markup symbols are removed.
+
+    Unlike prepare_mixed_tts_text(), this function does NOT strip Latin
+    script — English words must be preserved for the English TTS model.
+    """
+    value = unicodedata.normalize("NFC", html.unescape(text or ""))
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+    value = _HTML_TAG_RE.sub(" ", value)
+    # Remove fenced code blocks entirely — do not try to read code aloud.
+    value = re.sub(r"```[\s\S]*?```", " ", value)
+    value = re.sub(r"`[^`]*`", " ", value)   # inline code
+    value = _MARKDOWN_LINK_RE.sub(r"\1", value)
+    value = _URL_RE.sub(" ", value)
+    value = _REFERENCE_RE.sub("", value)
+    value = _HEADING_RE.sub("", value)
+    value = _QUOTE_RE.sub("", value)
+    # Convert list markers to natural sentence pauses.
+    value = _LIST_MARKER_RE.sub(". ", value)
+    value = _MARKDOWN_MARK_RE.sub("", value)
+
+    # Normalize punctuation.
+    value = value.translate(_PUNCT_MAP)
+    value = _SPACE_RE.sub(" ", value)
+    value = re.sub(r"\s*\n\s*", ". ", value)
+    value = re.sub(r"(?:\.\s*){2,}", ". ", value)
+    value = re.sub(r"[:;]\s*\.\s*", ". ", value)
+    value = re.sub(r"\s+([,.;:!?])", r"\1", value)
+    value = re.sub(r"([,.;:!?])(?!\s|$)", r"\1 ", value)
+    value = _SPACE_RE.sub(" ", value).strip()
+    return re.sub(r"^\.\s*", "", value)
+
+
 def prepare_mixed_tts_text(text: str) -> str:
     """Return speech-friendly Tamil-only text, stripping all English words.
 
@@ -80,20 +131,7 @@ def prepare_mixed_tts_text(text: str) -> str:
     value = _strip_english_tokens(value)
 
     # Normalize punctuation that tends to be verbalized or causes abrupt audio.
-    value = value.translate(
-        str.maketrans(
-            {
-                "–": ", ",
-                "—": ", ",
-                "…": ". ",
-                "•": ". ",
-                "●": ". ",
-                "▪": ". ",
-                "◦": ". ",
-                "|": ", ",
-            }
-        )
-    )
+    value = value.translate(_PUNCT_MAP)
     value = _SPACE_RE.sub(" ", value)
     value = re.sub(r"\s*\n\s*", ". ", value)
     value = re.sub(r"(?:\.\s*){2,}", ". ", value)

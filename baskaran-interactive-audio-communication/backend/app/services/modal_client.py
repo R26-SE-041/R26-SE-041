@@ -894,10 +894,11 @@ async def call_english_tts(
     effective_speed = speed if speed is not None else settings.english_tts_speed
 
     # Strip markdown symbols (**, *, _, `, ##, bullets, URLs etc.) so Kokoro
-    # never reads "asterisk" or "pound" aloud.  Reuses the same helper used
-    # for Tamil TTS text preparation.
-    from app.services.tts_text import prepare_mixed_tts_text
-    speech_text = prepare_mixed_tts_text(text)
+    # never reads "asterisk" or "pound" aloud.  Uses the English-specific helper
+    # that preserves Latin/English words (prepare_mixed_tts_text strips them all,
+    # which would leave an empty string for any English answer).
+    from app.services.tts_text import prepare_english_tts_text
+    speech_text = prepare_english_tts_text(text)
     if not speech_text:
         logger.warning("call_english_tts: text contained no speakable content after cleanup")
         return None

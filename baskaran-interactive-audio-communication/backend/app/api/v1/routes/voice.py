@@ -60,15 +60,41 @@ async def text_to_speech(
     """Synthesize a localized answer to WAV audio.
 
     Routes English, Tamil, and Sinhala to their final production voices.
+    Text is pre-processed before synthesis so the TTS model only receives
+    characters it can render — Latin-script words are stripped from Tamil
+    and Sinhala text to prevent broken or silent audio.
     """
-    text = request.text.strip()
-    if not text:
+    raw_text = request.text.strip()
+    if not raw_text:
         raise HTTPException(status_code=422, detail="'text' cannot be empty.")
 
+    from app.services.tts_text import prepare_english_tts_text, prepare_mixed_tts_text
+
+    # Pre-process text so TTS models only receive script they can handle.
+    if request.language is Language.ENGLISH:
+        text = prepare_english_tts_text(raw_text)
+    else:
+        # Tamil (Indic Parler) and Sinhala (VITS M2) both fail on Latin-script
+        # characters. Strip all English/Latin words so only the native script
+        # (plus numbers and punctuation) reaches the model.
+        text = prepare_mixed_tts_text(raw_text)
+
+    if not text.strip():
+        logger.warning(
+            "TTS text is empty after cleaning (lang=%s, original_len=%d). "
+            "Returning 422 to prevent silent audio.",
+            request.language.value, len(raw_text),
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="Answer text contained no speakable content in the selected language.",
+        )
+
     logger.info(
-        "TTS request: user=%s, language=%s, chars=%d",
+        "TTS request: user=%s, language=%s, raw_chars=%d, clean_chars=%d",
         current_user.get("sub") if current_user else "anon",
         request.language.value,
+        len(raw_text),
         len(text),
     )
 
@@ -106,6 +132,7 @@ async def text_to_speech(
         )
 
     return Response(content=audio_bytes, media_type="audio/wav")
+
 
 
 @router.post("/transcribe", response_model=TranscribeResponse)
