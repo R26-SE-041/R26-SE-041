@@ -545,3 +545,457 @@ def insert_ablation_result(result: dict[str, Any]) -> None:
                 result.get("visual_score"), result.get("pedagogical_score"), result.get("clip_score"),
                 result.get("retry_count", 0), result.get("latency_ms"), result.get("error"),
             ))
+
+
+# ── Explicit agent feedback and preference pairs ─────────────────────────────
+
+_FEEDBACK_AGENTS = {
+    "prompt-agent", "prompt-anatomy", "prompt-generic",
+    "image-agent", "interactive-agent", "eval-agent", "threed-agent",
+}
+
+
+def record_agent_feedback(
+    *,
+    session_id: str,
+    agent_name: str,
+    output_id: str,
+    rating: int,
+    reason_codes: list[str],
+    comment: str | None = None,
+    parent_feedback_id: str | None = None,
+    parent_output_id: str | None = None,
+    user_id: str | None = None,
+    auth_user_id: str | None = None,
+    pipeline_run_id: str | None = None,
+    input_context: dict[str, Any] | None = None,
+    output_snapshot: dict[str, Any] | None = None,
+    model_version: str | None = None,
+    skill_version: str | None = None,
+) -> dict[str, str | None]:
+    """Persist one rating and atomically complete a preference pair when possible."""
+    if agent_name not in _FEEDBACK_AGENTS:
+        raise ValueError(f"Unsupported feedback agent: {agent_name}")
+    if rating not in {-1, 1}:
+        raise ValueError("rating must be -1 or 1")
+
+    normalized_reasons = sorted({code.strip().lower() for code in reason_codes if code.strip()})
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO agent_feedback
+                    (session_id, user_id, auth_user_id, pipeline_run_id, agent_name, output_id,
+                     parent_output_id, rating, reason_codes, comment, input_context,
+                     output_snapshot, model_version, skill_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::text[], %s,
+                        %s::jsonb, %s::jsonb, %s, %s)
+                ON CONFLICT (agent_name, output_id) DO UPDATE SET
+                    rating = EXCLUDED.rating,
+                    reason_codes = EXCLUDED.reason_codes,
+                    comment = EXCLUDED.comment,
+                    input_context = EXCLUDED.input_context,
+                    output_snapshot = EXCLUDED.output_snapshot
+                RETURNING id::text
+            """, (
+                session_id, user_id, auth_user_id, pipeline_run_id, agent_name, output_id,
+                parent_output_id, rating, normalized_reasons, comment,
+                json.dumps(input_context or {}), json.dumps(output_snapshot or {}),
+                model_version, skill_version,
+            ))
+            feedback_id = cur.fetchone()[0]
+            pair_id: str | None = None
+            if rating == 1 and parent_feedback_id:
+                cur.execute("""
+                    INSERT INTO preference_pairs
+                        (agent_name, negative_feedback_id, positive_feedback_id,
+                         negative_output_id, positive_output_id,
+                         negative_reasons, positive_reasons)
+                    SELECT n.agent_name, n.id, p.id, n.output_id, p.output_id,
+                           n.reason_codes, p.reason_codes
+                    FROM agent_feedback n
+                    JOIN agent_feedback p ON p.id = %s::uuid
+                    WHERE n.id = %s::uuid
+                      AND n.rating = -1 AND p.rating = 1
+                      AND n.agent_name = p.agent_name
+                      AND n.session_id = p.session_id
+                      AND n.auth_user_id IS NOT DISTINCT FROM p.auth_user_id
+                    ON CONFLICT (negative_feedback_id) DO UPDATE SET
+                        positive_feedback_id = EXCLUDED.positive_feedback_id,
+                        positive_output_id = EXCLUDED.positive_output_id,
+                        positive_reasons = EXCLUDED.positive_reasons
+                    RETURNING id::text
+                """, (feedback_id, parent_feedback_id))
+                row = cur.fetchone()
+                if not row:
+                    raise ValueError("parent_feedback_id must reference a disliked output from the same agent and session")
+                pair_id = row[0]
+            return {"feedback_id": feedback_id, "preference_pair_id": pair_id}
+
+
+def list_preference_reason_aggregates(
+    minimum_pairs: int = 10,
+    minimum_sessions: int = 3,
+) -> list[dict[str, Any]]:
+    """Aggregate controlled negative reason codes; comments never become instructions."""
+    sql = """
+        SELECT pp.agent_name, reason.reason_code,
+               COUNT(DISTINCT pp.id)::int AS evidence_count,
+               COUNT(DISTINCT negative.session_id)::int AS distinct_sessions,
+               (ARRAY_AGG(DISTINCT pp.id::text))[1:100] AS pair_ids,
+               ARRAY_AGG(DISTINCT positive.reason_code)
+                   FILTER (WHERE positive.reason_code IS NOT NULL) AS positive_reasons
+        FROM preference_pairs pp
+        JOIN agent_feedback negative ON negative.id = pp.negative_feedback_id
+        CROSS JOIN LATERAL unnest(pp.negative_reasons) AS reason(reason_code)
+        LEFT JOIN LATERAL unnest(pp.positive_reasons) AS positive(reason_code) ON TRUE
+        WHERE pp.status = 'active'
+        GROUP BY pp.agent_name, reason.reason_code
+        HAVING COUNT(DISTINCT pp.id) >= %s AND COUNT(DISTINCT negative.session_id) >= %s
+        ORDER BY COUNT(DISTINCT pp.id) DESC
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (minimum_pairs, minimum_sessions))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def upsert_memory_candidate(candidate: dict[str, Any]) -> str:
+    sql = """
+        INSERT INTO memory_candidates
+            (fingerprint, scope, agent_name, memory_type, lesson, evidence_count,
+             distinct_sessions, confidence, evidence_pair_ids, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s::jsonb)
+        ON CONFLICT (fingerprint) DO UPDATE SET
+            lesson = EXCLUDED.lesson,
+            evidence_count = EXCLUDED.evidence_count,
+            distinct_sessions = EXCLUDED.distinct_sessions,
+            confidence = EXCLUDED.confidence,
+            evidence_pair_ids = EXCLUDED.evidence_pair_ids,
+            metadata = EXCLUDED.metadata,
+            updated_at = NOW()
+        RETURNING id::text
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                candidate["fingerprint"], candidate["scope"], candidate.get("agent_name"),
+                candidate["memory_type"], candidate["lesson"], candidate["evidence_count"],
+                candidate["distinct_sessions"], candidate["confidence"],
+                candidate.get("evidence_pair_ids") or [], json.dumps(candidate.get("metadata") or {}),
+            ))
+            return cur.fetchone()[0]
+
+
+def get_preference_pair_learning_evidence(pair_id: str) -> dict[str, Any] | None:
+    sql = """
+        SELECT pp.id::text, pp.agent_name, pp.negative_reasons, pp.positive_reasons,
+               negative.auth_user_id::text AS auth_user_id,
+               negative.input_context, negative.output_snapshot AS rejected_output,
+               positive.output_snapshot AS preferred_output
+        FROM preference_pairs pp
+        JOIN agent_feedback negative ON negative.id = pp.negative_feedback_id
+        JOIN agent_feedback positive ON positive.id = pp.positive_feedback_id
+        WHERE pp.id = %s::uuid
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (pair_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def list_unembedded_preference_pair_ids(limit: int = 200) -> list[str]:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id::text FROM preference_pairs
+                WHERE context_embedding IS NULL AND status = 'active'
+                ORDER BY created_at ASC LIMIT %s
+            """, (max(1, min(limit, 1000)),))
+            return [row[0] for row in cur.fetchall()]
+
+
+def update_preference_pair_embedding(pair_id: str, context_text: str, embedding: list[float]) -> None:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE preference_pairs SET context_text = %s, context_embedding = %s::vector WHERE id = %s::uuid",
+                (context_text, _vector_literal(embedding), pair_id),
+            )
+
+
+def get_user_memory_settings(user_id: str) -> dict[str, Any]:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT memory_enabled, updated_at FROM user_memory_settings WHERE user_id = %s::uuid",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            return {
+                "memory_enabled": bool(row[0]) if row else False,
+                "updated_at": row[1].isoformat() if row else None,
+            }
+
+
+def set_user_memory_enabled(user_id: str, enabled: bool) -> dict[str, Any]:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO user_memory_settings (user_id, memory_enabled)
+                VALUES (%s::uuid, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    memory_enabled = EXCLUDED.memory_enabled,
+                    updated_at = NOW()
+                RETURNING memory_enabled, updated_at
+            """, (user_id, enabled))
+            memory_enabled, updated_at = cur.fetchone()
+            return {"memory_enabled": memory_enabled, "updated_at": updated_at.isoformat()}
+
+
+def list_user_preferences(user_id: str) -> list[dict[str, Any]]:
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id::text, agent_name, preference_key, content, confidence,
+                       evidence_count, status, metadata, created_at, updated_at
+                FROM user_preferences
+                WHERE user_id = %s::uuid
+                ORDER BY status = 'active' DESC, confidence DESC, updated_at DESC
+            """, (user_id,))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def revoke_user_preference(user_id: str, preference_id: str) -> bool:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE user_preferences SET status = 'revoked', updated_at = NOW()
+                WHERE id = %s::uuid AND user_id = %s::uuid
+            """, (preference_id, user_id))
+            return cur.rowcount == 1
+
+
+def clear_user_preferences(user_id: str) -> int:
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM user_preferences WHERE user_id = %s::uuid", (user_id,))
+            return cur.rowcount
+
+
+def upsert_user_preference(
+    *,
+    user_id: str,
+    agent_name: str,
+    preference_key: str,
+    content: str,
+    embedding: list[float],
+    preference_pair_id: str,
+    metadata: dict[str, Any] | None = None,
+    activation_evidence: int = 3,
+) -> dict[str, Any]:
+    """Add idempotent pair evidence and activate only after repeated preference."""
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT memory_enabled FROM user_memory_settings WHERE user_id = %s::uuid",
+                (user_id,),
+            )
+            setting = cur.fetchone()
+            if not setting or not setting[0]:
+                return {
+                    "preference_id": None,
+                    "evidence_added": False,
+                    "evidence_count": 0,
+                    "confidence": 0.0,
+                    "status": "disabled",
+                }
+            cur.execute("""
+                INSERT INTO user_preferences
+                    (user_id, agent_name, preference_key, content, embedding, metadata)
+                VALUES (%s::uuid, %s, %s, %s, %s::vector, %s::jsonb)
+                ON CONFLICT (user_id, agent_name, preference_key) DO UPDATE SET
+                    content = EXCLUDED.content,
+                    embedding = EXCLUDED.embedding,
+                    metadata = user_preferences.metadata || EXCLUDED.metadata,
+                    updated_at = NOW()
+                RETURNING id::text
+            """, (
+                user_id, agent_name, preference_key, content,
+                _vector_literal(embedding), json.dumps(metadata or {}),
+            ))
+            preference_id = cur.fetchone()[0]
+            cur.execute("""
+                INSERT INTO user_preference_evidence (preference_id, preference_pair_id)
+                VALUES (%s::uuid, %s::uuid)
+                ON CONFLICT DO NOTHING
+                RETURNING preference_id
+            """, (preference_id, preference_pair_id))
+            inserted = cur.fetchone() is not None
+            cur.execute("""
+                WITH evidence AS (
+                    SELECT COUNT(*)::int AS count
+                    FROM user_preference_evidence
+                    WHERE preference_id = %s::uuid
+                )
+                UPDATE user_preferences preference
+                SET evidence_count = evidence.count,
+                    confidence = LEAST(0.95, 0.20 + evidence.count * 0.15),
+                    status = CASE
+                        WHEN preference.status = 'revoked' THEN 'revoked'
+                        WHEN evidence.count >= %s THEN 'active'
+                        ELSE 'candidate'
+                    END,
+                    updated_at = NOW()
+                FROM evidence
+                WHERE preference.id = %s::uuid
+                RETURNING preference.evidence_count, preference.confidence, preference.status
+            """, (preference_id, activation_evidence, preference_id))
+            evidence_count, confidence, status = cur.fetchone()
+            return {
+                "preference_id": preference_id,
+                "evidence_added": inserted,
+                "evidence_count": evidence_count,
+                "confidence": confidence,
+                "status": status,
+            }
+
+
+def upsert_agent_memory(
+    *,
+    fingerprint: str,
+    scope: str,
+    agent_name: str | None,
+    memory_type: str,
+    content: str,
+    embedding: list[float],
+    confidence: float,
+    evidence_count: int,
+    source_candidate_id: str | None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    sql = """
+        INSERT INTO agent_memories
+            (fingerprint, scope, agent_name, memory_type, content, embedding,
+             confidence, evidence_count, source_candidate_id, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s::uuid, %s::jsonb)
+        ON CONFLICT (fingerprint) DO UPDATE SET
+            content = EXCLUDED.content,
+            embedding = EXCLUDED.embedding,
+            confidence = EXCLUDED.confidence,
+            evidence_count = EXCLUDED.evidence_count,
+            source_candidate_id = EXCLUDED.source_candidate_id,
+            metadata = EXCLUDED.metadata,
+            updated_at = NOW()
+        RETURNING id::text
+    """
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                fingerprint, scope, agent_name, memory_type, content,
+                _vector_literal(embedding), confidence, evidence_count,
+                source_candidate_id, json.dumps(metadata or {}),
+            ))
+            return cur.fetchone()[0]
+
+
+def list_agent_memories(status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    sql = """
+        SELECT id::text, fingerprint, scope, agent_name, memory_type, content,
+               confidence, evidence_count, status, source_candidate_id::text,
+               metadata, created_at, updated_at, deployed_at
+        FROM agent_memories
+        WHERE (%s IS NULL OR status = %s)
+        ORDER BY confidence DESC, evidence_count DESC, updated_at DESC
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (status, status, max(1, min(limit, 500))))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def transition_agent_memory(memory_id: str, target_status: str) -> dict[str, Any]:
+    transitions = {
+        "approved": {"proposed"},
+        "rejected": {"proposed", "approved"},
+        "deployed": {"approved"},
+        "superseded": {"deployed"},
+    }
+    if target_status not in transitions:
+        raise ValueError(f"Unsupported target status: {target_status}")
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                UPDATE agent_memories
+                SET status = %s,
+                    deployed_at = CASE WHEN %s = 'deployed' THEN NOW() ELSE deployed_at END,
+                    updated_at = NOW()
+                WHERE id = %s::uuid AND status = ANY(%s::text[])
+                RETURNING id::text, scope, agent_name, memory_type, content, status,
+                          confidence, evidence_count, deployed_at, source_candidate_id::text
+            """, (target_status, target_status, memory_id, list(transitions[target_status])))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError("Memory does not exist or status transition is not allowed")
+            result = dict(row)
+            source_candidate_id = result.pop("source_candidate_id", None)
+            if source_candidate_id and target_status in {"approved", "rejected", "deployed"}:
+                cur.execute("""
+                    UPDATE memory_candidates
+                    SET status = %s,
+                        deployed_at = CASE WHEN %s = 'deployed' THEN NOW() ELSE deployed_at END,
+                        updated_at = NOW()
+                    WHERE id = %s::uuid
+                """, (target_status, target_status, source_candidate_id))
+            return result
+
+
+def retrieve_scoped_memories(
+    *,
+    query_embedding: list[float],
+    agent_name: str,
+    user_id: str | None = None,
+    limit: int = 5,
+    minimum_similarity: float = 0.25,
+) -> list[dict[str, Any]]:
+    """Retrieve deployed global/agent memory plus only the authenticated user's preferences."""
+    vector = _vector_literal(query_embedding)
+    sql = """
+        WITH candidates AS (
+            SELECT id::text, content, 'agent_memory'::text AS source,
+                   scope, confidence, evidence_count,
+                   1 - (embedding <=> %s::vector) AS similarity
+            FROM agent_memories
+            WHERE status = 'deployed'
+              AND (scope = 'global' OR (scope = 'agent' AND agent_name = %s))
+            UNION ALL
+            SELECT id::text, content, 'user_preference'::text AS source,
+                   'user'::text AS scope, confidence, evidence_count,
+                   1 - (embedding <=> %s::vector) AS similarity
+            FROM user_preferences
+            WHERE %s::uuid IS NOT NULL
+              AND user_id = %s::uuid
+              AND agent_name = %s
+              AND status = 'active'
+              AND EXISTS (
+                  SELECT 1 FROM user_memory_settings setting
+                  WHERE setting.user_id = user_preferences.user_id
+                    AND setting.memory_enabled = TRUE
+              )
+        )
+        SELECT id, content, source, scope, confidence, evidence_count, similarity,
+               similarity * 0.65 + confidence * 0.25 +
+               LEAST(evidence_count / 10.0, 1.0) * 0.10 AS score
+        FROM candidates
+        WHERE similarity >= %s
+        ORDER BY score DESC
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (
+                vector, agent_name, vector, user_id, user_id, agent_name,
+                minimum_similarity, max(1, min(limit, 10)),
+            ))
+            return [dict(row) for row in cur.fetchall()]

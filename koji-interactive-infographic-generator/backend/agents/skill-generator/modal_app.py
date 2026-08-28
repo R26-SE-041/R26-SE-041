@@ -13,7 +13,11 @@ PACKAGED_SKILL_PATH = "/root/agent-config/prompt-agent/SKILL.md"
 skills_vol = modal.Volume.from_name("skills-vol", create_if_missing=True)
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("requests>=2.32.0", "psycopg2-binary>=2.9.9")
+    .pip_install(
+        "requests>=2.32.0",
+        "psycopg2-binary>=2.9.9",
+        "sentence-transformers>=3.2.0",
+    )
     .add_local_python_source("shared")
     .add_local_file("agents/prompt-agent/SKILL.md", PACKAGED_SKILL_PATH)
 )
@@ -24,6 +28,24 @@ def _run() -> dict:
     from pathlib import Path
     import shutil
     from shared.skill_evolution import run_automatic_evolution
+    from shared.feedback_learning import backfill_preference_pair_embeddings, consolidate_feedback_candidates
+
+    feedback_candidates = []
+    feedback_warning = None
+    embedding_backfill = {"requested": 0, "completed": 0, "errors": []}
+    try:
+        embedding_backfill = backfill_preference_pair_embeddings(
+            int(os.getenv("FEEDBACK_EMBEDDING_BACKFILL_LIMIT", "200"))
+        )
+        feedback_candidates = consolidate_feedback_candidates(
+            memento_min_pairs=int(os.getenv("MEMENTO_MIN_PAIRS", "10")),
+            skill_min_pairs=int(os.getenv("AGENT_SKILL_MIN_PAIRS", "25")),
+            minimum_sessions=int(os.getenv("MEMORY_MIN_SESSIONS", "3")),
+        )
+    except Exception as exc:
+        # Keep the established prompt-skill evolution job available during a
+        # rolling migration where the new feedback tables may not exist yet.
+        feedback_warning = f"feedback consolidation skipped: {exc}"
 
     skill_directory = Path(SKILL_DIRECTORY)
     skill_directory.mkdir(parents=True, exist_ok=True)
@@ -39,7 +61,12 @@ def _run() -> dict:
         minimum_improvement=float(os.getenv("SKILL_MIN_IMPROVEMENT", "0.10")),
         deployment_callback=skills_vol.commit,
     )
-    return result
+    return {
+        **result,
+        "feedback_memory_candidates": len(feedback_candidates),
+        "feedback_warning": feedback_warning,
+        "embedding_backfill": embedding_backfill,
+    }
 
 
 @app.function(

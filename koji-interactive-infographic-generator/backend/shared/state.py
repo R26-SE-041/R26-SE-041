@@ -34,22 +34,24 @@ class PipelineState(TypedDict):
 
     raw_prompt: str
     enhanced_prompt: Optional[str]
+    enhanced_prompt_json: Optional[dict[str, Any]]
+    anatomy_spec: dict[str, Any]
+    routing: dict[str, Any]
+    model_variants: dict[str, str]
     prompt_parse_error: bool
     image_bytes: Optional[bytes]
     clip_score: Optional[float]
     vlm_score: Optional[float]
     visual_score: Optional[float]
     pedagogical_score: Optional[float]
+    anatomy_metrics: dict[str, Any]
+    anatomy_hard_failures: list[str]
     vlm_feedback: Optional[str]
     retry_count: int
     retry_feedback: Optional[str]
     best_attempt: Optional[dict[str, Any]]
     memento_examples: list[dict[str, Any]]
     token_usage: dict[str, int]
-    skill_compression: dict[str, Any]
-    skill_compression_mode: str
-    skill_token_budget: int
-    available_context_tokens: Optional[int]
     safety: dict[str, Any]
     trace_id: Optional[str]
     experiment_config: dict[str, Any]
@@ -66,22 +68,24 @@ def initial_state(
     return PipelineState(
         raw_prompt=raw_prompt,
         enhanced_prompt=None,
+        enhanced_prompt_json=None,
+        anatomy_spec={"is_anatomy": False},
+        routing={},
+        model_variants={"prompt": "base", "image": "base", "interactive": "base"},
         prompt_parse_error=False,
         image_bytes=None,
         clip_score=None,
         vlm_score=None,
         visual_score=None,
         pedagogical_score=None,
+        anatomy_metrics={},
+        anatomy_hard_failures=[],
         vlm_feedback=None,
         retry_count=0,
         retry_feedback=None,
         best_attempt=None,
         memento_examples=[],
         token_usage={},
-        skill_compression={},
-        skill_compression_mode="auto",
-        skill_token_budget=150,
-        available_context_tokens=None,
         safety={},
         trace_id=str(uuid.uuid4()),
         experiment_config=experiment_config or {},

@@ -1,0 +1,6 @@
+{
+  "organ":"liver","version":"1.0.0","sources":[
+    {"id":"ncbi-liver-anatomy","title":"Anatomy, Abdomen and Pelvis: Liver","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK500014/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-portal-system","title":"Anatomy, Abdomen and Pelvis, Portal Venous System","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK554589/","accessed":"2026-08-21","reviewed":true}
+  ]
+}

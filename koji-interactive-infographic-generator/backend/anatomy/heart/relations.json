@@ -1,0 +1,20 @@
+{
+  "organ": "heart",
+  "version": "1.0.0",
+  "relations": [
+    {"source": "superior_vena_cava", "relation": "blood_flows_to", "target": "right_atrium", "flow": "deoxygenated"},
+    {"source": "inferior_vena_cava", "relation": "blood_flows_to", "target": "right_atrium", "flow": "deoxygenated"},
+    {"source": "right_atrium", "relation": "blood_flows_through", "target": "tricuspid_valve", "flow": "deoxygenated"},
+    {"source": "tricuspid_valve", "relation": "blood_flows_to", "target": "right_ventricle", "flow": "deoxygenated"},
+    {"source": "right_ventricle", "relation": "blood_flows_through", "target": "pulmonary_valve", "flow": "deoxygenated"},
+    {"source": "pulmonary_valve", "relation": "blood_flows_to", "target": "pulmonary_trunk", "flow": "deoxygenated"},
+    {"source": "pulmonary_trunk", "relation": "divides_into", "target": "pulmonary_arteries", "flow": "deoxygenated"},
+    {"source": "pulmonary_veins", "relation": "blood_flows_to", "target": "left_atrium", "flow": "oxygenated"},
+    {"source": "left_atrium", "relation": "blood_flows_through", "target": "mitral_valve", "flow": "oxygenated"},
+    {"source": "mitral_valve", "relation": "blood_flows_to", "target": "left_ventricle", "flow": "oxygenated"},
+    {"source": "left_ventricle", "relation": "blood_flows_through", "target": "aortic_valve", "flow": "oxygenated"},
+    {"source": "aortic_valve", "relation": "blood_flows_to", "target": "aorta", "flow": "oxygenated"},
+    {"source": "interventricular_septum", "relation": "separates", "target": "right_ventricle", "context": "The septum separates the two ventricles."},
+    {"source": "interventricular_septum", "relation": "separates", "target": "left_ventricle", "context": "The septum separates the two ventricles."}
+  ]
+}
