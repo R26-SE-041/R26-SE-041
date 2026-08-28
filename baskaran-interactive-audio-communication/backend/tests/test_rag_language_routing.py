@@ -41,7 +41,7 @@ def _ask(language: str, direct: bool):
             return_value=CHUNKS,
         ) as retrieve,
         patch(
-            "app.api.v1.routes.documents.call_rag_generator",
+            "app.api.v1.routes.documents.call_answer_generator",
             new_callable=AsyncMock,
             return_value={"answer": generated},
         ) as gemma,
@@ -53,7 +53,7 @@ def _ask(language: str, direct: bool):
     ):
         response = asyncio.run(
             ask_question(
-                AskRequest(transcript="What is Newton's second law?", language=language),
+                AskRequest(transcript="What is Newton's second law?", language=language, document_grounded=True),
                 current_user={"sub": "test-user"},
             )
         )
@@ -67,9 +67,10 @@ def test_direct_mode_passes_selected_language_to_gemma_and_bypasses_localizer(la
     retrieve.assert_awaited_once_with(
         "What is Newton's second law?", "test-user", n_results=5
     )
-    gemma.assert_awaited_once_with(
-        "What is Newton's second law?", [CHUNKS[0]["text"]], language
-    )
+    gemma.assert_awaited_once()
+    assert gemma.await_args.args == ("What is Newton's second law?", language)
+    assert gemma.await_args.kwargs["route"] == "document_rag_base"
+    assert gemma.await_args.kwargs["context_chunks"] == [CHUNKS[0]["text"]]
     localizer.assert_not_awaited()
     assert response.answer == f"grounded-{language}"
     assert response.references[0].filename == "physics-notes.pdf"
@@ -79,9 +80,10 @@ def test_direct_mode_passes_selected_language_to_gemma_and_bypasses_localizer(la
 def test_disabled_flag_restores_legacy_english_then_localizer(language):
     response, _, gemma, localizer = _ask(language, direct=False)
 
-    gemma.assert_awaited_once_with(
-        "What is Newton's second law?", [CHUNKS[0]["text"]], "english"
-    )
+    gemma.assert_awaited_once()
+    assert gemma.await_args.args == ("What is Newton's second law?", "english")
+    assert gemma.await_args.kwargs["route"] == "document_rag_base"
+    assert gemma.await_args.kwargs["context_chunks"] == [CHUNKS[0]["text"]]
     localizer.assert_awaited_once_with(f"grounded-{language}", language)
     assert response.answer == f"localized-{language}"
 
@@ -89,8 +91,9 @@ def test_disabled_flag_restores_legacy_english_then_localizer(language):
 def test_english_is_unchanged_when_flag_is_disabled():
     response, _, gemma, localizer = _ask("english", direct=False)
 
-    gemma.assert_awaited_once_with(
-        "What is Newton's second law?", [CHUNKS[0]["text"]], "english"
-    )
+    gemma.assert_awaited_once()
+    assert gemma.await_args.args == ("What is Newton's second law?", "english")
+    assert gemma.await_args.kwargs["route"] == "document_rag_base"
+    assert gemma.await_args.kwargs["context_chunks"] == [CHUNKS[0]["text"]]
     localizer.assert_not_awaited()
     assert response.answer == "grounded-english"

@@ -71,11 +71,53 @@ def test_bge_reranker_uses_existing_persistent_model_volume():
 
     assert len(cross_encoder_calls) == 1
     keywords = {kw.arg: kw.value for kw in cross_encoder_calls[0].keywords}
-    assert isinstance(keywords["cache_folder"], ast.Name)
-    assert keywords["cache_folder"].id == "MODELS_DIR"
+    assert "cache_folder" not in keywords
+    assert isinstance(keywords["cache_dir"], ast.Name)
+    assert keywords["cache_dir"].id == "MODELS_DIR"
+    assert isinstance(keywords["local_files_only"], ast.Constant)
+    assert keywords["local_files_only"].value is True
     assert 'MODELS_DIR = "/bge_models"' in source
     assert 'Volume.from_name("voicelearn-bge-models"' in source
     assert "bge_volume.commit()" in source
+
+
+def test_bge_reranker_scales_to_zero_without_parallel_replicas():
+    source = (BACKEND_ROOT / "modal_endpoints" / "bge_retrieval.py").read_text(encoding="utf-8-sig")
+    tree = ast.parse(source)
+    reranker_class = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "BGEReranker"
+    )
+    decorator = next(
+        item for item in reranker_class.decorator_list
+        if isinstance(item, ast.Call)
+        and isinstance(item.func, ast.Attribute)
+        and item.func.attr == "cls"
+    )
+    keywords = {kw.arg: kw.value for kw in decorator.keywords}
+    assert keywords["min_containers"].value == 0
+    assert keywords["max_containers"].value == 1
+    assert keywords["buffer_containers"].value == 0
+    assert keywords["scaledown_window"].value == 60
+
+
+def test_bge_reranker_cache_step_is_cpu_only():
+    source = (BACKEND_ROOT / "modal_endpoints" / "bge_retrieval.py").read_text(encoding="utf-8-sig")
+    tree = ast.parse(source)
+    cache_function = next(
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "cache_reranker_model"
+    )
+    decorator = next(
+        item for item in cache_function.decorator_list
+        if isinstance(item, ast.Call)
+        and isinstance(item.func, ast.Attribute)
+        and item.func.attr == "function"
+    )
+    keywords = {kw.arg: kw.value for kw in decorator.keywords}
+    assert "gpu" not in keywords
+    assert keywords["cpu"].value == 2.0
 
 
 def test_bge_image_uses_secure_torch_and_numpy_1_abi():

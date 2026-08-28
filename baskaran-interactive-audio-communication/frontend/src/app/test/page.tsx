@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LanguageSelector } from '@/components/voice/LanguageSelector'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import {
   askDocument,
   deleteDocument,
@@ -189,6 +191,7 @@ export default function StudyAssistantPage() {
         language,
         undefined,
         detectedLanguage,
+        true, // /test is an explicitly document-grounded workflow.
       )
       setResult({ transcript: question, answer: answer.answer, references: answer.references })
       setPhase('answered')
@@ -255,19 +258,30 @@ export default function StudyAssistantPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-page-gradient">
-      <header className="glass sticky top-0 z-50 border-b border-white/[0.06]">
-        <div className="mx-auto flex h-16 max-w-3xl items-center px-4 sm:px-6">
-          <span className="glow-dot" />
-          <span className="ml-2.5 text-sm font-semibold tracking-tight text-white">VoiceLearn AI</span>
+    <div className="min-h-screen" style={{ background: 'var(--c-bg)', transition: 'background 0.25s' }}>
+      <header className="nb-header sticky top-0 z-50">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--c-blue)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              </svg>
+            </div>
+            <span className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Learning Assistant</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium" style={{ color: 'var(--c-ink-faint)' }}>Voice Interaction</span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10 pb-24 sm:px-6">
-        <div className="flex flex-col items-center gap-3 pb-2 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-300">AI Study Assistant</p>
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Learn from your documents, by voice</h1>
-          <p className="max-w-xl text-sm leading-relaxed text-white/50">
+      <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-8 pb-24 sm:px-6">
+        <div className="flex flex-col items-center gap-2 pb-2 text-center pt-4">
+          <p className="nb-label" style={{ color: '#1A73E8' }}>AI Study Assistant</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink">Learn from your documents, by voice</h1>
+          <p className="max-w-xl text-sm leading-relaxed text-ink-muted">
             Upload your lecture documents, ask by voice, and receive grounded answers in your language.
           </p>
         </div>
@@ -300,34 +314,42 @@ export default function StudyAssistantPage() {
               const file = event.dataTransfer.files[0]
               if (file) void handleFileUpload(file)
             }}
-            className={`flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed px-5 py-7 transition-colors disabled:cursor-wait disabled:opacity-60 ${
-              dragOver ? 'border-brand-400 bg-brand-500/10' : 'border-white/15 bg-white/[0.025] hover:border-brand-400/60 hover:bg-brand-500/[0.06]'
-            }`}
+            className="flex w-full flex-col items-center gap-2 rounded-2xl px-5 py-8 transition-all disabled:cursor-wait disabled:opacity-60"
+            style={{
+              border: `2px dashed ${dragOver ? '#1A73E8' : 'rgba(0,0,0,0.12)'}`,
+              background: dragOver ? '#EEF3FD' : '#F5F4EF',
+            }}
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/15 text-xl text-brand-200" aria-hidden>↑</span>
-            <span className="text-sm font-semibold text-white/80">{uploading ? 'Indexing document…' : 'Upload or drop a document'}</span>
-            <span className="text-xs text-white/35">PDF, PowerPoint, Word, Excel, text, or Markdown</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: '#EEF3FD' }} aria-hidden>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </span>
+            <span className="text-sm font-medium text-ink">{uploading ? 'Indexing document…' : 'Upload or drop a document'}</span>
+            <span className="text-xs text-ink-faint">PDF, PowerPoint, Word, Excel, text, or Markdown</span>
           </button>
 
-          <div className="mt-5">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Indexed Documents</p>
+          <div className="mt-4">
+            <p className="nb-label mb-3">Indexed Documents</p>
             {documentsLoading ? (
-              <p className="text-sm text-white/35">Loading documents…</p>
+              <p className="text-sm text-ink-faint">Loading documents…</p>
             ) : documents.length === 0 ? (
-              <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm text-white/35">No documents indexed yet.</p>
+              <p className="rounded-xl px-4 py-3 text-sm text-ink-faint" style={{ background: '#F5F4EF', border: '1px solid rgba(0,0,0,0.07)' }}>No documents indexed yet.</p>
             ) : (
               <ul className="space-y-2">
                 {documents.map((document) => (
-                  <li key={document.document_id} className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-xs font-bold uppercase text-brand-300">{document.file_type}</span>
+                  <li key={document.document_id} className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.07)' }}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold uppercase" style={{ background: '#EEF3FD', color: '#1A73E8' }}>{document.file_type}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white/80">{document.filename}</p>
-                      <p className="text-xs text-white/35">Ready to search</p>
+                      <p className="truncate text-sm font-medium text-ink">{document.filename}</p>
+                      <p className="text-xs text-ink-faint">Ready to search</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => void handleDelete(document.document_id)}
-                      className="rounded-lg px-2 py-1 text-xs text-white/35 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-ink-faint transition-colors hover:text-red-600 hover:bg-red-50"
                       aria-label={`Remove ${document.filename}`}
                     >
                       Remove
@@ -349,7 +371,8 @@ export default function StudyAssistantPage() {
             disabled={phase === 'asking'}
           />
           {phase === 'asking' && (
-            <div className="flex items-center justify-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/[0.07] px-4 py-3 text-sm text-brand-200">
+            <div className="flex items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm animate-fade-up"
+              style={{ background: '#EEF3FD', border: '1px solid rgba(26,115,232,0.2)', color: '#1A73E8' }}>
               <Spinner />
               Searching your documents and preparing an answer…
             </div>
@@ -365,10 +388,11 @@ export default function StudyAssistantPage() {
               disabled={phase === 'asking' || correctingTranscript}
               rows={3}
               aria-label="Your question"
-              className="w-full resize-y rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-[15px] leading-relaxed text-white/90 outline-none transition-colors focus:border-brand-400/60 disabled:cursor-wait disabled:opacity-60"
+              className="nb-input w-full resize-y"
+              style={{ minHeight: 80 }}
             />
 
-            {correctionError && <p className="mt-3 text-xs text-amber-300/80">{correctionError}</p>}
+            {correctionError && <p className="mt-3 text-xs text-amber-700">{correctionError}</p>}
             {ragError && <ErrorNotice message={ragError} />}
 
             <div className="mt-4 flex flex-wrap gap-3">
@@ -376,17 +400,17 @@ export default function StudyAssistantPage() {
                 type="button"
                 onClick={() => void handleFixTranscript()}
                 disabled={!transcript.trim() || phase === 'asking' || correctingTranscript}
-                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-40"
+                className="nb-btn-ghost rounded-xl px-4 py-2.5 text-sm"
               >
-                {correctingTranscript ? 'Fixing\u2026' : 'Fix Transcript'}
+                {correctingTranscript ? 'Fixing…' : 'Fix Transcript'}
               </button>
               <button
                 type="button"
                 onClick={() => void submitQuestionToRag()}
                 disabled={!transcript.trim() || phase === 'asking' || correctingTranscript}
-                className="inline-flex items-center justify-center rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-brand transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                className="nb-btn-primary rounded-xl px-5 py-2.5 text-sm"
               >
-                {phase === 'asking' ? 'Asking\u2026' : phase === 'rag-error' ? 'Retry Answer' : 'Ask'}
+                {phase === 'asking' ? 'Asking…' : phase === 'rag-error' ? 'Retry Answer' : 'Ask →'}
               </button>
             </div>
           </Section>
@@ -395,32 +419,33 @@ export default function StudyAssistantPage() {
         {result && (
           <>
             <Section title="Answer">
-              <p className="whitespace-pre-wrap text-[15px] leading-7 text-white/90">{result.answer}</p>
+              <MarkdownContent content={result.answer} className="text-sm" />
 
-              <div className="mt-5 border-t border-white/[0.07] pt-4">
+              <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
                 {audioLoading && (
-                  <div className="flex items-center gap-2 text-sm text-white/45"><Spinner /> Preparing answer audio…</div>
+                  <div className="flex items-center gap-2 text-sm text-ink-faint"><Spinner /> Preparing answer audio…</div>
                 )}
                 {audioUrl && (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <button
                       type="button"
                       onClick={() => void audioRef.current?.play()}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-brand transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                      className="nb-btn-primary rounded-xl px-4 py-2.5 text-sm"
                     >
-                      <span aria-hidden>▶</span> Play Answer
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                      Play Answer
                     </button>
                     <audio ref={audioRef} src={audioUrl} controls className="h-10 w-full sm:max-w-sm" preload="metadata" />
                   </div>
                 )}
                 {audioError && (
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-xs text-amber-300/80">{audioError}</p>
+                    <p className="text-xs text-amber-700">{audioError}</p>
                     <button
                       type="button"
                       onClick={() => void synthesizeAnswer(result.answer, language)}
                       disabled={audioLoading}
-                      className="text-xs font-semibold text-brand-300 transition-colors hover:text-brand-200 disabled:opacity-40"
+                      className="text-xs font-semibold transition-colors disabled:opacity-40" style={{ color: '#1A73E8' }}
                     >
                       Retry Audio
                     </button>
@@ -431,16 +456,22 @@ export default function StudyAssistantPage() {
 
             <Section title="Sources">
               {result.references.length === 0 ? (
-                <p className="text-sm text-white/35">No source references were returned.</p>
+                <p className="text-sm text-ink-faint">No source references were returned.</p>
               ) : (
                 <ol className="space-y-2">
                   {result.references.map((reference, index) => (
-                    <li key={`${reference.document_id}-${index}`} className="rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3">
+                    <li key={`${reference.document_id}-${index}`} className="rounded-xl px-4 py-3 nb-inset">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-white/75">{reference.filename}</span>
-                        {reference.page != null && <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs text-white/40">Page {reference.page}</span>}
+                        <span className="text-sm font-semibold text-ink-soft">{reference.filename}</span>
+                        {reference.page != null && (
+                          <span className="rounded px-2 py-0.5 text-xs text-ink-faint" style={{ background: '#EAE8E0' }}>Page {reference.page}</span>
+                        )}
                       </div>
-                      {reference.excerpt && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-white/40">{reference.excerpt}</p>}
+                      {reference.excerpt && (
+                        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-ink-muted border-l-2 pl-2.5 italic mt-2" style={{ borderColor: '#DBD8CC' }}>
+                          {reference.excerpt}
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -450,7 +481,8 @@ export default function StudyAssistantPage() {
         )}
 
         {(phase === 'answered' || phase === 'rag-error') && (
-          <button type="button" onClick={clearAnswer} className="self-center text-sm font-medium text-white/45 transition-colors hover:text-white/75">
+          <button type="button" onClick={clearAnswer}
+            className="self-center text-sm font-medium text-ink-faint transition-colors hover:text-ink">
             Ask another question
           </button>
         )}
@@ -461,17 +493,24 @@ export default function StudyAssistantPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="glass-card rounded-3xl p-5 sm:p-6">
-      <h2 className="mb-5 text-xs font-bold uppercase tracking-[0.16em] text-white/40">{title}</h2>
+    <section className="nb-card rounded-2xl p-5 sm:p-6">
+      <h2 className="mb-5 nb-label">{title}</h2>
       {children}
     </section>
   )
 }
 
 function Spinner() {
-  return <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+  return (
+    <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(26,115,232,0.2)', borderTopColor: '#1A73E8' }} aria-hidden />
+  )
 }
 
 function ErrorNotice({ message }: { message: string }) {
-  return <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{message}</p>
+  return (
+    <div className="mt-4 rounded-xl px-4 py-3 text-sm text-red-700 animate-fade-up"
+      style={{ background: '#FEF2F2', border: '1px solid rgba(234,67,53,0.2)' }}>
+      {message}
+    </div>
+  )
 }

@@ -364,7 +364,14 @@ async def call_script_corrector(text: str, language: str) -> dict:
         return {"corrected_text": text}
 
 
-async def call_rag_generator(query: str, context_chunks: list[str], language: str) -> dict:
+async def call_rag_generator(
+    query: str,
+    context_chunks: list[str],
+    language: str,
+    *,
+    tutor_instructions: str = "",
+    memento: dict | None = None,
+) -> dict:
     """Call the Gemma 4 RAG generation endpoint.
 
     Wraps the request in a try/except so a cold-start timeout, network error,
@@ -379,7 +386,13 @@ async def call_rag_generator(query: str, context_chunks: list[str], language: st
         response = await _http.post(
             url,
             # Public FastAPI endpoint; do not send Modal CLI credentials.
-            json={"query": query, "context": context_chunks, "language": language},
+            json={
+                "query": query,
+                "context": context_chunks,
+                "language": language,
+                "tutor_instructions": tutor_instructions,
+                "memento": memento,
+            },
             timeout=300.0,  # Includes Modal scheduling plus Gemma 4 model initialization.
         )
         response.raise_for_status()
@@ -394,6 +407,49 @@ async def call_rag_generator(query: str, context_chunks: list[str], language: st
             f"RAG generation failed ({type(exc).__name__}): {exc}. "
             "The Modal endpoint may be cold-starting — please retry in a moment."
         ) from exc
+
+
+async def call_answer_generator(
+    query: str,
+    language: str,
+    *,
+    route: str,
+    context_chunks: list[str] | None = None,
+    tutor_instructions: str = "",
+    memento: dict | None = None,
+) -> dict:
+    """Call the configured base or V2 answer service.
+
+    This caller never falls back across model routes: doing so would violate
+    document fidelity and make Modal usage hard to audit.
+    """
+    settings = get_settings()
+    url = (
+        settings.modal_base_gemma_url
+        if route in {"document_rag_base", "general_base"}
+        else settings.modal_finetuned_gemma_v2_url
+    ).strip()
+    if not url:
+        setting = "MODAL_BASE_GEMMA_URL" if route in {"document_rag_base", "general_base"} else "MODAL_FINETUNED_GEMMA_V2_URL"
+        raise RuntimeError(f"{setting} is not configured for route {route}.")
+    try:
+        response = await _http.post(
+            url,
+            json={
+                "query": query,
+                "context": context_chunks or [],
+                "language": language,
+                "tutor_instructions": tutor_instructions,
+                "memento": memento,
+                "route": route,
+            },
+            timeout=300.0,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as exc:
+        logger.error("call_answer_generator route=%s failed (%s: %s)", route, type(exc).__name__, exc)
+        raise RuntimeError(f"Answer generation failed for {route} ({type(exc).__name__}): {exc}") from exc
 
 
 async def call_localizer(text: str, language: str) -> dict:
@@ -888,12 +944,14 @@ async def call_english_tts(
         return None
 
 
-# ── Sinhala VITS TTS (dialoglk/SinhalaVITS-TTS-F1) ────────────────────────────
+# ── Sinhala TTS (tharindumihi/tts-si-F5-TTS via MODAL_SINHALA_VITS_TTS_URL) ──
+# facebook/mms-tts-sin does NOT exist on HuggingFace — MMS has no Sinhala TTS.
+# We use the F5-TTS fine-tuned Sinhala model instead.
 
 async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
-    """Call the final SinhalaVITS-TTS-F1 production endpoint.
+    """Synthesize Sinhala text to audio using tharindumihi/tts-si-F5-TTS.
 
-    Returns raw WAV bytes (22,050 Hz, PCM 16-bit) on success and ``None`` on
+    Returns raw WAV bytes (24,000 Hz, PCM 16-bit) on success and None on
     failure so the text answer remains usable.
     """
     import time as _time
@@ -912,24 +970,23 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
     _t0 = _time.perf_counter()
     try:
         logger.info(
-            "[SINHALA-VITS] Synthesizing %d chars via SinhalaVITS-TTS-F1 "
-            "(dialoglk/SinhalaVITS-TTS-F1, T4 GPU, 22050 Hz)",
+            "[SINHALA-F5TTS] Synthesizing %d chars via tharindumihi/tts-si-F5-TTS "
+            "(F5-TTS, T4 GPU, 24000 Hz)",
             len(text),
         )
         response = await _http.post(
             url,
             headers=_auth_headers(),
             json={"text": text},
-            timeout=180.0,   # T4 cold-start ~60-90s; VITS synthesis is fast once warm
+            timeout=180.0,
         )
         response.raise_for_status()
         elapsed = _time.perf_counter() - _t0
 
-        # Validate we actually got audio
         content_type = response.headers.get("content-type", "")
         if "audio" not in content_type and "octet-stream" not in content_type:
             logger.warning(
-                "[SINHALA-VITS] Unexpected content-type '%s' after %.2fs — "
+                "[SINHALA-F5TTS] Unexpected content-type '%s' after %.2fs — "
                 "Sinhala answer audio is unavailable.",
                 content_type, elapsed,
             )
@@ -937,15 +994,12 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
 
         content = response.content
         if not content:
-            logger.warning(
-                "[SINHALA-VITS] Empty audio bytes after %.2fs.",
-                elapsed,
-            )
+            logger.warning("[SINHALA-F5TTS] Empty audio bytes after %.2fs.", elapsed)
             return None
 
         warmth = "cold-start" if elapsed > 15.0 else "warm"
         logger.info(
-            "[TIMING][SINHALA-VITS] synthesis: %.3fs (container=%s, %d chars, %d bytes)",
+            "[TIMING][SINHALA-F5TTS] synthesis: %.3fs (container=%s, %d chars, %d bytes)",
             elapsed, warmth, len(text), len(content),
         )
         return content
@@ -958,6 +1012,8 @@ async def call_sinhala_vits_tts_direct(text: str) -> bytes | None:
             elapsed, type(exc).__name__, exc,
         )
         return None
+
+
 
 
 async def call_sinhala_vits_romanize(text: str) -> dict | None:

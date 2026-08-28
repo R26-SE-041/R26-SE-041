@@ -23,7 +23,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.security import get_current_user
-from app.services.modal_client import call_transcript_corrector, call_rag_generator, call_localizer
+from app.services.modal_client import call_answer_generator, call_transcript_corrector, call_localizer
+from app.services.model_router import DOCUMENT_RAG_BASE, choose_answer_route
 from app.schemas.document import (
     DocumentUploadResponse,
     DocumentListItem,
@@ -37,6 +38,12 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.services import local_document_store
 from app.services.bge_m3_cache import bge_m3_cache_status
+from app.agents.tutor.config import load_tutor_instructions
+from app.agents.tutor.memory import (
+    contextual_retrieval_query,
+    get_relevant_memento,
+    update_memento,
+)
 
 logger = get_logger(__name__)
 
@@ -374,18 +381,12 @@ async def ask_question(
     4. Return the final answer + source references
     """
     rag_started = time.perf_counter()
-    bge_ready, _ = bge_m3_cache_status()
-    if not bge_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="BGE-M3 model unavailable: local cache is incomplete or corrupt.",
-        )
-    from app.services.ingestion import hybrid_query_chunks
-
     user_id = current_user["sub"] if current_user else "guest"
     transcript = body.transcript.strip()
     language = body.language
-    direct_multilingual_gemma = get_settings().use_direct_multilingual_gemma
+    settings = get_settings()
+    direct_multilingual_gemma = getattr(settings, "use_direct_multilingual_gemma", True)
+    debug_routes = bool(getattr(settings, "debug", False))
 
     if not transcript:
         raise HTTPException(status_code=400, detail="transcript cannot be empty")
@@ -398,9 +399,54 @@ async def ask_question(
         query = transcript
         logger.info("Ask: using raw transcript directly")
 
+    memento = get_relevant_memento(body.session_id, query)
+    route = choose_answer_route(
+        query,
+        document_grounded=body.document_grounded,
+        memento=memento,
+    )
+    logger.info("[ANSWER_ROUTE] route=%s reason=%s", route.name, route.reason)
+
+    # Non-document questions must not query Chroma or invoke the RAG endpoint.
+    if route.name != DOCUMENT_RAG_BASE:
+        try:
+            result = await call_answer_generator(
+                query,
+                language,
+                route=route.name,
+                tutor_instructions=load_tutor_instructions(),
+                memento=memento,
+            )
+            answer = result.get("answer", "I couldn't generate an answer right now.")
+        except Exception as exc:
+            logger.error("Answer generator route=%s failed: %s", route.name, exc)
+            answer = "Answer generation is not available right now."
+        update_memento(
+            body.session_id,
+            language=language,
+            document_ids=[],
+            question=query,
+            answer=answer,
+        )
+        return AskResponse(
+            answer=answer,
+            enhanced_query=query,
+            references=[],
+            route=route.name if debug_routes else None,
+        )
+
+    bge_ready, _ = bge_m3_cache_status()
+    if not bge_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="BGE-M3 model unavailable: local cache is incomplete or corrupt.",
+        )
+    from app.services.ingestion import hybrid_query_chunks
+    retrieval_query = contextual_retrieval_query(query, memento)
+
     # Step 2 -- BGE-M3 dense retrieval + BM25 keyword signals + multilingual reranking.
     retrieval_started = time.perf_counter()
-    raw_chunks = await hybrid_query_chunks(query, user_id, n_results=5)
+    raw_chunks = await hybrid_query_chunks(retrieval_query, user_id, n_results=5)
     logger.info("[LATENCY] RETRIEVAL = %.3fs", time.perf_counter() - retrieval_started)
 
     if not raw_chunks:
@@ -415,6 +461,7 @@ async def ask_question(
             ),
             enhanced_query=query,
             references=[],
+            route=route.name if debug_routes else None,
         )
         logger.info("[LATENCY] RAG TOTAL = %.3fs", time.perf_counter() - rag_started)
         return response
@@ -423,14 +470,25 @@ async def ask_question(
     # immediately restorable without duplicating retrieval or generation.
     context_texts = [c["text"] for c in raw_chunks]
     rag_language = language if direct_multilingual_gemma else "english"
+    tutor_instructions = load_tutor_instructions()
+    document_ids = list({str(c.get("metadata", {}).get("document_id")) for c in raw_chunks if c.get("metadata", {}).get("document_id")})
     logger.info(
-        "[RAG] direct_multilingual_gemma=%s language=%s",
+        "[RAG] direct_multilingual_gemma=%s language=%s context_provided=%s session_memory_used=%s",
         str(direct_multilingual_gemma).lower(),
         language,
+        bool(context_texts),
+        bool(memento),
     )
     gemma_started = time.perf_counter()
     try:
-        rag_result = await call_rag_generator(query, context_texts, rag_language)
+        rag_result = await call_answer_generator(
+            retrieval_query,
+            rag_language,
+            route=route.name,
+            context_chunks=context_texts,
+            tutor_instructions=tutor_instructions,
+            memento=memento,
+        )
         answer = rag_result.get("answer", "I couldn't generate an answer right now.")
         remote_timings = rag_result.get("timings_ms") or {}
         logger.info(
@@ -474,6 +532,14 @@ async def ask_question(
     else:
         localized_answer = answer
 
+    update_memento(
+        body.session_id,
+        language=language,
+        document_ids=document_ids,
+        question=query,
+        answer=localized_answer,
+    )
+
     # Step 5 — Build source references
     references = []
     for idx, chunk in enumerate(raw_chunks):
@@ -501,6 +567,7 @@ async def ask_question(
         answer=localized_answer,
         enhanced_query=query,
         references=references,
+        route=route.name if debug_routes else None,
     )
     logger.info("[LATENCY] RAG TOTAL = %.3fs", time.perf_counter() - rag_started)
     return response

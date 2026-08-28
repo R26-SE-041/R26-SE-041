@@ -42,6 +42,15 @@ class AskRequest(BaseModel):
         default=None,
         description="If provided, skip prompt enhancement and use this query directly",
     )
+    session_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Optional opaque ID for short-lived Tutor follow-up context",
+    )
+    document_grounded: bool = Field(
+        default=False,
+        description="True only when this request is explicitly asking about uploaded documents",
+    )
 
 
 class EnhanceRequest(BaseModel):
@@ -59,3 +68,4 @@ class AskResponse(BaseModel):
     answer: str
     enhanced_query: str | None = None
     references: list[ChunkReference] = []
+    route: str | None = Field(default=None, description="Debug-only route label when DEBUG is enabled")

@@ -1,6 +1,5 @@
 'use client'
 
-import { clsx } from 'clsx'
 import type { Language } from '@/types'
 
 interface LanguageSelectorProps {
@@ -9,37 +8,47 @@ interface LanguageSelectorProps {
   disabled?: boolean
 }
 
-const LANGUAGES: Array<{ value: Language; label: string; native: string }> = [
-  { value: 'english', label: 'English', native: 'Full English' },
-  { value: 'tamil', label: 'Tamil', native: 'தமிழ்' },
-  { value: 'sinhala', label: 'Sinhala', native: 'සිංහල' },
+const LANGUAGES: Array<{ value: Language; label: string; native: string; flag: string }> = [
+  { value: 'english', label: 'English', native: 'EN',    flag: '🇬🇧' },
+  { value: 'tamil',   label: 'Tamil',   native: 'தமிழ்', flag: '🇮🇳' },
+  { value: 'sinhala', label: 'Sinhala', native: 'සිං',   flag: '🇱🇰' },
 ]
 
-export function LanguageSelector({ value, onChange, disabled = false }: LanguageSelectorProps) {
+export function LanguageSelector({ value, onChange, disabled }: LanguageSelectorProps) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Response language">
-      {LANGUAGES.map((language) => {
-        const selected = value === language.value
+    <div className="flex flex-row gap-2 flex-wrap">
+      {LANGUAGES.map((lang) => {
+        const active = value === lang.value
         return (
           <button
-            key={language.value}
-            id={`lang-${language.value}`}
-            type="button"
-            role="radio"
-            aria-checked={selected}
+            key={lang.value}
+            onClick={() => !disabled && onChange(lang.value)}
             disabled={disabled}
-            onClick={() => onChange(language.value)}
-            className={clsx(
-              'relative flex min-h-24 flex-col items-start justify-center rounded-2xl border px-5 text-left transition-all',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:pointer-events-none disabled:opacity-50',
-              selected
-                ? 'border-brand-400/70 bg-brand-500/15 shadow-brand'
-                : 'border-white/10 bg-white/[0.025] hover:border-white/20 hover:bg-white/[0.05]',
-            )}
+            aria-pressed={active}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              borderRadius: 999,
+              fontSize: 13,
+              fontWeight: active ? 600 : 500,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.5 : 1,
+              transition: 'all 0.15s ease',
+              background: active ? 'var(--c-blue-soft)' : 'var(--c-inset)',
+              border: `1.5px solid ${active ? 'var(--c-blue)' : 'var(--c-border)'}`,
+              color: active ? 'var(--c-blue)' : 'var(--c-ink-muted)',
+              whiteSpace: 'nowrap',
+            }}
           >
-            {selected && <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-brand-300" />}
-            <span className="text-sm font-semibold text-white/90">{language.label}</span>
-            <span className="mt-1 text-sm text-white/45">{language.native}</span>
+            <span>{lang.label}</span>
+            {active && (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
           </button>
         )
       })}
