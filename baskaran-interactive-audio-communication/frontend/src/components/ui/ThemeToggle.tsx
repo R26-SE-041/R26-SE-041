@@ -14,9 +14,9 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
       title={isDark ? 'Light mode' : 'Dark mode'}
       className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${className}`}
       style={{
-        background: 'var(--c-inset)',
-        border: '1.5px solid var(--c-border)',
-        color: 'var(--c-ink-muted)',
+        background: 'var(--surface-soft)',
+        border: '1px solid var(--border)',
+        color: 'var(--text-muted)',
       }}
     >
       {isDark ? (

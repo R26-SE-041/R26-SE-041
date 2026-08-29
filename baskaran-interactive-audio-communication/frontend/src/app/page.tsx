@@ -55,31 +55,40 @@ const features = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen" style={{ background: '#F5F4EF' }}>
+    <main className="min-h-screen relative" style={{ background: 'var(--background)' }}>
 
-      {/* ── Nav ───────────────────────────────────────────────────────── */}
-      <nav className="nb-header sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      {/* ── Ambient background blobs ─────────────────────────────────────── */}
+      <div className="vl-ambient" aria-hidden="true">
+        <div className="vl-ambient-top" />
+        <div className="vl-ambient-bottom" />
+      </div>
+
+      {/* ── Nav ───────────────────────────────────────────────────────────── */}
+      <nav className="nb-header sticky top-0 z-20" style={{ position: 'relative', zIndex: 20 }}>
+        <div className="vl-page h-16 flex items-center justify-between" style={{ maxWidth: 1040 }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#1A73E8' }}>
+            <div className="w-8 h-8 rounded-[13px] flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--primary)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span className="font-semibold text-base text-ink tracking-tight">VoiceLearn AI</span>
+            <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--text)' }}>VoiceLearn AI</span>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/login"
-              className="text-sm font-medium text-ink-muted hover:text-ink transition-colors px-4 py-2 rounded-lg hover:bg-sand-200"
+              className="text-sm font-medium px-4 py-2 rounded-[13px] transition-colors"
+              style={{ color: 'var(--text-muted)' }}
             >
               Sign In
             </Link>
             <Link
               href="/register"
-              className="text-sm font-medium text-white px-5 py-2.5 rounded-lg transition-all hover:shadow-blue"
-              style={{ background: '#1A73E8' }}
+              className="vl-btn-primary text-sm"
+              id="nav-get-started"
+              style={{ minHeight: 38, padding: '0 18px', borderRadius: 13 }}
             >
               Get Started
             </Link>
@@ -87,21 +96,26 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* ── Hero ───────────────────────────────────────────────────────── */}
-      <section className="max-w-4xl mx-auto px-6 pt-20 pb-16 text-center">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold mb-8 border"
-          style={{ background: '#EEF3FD', borderColor: 'rgba(26,115,232,0.2)', color: '#1A73E8' }}>
-          <span className="nb-dot nb-dot-blue animate-pulse-slow" />
-          Powered by Whisper · Llama 3.1 · Kokoro-82M
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      <section className="vl-page pt-20 pb-16 text-center relative z-10" style={{ maxWidth: 900, margin: '0 auto' }}>
+        {/* Eyebrow badge */}
+        <div className="inline-flex items-center gap-2 rounded-[50px] px-4 py-1.5 mb-8"
+          style={{
+            background: 'var(--primary-soft)',
+            border: '1px solid var(--primary-border)',
+            fontSize: 11, fontWeight: 800, letterSpacing: 2.2,
+            textTransform: 'uppercase', color: 'var(--primary)',
+          }}>
+          <span className="vl-dot animate-pulse-slow" />
+          Whisper · Llama 3.1 · Kokoro-82M
         </div>
 
-        <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-5 text-ink leading-tight">
+        <h1 className="vl-hero-title mb-5" style={{ fontSize: 'clamp(38px, 6vw, 58px)', lineHeight: '1.08', letterSpacing: '-1.5px' }}>
           Your AI-powered<br />
-          <span style={{ color: '#1A73E8' }}>Study Notebook</span>
+          <span style={{ color: 'var(--primary)' }}>Study Notebook</span>
         </h1>
 
-        <p className="text-lg text-ink-muted max-w-2xl mx-auto mb-10 leading-relaxed">
+        <p className="text-lg max-w-2xl mx-auto mb-10 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
           Upload lecture slides, PDFs, and notes — then ask questions in your voice.
           Get spoken answers in English, Tamil, or Sinhala, grounded in your own materials.
         </p>
@@ -110,8 +124,7 @@ export default function HomePage() {
           <Link
             href="/register"
             id="cta-register"
-            className="inline-flex items-center justify-center gap-2 text-white font-semibold px-8 py-3.5 rounded-xl text-base transition-all hover:shadow-blue hover:-translate-y-0.5"
-            style={{ background: '#1A73E8' }}
+            className="vl-btn-primary inline-flex items-center justify-center gap-2 text-base"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
@@ -122,51 +135,52 @@ export default function HomePage() {
           <Link
             href="/login"
             id="cta-login"
-            className="nb-btn-ghost inline-flex items-center justify-center px-8 py-3.5 rounded-xl text-base"
+            className="vl-btn-secondary inline-flex items-center justify-center text-base"
           >
             Sign In →
           </Link>
         </div>
 
         {/* Demo links */}
-        <div className="flex items-center justify-center gap-4 mt-5">
-          <Link href="/test" className="text-xs text-ink-faint hover:text-blue-500 transition-colors">
+        <div className="flex items-center justify-center gap-4 mt-6">
+          <Link href="/test" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
             → Voice Studio
           </Link>
-          <span className="text-ink-ghost">·</span>
-          <Link href="/documents" className="text-xs text-ink-faint hover:text-blue-500 transition-colors">
+          <span style={{ color: 'var(--text-dim)' }}>·</span>
+          <Link href="/documents" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
             → Document Library
           </Link>
         </div>
       </section>
 
-      {/* ── Features ──────────────────────────────────────────────────── */}
-      <section className="max-w-5xl mx-auto px-6 pb-24">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── Features ──────────────────────────────────────────────────────── */}
+      <section className="vl-page pb-24 relative z-10" style={{ maxWidth: 1040, margin: '0 auto' }}>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {features.map((f) => (
-            <div key={f.title} className="nb-card p-6 hover:-translate-y-0.5 transition-transform">
+            <div key={f.title} className="nb-card p-[22px] hover:-translate-y-1 transition-transform duration-200">
               <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                style={{ background: '#EEF3FD', color: '#1A73E8' }}
+                className="w-10 h-10 rounded-[13px] flex items-center justify-center mb-4"
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}
               >
                 {f.icon}
               </div>
-              <h3 className="font-semibold text-ink mb-2 text-sm">{f.title}</h3>
-              <p className="text-sm text-ink-muted leading-relaxed">{f.desc}</p>
+              <h3 className="font-bold text-sm mb-2" style={{ color: 'var(--text)', fontFamily: 'Georgia, serif' }}>{f.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>{f.desc}</p>
             </div>
           ))}
         </div>
 
         {/* Language pills */}
-        <div className="mt-12 text-center">
-          <p className="text-xs text-ink-faint mb-4 nb-label">Supported Languages</p>
+        <div className="mt-14 text-center">
+          <p className="vl-eyebrow mb-4">Supported Languages</p>
           <div className="flex flex-wrap justify-center gap-3">
             {[
               { flag: '🇬🇧', name: 'English' },
               { flag: '🇮🇳', name: 'Tamil · தமிழ்' },
               { flag: '🇱🇰', name: 'Sinhala · සිංහල' },
             ].map((l) => (
-              <span key={l.name} className="nb-card px-5 py-2.5 text-sm font-medium text-ink-soft flex items-center gap-2">
+              <span key={l.name} className="nb-card px-5 py-2.5 text-sm font-medium flex items-center gap-2"
+                style={{ color: 'var(--text-muted)', borderRadius: 20 }}>
                 <span>{l.flag}</span>
                 <span>{l.name}</span>
               </span>
@@ -175,7 +189,8 @@ export default function HomePage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-16 pt-8 border-t border-sand-200 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-ink-faint">
+        <div className="mt-16 pt-8 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs"
+          style={{ borderTop: '1px solid var(--border)', color: 'var(--text-dim)' }}>
           <span>Llama 3.1 8B</span>
           <span>·</span>
           <span>Whisper Large V3</span>

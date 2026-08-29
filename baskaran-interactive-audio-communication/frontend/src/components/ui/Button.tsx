@@ -9,19 +9,30 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = 'primary', size = 'md', loading, children, className, disabled, ...props }, ref) => {
-    const base = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900 disabled:opacity-50 disabled:cursor-not-allowed select-none'
+    const base =
+      'inline-flex items-center justify-center font-bold rounded-[13px] transition-all duration-150 ' +
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
+      'disabled:opacity-45 disabled:cursor-not-allowed select-none ' +
+      'active:not(:disabled):opacity-[0.78] active:not(:disabled):scale-[0.99]'
 
-    const variants = {
-      primary: 'bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-500 hover:to-accent-500 text-white shadow-brand hover:shadow-brand-lg active:scale-95',
-      secondary: 'bg-surface-700 hover:bg-surface-600 text-white border border-white/10 hover:border-white/20 active:scale-95',
-      ghost: 'text-white/70 hover:text-white hover:bg-white/5 active:scale-95',
-      danger: 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 active:scale-95',
+    const variants: Record<string, string> = {
+      primary:   'text-white border-none',
+      secondary: 'border',
+      ghost:     'border',
+      danger:    'border',
     }
 
-    const sizes = {
-      sm: 'px-3 py-1.5 text-sm gap-1.5',
-      md: 'px-5 py-2.5 text-sm gap-2',
-      lg: 'px-7 py-3.5 text-base gap-2.5',
+    const variantStyles: Record<string, React.CSSProperties> = {
+      primary:   { background: 'var(--primary)', color: '#ffffff', border: 'none' },
+      secondary: { background: 'var(--surface-soft)', border: '1px solid var(--border)', color: 'var(--text)' },
+      ghost:     { background: 'var(--surface-soft)', border: '1px solid var(--border)', color: 'var(--text-muted)' },
+      danger:    { background: 'var(--danger-soft)',  border: '1px solid var(--danger-border)', color: 'var(--danger)' },
+    }
+
+    const sizes: Record<string, string> = {
+      sm: 'min-h-[36px] px-[14px] text-[13px] gap-[6px]',
+      md: 'min-h-[46px] px-[18px] text-[14px] gap-[8px]',
+      lg: 'min-h-[52px] px-[22px] text-[15px] gap-[8px]',
     }
 
     return (
@@ -29,6 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={clsx(base, variants[variant], sizes[size], className)}
+        style={variantStyles[variant]}
         {...props}
       >
         {loading && (

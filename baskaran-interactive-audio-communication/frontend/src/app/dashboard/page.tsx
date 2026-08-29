@@ -97,7 +97,13 @@ export default function DashboardPage() {
   const handleSignOut = async () => { await signOut(); router.push('/') }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--c-bg)', transition: 'background 0.25s' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--background)', transition: 'background 0.3s' }}>
+
+      {/* ── Ambient blobs ─────────────────────────────────────────────────── */}
+      <div className="vl-ambient" aria-hidden="true">
+        <div className="vl-ambient-top" />
+        <div className="vl-ambient-bottom" />
+      </div>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <header className="nb-header sticky top-0 z-20">
@@ -120,10 +126,10 @@ export default function DashboardPage() {
           {/* Center: Processing badge */}
           {isQuerying && (
             <div className="hidden sm:flex items-center gap-2 text-xs animate-fade-in"
-              style={{ background: 'var(--c-blue-soft)', borderRadius: 999, padding: '5px 14px',
-                border: '1px solid var(--c-blue-border)', color: 'var(--c-blue)' }}>
+              style={{ background: 'var(--primary-soft)', borderRadius: 999, padding: '5px 14px',
+                border: '1px solid var(--primary-border)', color: 'var(--primary)' }}>
               <div className="w-3 h-3 rounded-full border-2 animate-spin"
-                style={{ borderColor: 'var(--c-blue-soft)', borderTopColor: 'var(--c-blue)' }} />
+                style={{ borderColor: 'var(--primary-soft)', borderTopColor: 'var(--primary)' }} />
               Finding answer from your documents…
             </div>
           )}
