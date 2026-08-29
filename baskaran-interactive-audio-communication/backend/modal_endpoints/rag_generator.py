@@ -38,7 +38,10 @@ image = (
     )
 )
 
-_BASE_MODEL_ID = "google/gemma-4-12B-it"
+_BASE_MODEL_ID = os.environ.get(
+    "VOICELEARN_GEMMA_BASE_PATH",
+    "/models/gemma/base",
+).strip()
 _ADAPTER_PATH = os.environ.get(
     "VOICELEARN_GEMMA_ADAPTER_PATH",
     "/models/gemma/adapters/v2",

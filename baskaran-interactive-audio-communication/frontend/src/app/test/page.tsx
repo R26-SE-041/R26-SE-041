@@ -239,7 +239,17 @@ export default function StudyAssistantPage() {
         documentGrounded: isDocumentGrounded,
       })
       setPhase('answered')
-      void synthesizeAnswer(answer.answer, language)
+      // Only synthesize if we have a real answer — skip TTS for backend error
+      // messages (e.g. "Answer generation is not available right now.") which
+      // contain only English and would produce empty audio.
+      const isErrorAnswer =
+        answer.answer.startsWith('Answer generation is not available') ||
+        answer.answer.startsWith('RAG generation is not available') ||
+        answer.answer.startsWith("I couldn't generate") ||
+        answer.answer.startsWith("I couldn't find relevant content")
+      if (!isErrorAnswer) {
+        void synthesizeAnswer(answer.answer, language)
+      }
     } catch (error) {
       setPhase('rag-error')
       setRagError(

@@ -15,8 +15,11 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Shared async client with a generous timeout for cold-start
-_http = httpx.AsyncClient(timeout=120.0)
+# Shared async client — follow_redirects=True is REQUIRED for Modal endpoints:
+# Modal returns HTTP 303 See Other with a JWT attempt-token when a container
+# finishes a cold-start.  Without this flag httpx raises HTTPStatusError on 303
+# and the caller never receives the actual inference response.
+_http = httpx.AsyncClient(timeout=120.0, follow_redirects=True)
 
 
 def _auth_headers() -> dict[str, str]:
@@ -120,7 +123,7 @@ async def call_bge_rerank(
                 "candidates": candidates,
                 "top_k": top_k,
             },
-            timeout=60.0,   # reranker is fast on GPU; 45 s covers cold-start
+            timeout=120.0,  # T4 cold-start observed at ~60-90s; 120s gives full headroom
         )
         response.raise_for_status()
         data = response.json()
@@ -443,7 +446,7 @@ async def call_answer_generator(
                 "memento": memento,
                 "route": route,
             },
-            timeout=300.0,
+            timeout=480.0,  # A100 cold-start for Gemma 4 12B + LoRA can reach 6-7 min
         )
         response.raise_for_status()
         return response.json()

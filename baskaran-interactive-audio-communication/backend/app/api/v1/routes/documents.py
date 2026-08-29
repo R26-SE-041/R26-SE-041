@@ -419,7 +419,10 @@ async def ask_question(
             )
             answer = result.get("answer", "I couldn't generate an answer right now.")
         except Exception as exc:
-            logger.error("Answer generator route=%s failed: %s", route.name, exc)
+            logger.error(
+                "Answer generator route=%s failed (%s: %s)",
+                route.name, type(exc).__name__, exc,
+            )
             answer = "Answer generation is not available right now."
         update_memento(
             body.session_id,

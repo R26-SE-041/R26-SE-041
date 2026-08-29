@@ -32,6 +32,7 @@ Usage:
       language_hint: "tamil"      (only "tamil" supported; others raise 400)
 """
 
+import os
 import tempfile
 import time
 
@@ -66,7 +67,10 @@ image = (
     )
 )
 
-app = modal.App("voicelearn-tamil-asr-qwen3", image=image)
+app = modal.App(
+    os.environ.get("VOICELEARN_TAMIL_ASR_APP_NAME", "voicelearn-tamil-asr-qwen3"),
+    image=image,
+)
 model_volume = modal.Volume.from_name("voicelearn-models", create_if_missing=True)
 
 # Model ID -- osmapi/tamil-asr-qwen3 mirrors lemuralabs/tamil-asr-qwen3

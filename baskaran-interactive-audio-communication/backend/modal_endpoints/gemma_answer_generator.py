@@ -17,7 +17,11 @@ from typing import Any
 import modal
 from pydantic import BaseModel, Field
 
-_BASE_MODEL_ID = "google/gemma-4-12B-it"
+_BASE_MODEL_CANONICAL_ID = "google/gemma-4-12B-it"
+_BASE_MODEL_PATH = os.environ.get(
+    "VOICELEARN_GEMMA_BASE_PATH",
+    "/models/gemma/base",
+).strip()
 _ADAPTER_PATH = "/models/gemma/adapters/v2"
 _APP_NAME = "voicelearn-hybrid-gemma"
 
@@ -136,7 +140,7 @@ class _GemmaAnswerBase:
         return {
             "answer": self.processor.decode(output[0][input_length:], skip_special_tokens=True).strip(),
             "route": payload.route,
-            "model_id": _BASE_MODEL_ID,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
             "adapter_active": bool(getattr(self.model, "peft_config", None)),
         }
 
@@ -151,16 +155,16 @@ class BaseGemmaAnswer(_GemmaAnswerBase):
         import torch
         from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-        self.processor = AutoProcessor.from_pretrained(_BASE_MODEL_ID, cache_dir="/models", local_files_only=True)
+        self.processor = AutoProcessor.from_pretrained(_BASE_MODEL_PATH, cache_dir="/models", local_files_only=True)
         self.model = AutoModelForMultimodalLM.from_pretrained(
-            _BASE_MODEL_ID, torch_dtype=torch.bfloat16, device_map="auto",
+            _BASE_MODEL_PATH, dtype=torch.bfloat16, device_map="auto",
             attn_implementation="sdpa", cache_dir="/models", local_files_only=True,
         ).eval()
         if getattr(self.model, "peft_config", None):
             raise RuntimeError("Base Gemma isolation failed: PEFT configuration is present")
         print(
             "[BaseGemmaAnswer] READY "
-            f"base={_BASE_MODEL_ID}; model_class={type(self.model).__name__}; "
+            f"base={_BASE_MODEL_PATH}; model_class={type(self.model).__name__}; "
             "adapter_active=false; peft_wrapper=false; local_files_only=true"
         )
 
@@ -168,7 +172,8 @@ class BaseGemmaAnswer(_GemmaAnswerBase):
     def health(self):
         return {
             "ready": True,
-            "model_id": _BASE_MODEL_ID,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
+            "model_path": _BASE_MODEL_PATH,
             "adapter_active": False,
             "peft_wrapper": False,
         }
@@ -185,7 +190,7 @@ class BaseGemmaAnswer(_GemmaAnswerBase):
 
 
 @app.cls(gpu="A100-80GB", volumes={"/models": model_volume}, min_containers=0,
-         max_containers=1, buffer_containers=0, scaledown_window=60, memory=16384)
+         max_containers=1, buffer_containers=0, scaledown_window=600, memory=16384)
 class FineTunedGemmaV2Answer(_GemmaAnswerBase):
     """Gemma plus the verified VoiceLearn V2 LoRA; never accepts RAG context."""
 
@@ -201,13 +206,17 @@ class FineTunedGemmaV2Answer(_GemmaAnswerBase):
             raise FileNotFoundError("VoiceLearn V2 adapter config is missing")
         with open(adapter_config_path, "r", encoding="utf-8") as handle:
             adapter_config = json.load(handle)
-        if adapter_config.get("base_model_name_or_path") != _BASE_MODEL_ID:
+        # PEFT records the canonical Hugging Face model ID at training time,
+        # while production loads the exact same weights from a local Modal
+        # Volume path. Comparing that metadata with the local filesystem path
+        # made every V2 container crash during startup and left requests queued.
+        if adapter_config.get("base_model_name_or_path") != _BASE_MODEL_CANONICAL_ID:
             raise RuntimeError("VoiceLearn V2 adapter declares the wrong base model")
         if str(adapter_config.get("peft_type", "")).upper() != "LORA":
             raise RuntimeError("VoiceLearn V2 adapter is not PEFT LoRA")
         self.processor = AutoProcessor.from_pretrained(_ADAPTER_PATH, cache_dir="/models", local_files_only=True)
         base = AutoModelForMultimodalLM.from_pretrained(
-            _BASE_MODEL_ID, torch_dtype=torch.bfloat16, device_map="auto",
+            _BASE_MODEL_PATH, dtype=torch.bfloat16, device_map="auto",
             attn_implementation="sdpa", cache_dir="/models", local_files_only=True,
         )
         self.model = PeftModel.from_pretrained(base, _ADAPTER_PATH, local_files_only=True).eval()
@@ -215,7 +224,7 @@ class FineTunedGemmaV2Answer(_GemmaAnswerBase):
             raise RuntimeError("VoiceLearn V2 PEFT adapter did not activate")
         print(
             "[FineTunedGemmaV2Answer] READY "
-            f"base={_BASE_MODEL_ID}; adapter={_ADAPTER_PATH}; PEFT=LORA; "
+            f"base={_BASE_MODEL_PATH}; adapter={_ADAPTER_PATH}; PEFT=LORA; "
             f"adapters={list(self.model.peft_config)}; local_files_only=true"
         )
 
@@ -223,7 +232,8 @@ class FineTunedGemmaV2Answer(_GemmaAnswerBase):
     def health(self):
         return {
             "ready": True,
-            "model_id": _BASE_MODEL_ID,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
+            "model_path": _BASE_MODEL_PATH,
             "adapter_path": _ADAPTER_PATH,
             "adapter_active": bool(getattr(self.model, "peft_config", None)),
             "peft_type": "LORA",
