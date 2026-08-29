@@ -328,56 +328,73 @@ export default function StudyAssistantPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen" style={{ background: 'var(--c-bg)', transition: 'background 0.25s' }}>
+    <div className="min-h-screen" style={{ background: 'var(--background)', transition: 'background 0.3s' }}>
+
+      {/* Ambient blobs */}
+      <div className="vl-ambient" aria-hidden="true">
+        <div className="vl-ambient-top" />
+        <div className="vl-ambient-bottom" />
+      </div>
+
       {/* ── Header ── */}
       <header className="nb-header sticky top-0 z-50">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--c-blue)' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-[13px] flex items-center justify-center" style={{ background: 'var(--primary)' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Learning Assistant</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Learning Assistant</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium" style={{ color: 'var(--c-ink-faint)' }}>Voice Interaction</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-dim)' }}>Voice Interaction</span>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-8 pb-24 sm:px-6">
+      <main className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 pb-28 sm:px-8 lg:px-10 lg:py-10">
 
         {/* ── Hero ── */}
-        <div className="flex flex-col items-center gap-2 pb-2 text-center pt-4">
-          <p className="nb-label" style={{ color: '#1A73E8' }}>AI Study Assistant</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-ink">Learn with your voice</h1>
-          <p className="max-w-xl text-sm leading-relaxed text-ink-muted">
+        <div className="flex flex-col items-center gap-3 pb-1 pt-4 text-center lg:pt-5">
+          <p className="vl-eyebrow">AI Study Assistant</p>
+          <h1 className="vl-serif text-5xl font-bold tracking-tight" style={{ color: 'var(--text)', fontSize: 42, lineHeight: 1.1 }}>Learn with your voice</h1>
+          <p className="max-w-2xl text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
             Study your documents or explore specialized anatomy topics in English, Tamil, and Sinhala.
           </p>
         </div>
 
-        {/* ── Study Mode Selector ── */}
-        <div className="flex flex-col items-center gap-3">
-          <p className="nb-label">{loc.ui.studyMode}</p>
-          <StudyModeSelector
-            value={studyMode}
-            onChange={handleStudyModeChange}
-            disabled={phase === 'asking'}
-          />
-        </div>
+        {/* ── Study controls ── */}
+        <section className="nb-card flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-start lg:gap-5">
+            <div>
+              <p className="vl-label">{loc.ui.studyMode}</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Choose how you want to learn</p>
+            </div>
+            <StudyModeSelector
+              value={studyMode}
+              onChange={handleStudyModeChange}
+              disabled={phase === 'asking'}
+            />
+          </div>
 
-        {/* ── Response Language ── */}
-        <Section title={loc.ui.responseLanguage}>
-          <LanguageSelector value={language} onChange={selectLanguage} disabled={phase === 'asking'} />
-        </Section>
+          <div className="hidden h-10 w-px lg:block" style={{ background: 'var(--border)' }} aria-hidden />
+
+          <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between lg:flex-1 lg:justify-end lg:gap-5 lg:border-0 lg:pt-0" style={{ borderColor: 'var(--border)' }}>
+            <div className="lg:text-right">
+              <p className="vl-label">{loc.ui.responseLanguage}</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Answers and audio</p>
+            </div>
+            <LanguageSelector value={language} onChange={selectLanguage} disabled={phase === 'asking'} />
+          </div>
+        </section>
 
         {/* ── Document Study panel ── */}
         {studyMode === 'document' && (
-          <Section title="Document Study">
-            <p style={{ fontSize: 13, color: 'var(--c-ink-muted)', marginBottom: 16, lineHeight: 1.55 }}>
+          <SectionWide title="Document Study">
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               Upload your notes, PDFs, slides, or study files and receive answers grounded in your documents.
             </p>
 
@@ -405,43 +422,48 @@ export default function StudyAssistantPage() {
                 const file = event.dataTransfer.files[0]
                 if (file) void handleFileUpload(file)
               }}
-              className="flex w-full flex-col items-center gap-2 rounded-2xl px-5 py-8 transition-all disabled:cursor-wait disabled:opacity-60"
+              className="flex min-h-[210px] w-full flex-col items-center justify-center gap-3 rounded-[20px] px-8 py-12 transition-all disabled:cursor-wait disabled:opacity-60 lg:min-h-[225px]"
               style={{
-                border: `2px dashed ${dragOver ? '#1A73E8' : 'rgba(0,0,0,0.12)'}`,
-                background: dragOver ? '#EEF3FD' : '#F5F4EF',
+                border: `2px dashed ${dragOver ? 'var(--primary)' : 'var(--border)'}`,
+                background: dragOver ? 'var(--primary-soft)' : 'var(--surface-soft)',
               }}
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: '#EEF3FD' }} aria-hidden>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <span className="flex h-14 w-14 items-center justify-center rounded-[13px]" style={{ background: 'var(--primary-soft)' }} aria-hidden>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </span>
-              <span className="text-sm font-medium text-ink">{uploading ? 'Indexing document…' : 'Upload or drop a document'}</span>
-              <span className="text-xs text-ink-faint">PDF, PowerPoint, Word, Excel, text, or Markdown</span>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-base font-semibold" style={{ color: 'var(--text)' }}>{uploading ? 'Indexing document…' : 'Upload or drop a document'}</span>
+                <span className="text-sm" style={{ color: 'var(--text-dim)' }}>PDF, PowerPoint, Word, Excel, text, or Markdown</span>
+              </div>
             </button>
 
             {/* Indexed document list */}
-            <div className="mt-4">
-              <p className="nb-label mb-3">Indexed Documents</p>
+            <div className="mt-6">
+              <p className="vl-label mb-4">Indexed Documents</p>
               {documentsLoading ? (
-                <p className="text-sm text-ink-faint">Loading documents…</p>
+                <p className="text-sm" style={{ color: 'var(--text-dim)' }}>Loading documents…</p>
               ) : documents.length === 0 ? (
-                <p className="rounded-xl px-4 py-3 text-sm text-ink-faint" style={{ background: '#F5F4EF', border: '1px solid rgba(0,0,0,0.07)' }}>No documents indexed yet.</p>
+                <p className="rounded-[16px] px-5 py-4 text-sm" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>No documents indexed yet.</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {documents.map((document) => (
-                    <li key={document.document_id} className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.07)' }}>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold uppercase" style={{ background: '#EEF3FD', color: '#1A73E8' }}>{document.file_type}</span>
+                    <li key={document.document_id} className="flex items-center gap-4 rounded-[16px] px-5 py-4" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)' }}>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold uppercase" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{document.file_type}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-ink">{document.filename}</p>
-                        <p className="text-xs text-ink-faint">Ready to search</p>
+                        <p className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{document.filename}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Ready to search</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => void handleDelete(document.document_id)}
-                        className="rounded-lg px-2 py-1 text-xs font-medium text-ink-faint transition-colors hover:text-red-600 hover:bg-red-50"
+                        className="rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-all"
+                        style={{ color: 'var(--text-dim)', background: 'var(--surface-soft)', border: '1px solid var(--border)' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.borderColor = 'var(--danger-border)'; e.currentTarget.style.background = 'var(--danger-soft)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface-soft)' }}
                         aria-label={`Remove ${document.filename}`}
                       >
                         Remove
@@ -453,18 +475,18 @@ export default function StudyAssistantPage() {
             </div>
 
             {documentError && <ErrorNotice message={documentError} />}
-          </Section>
+          </SectionWide>
         )}
 
         {/* ── Muscle Tutor panel ── */}
         {studyMode === 'muscle' && (
-          <Section title={loc.ui.muscleTutor}>
+          <SectionWide title={loc.ui.muscleTutor}>
             <MuscleTopicGrid language={language} onPromptSelect={handlePromptSelect} />
-          </Section>
+          </SectionWide>
         )}
 
         {/* ── Ask a Question (shared by both modes) ── */}
-        <Section title={loc.ui.askAQuestion}>
+        <SectionWide title={loc.ui.askAQuestion}>
           <VoiceRecorder
             language={language}
             onTranscript={handleTranscript}
@@ -473,38 +495,38 @@ export default function StudyAssistantPage() {
           />
           {phase === 'asking' && (
             <div
-              className="flex items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm animate-fade-up"
-              style={{ background: '#EEF3FD', border: '1px solid rgba(26,115,232,0.2)', color: '#1A73E8', marginTop: 12 }}
+              className="flex items-center justify-center gap-3 rounded-[13px] px-6 py-4 text-sm animate-fade-up"
+              style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-border)', color: 'var(--primary)', marginTop: 16 }}
             >
               <Spinner />
               {askingText}
             </div>
           )}
           {asrError && <ErrorNotice message={asrError} />}
-        </Section>
+        </SectionWide>
 
         {/* ── Transcript / Fix / Ask (shared by both modes) ── */}
         {transcript && (
-          <Section title={loc.ui.yourQuestion}>
+          <SectionWide title={loc.ui.yourQuestion}>
             <textarea
               value={transcript}
               onChange={(event) => handleTranscriptChange(event.target.value)}
               disabled={phase === 'asking' || correctingTranscript}
-              rows={3}
+              rows={4}
               aria-label={loc.ui.yourQuestion}
               className="nb-input w-full resize-y"
-              style={{ minHeight: 80 }}
+              style={{ minHeight: 110, fontSize: 15, lineHeight: 1.65 }}
             />
 
-            {correctionError && <p className="mt-3 text-xs text-amber-700">{correctionError}</p>}
+            {correctionError && <p className="mt-3 text-sm" style={{ color: 'var(--warning)' }}>{correctionError}</p>}
             {ragError && <ErrorNotice message={ragError} />}
 
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void handleFixTranscript()}
                 disabled={!transcript.trim() || phase === 'asking' || correctingTranscript}
-                className="nb-btn-ghost rounded-xl px-4 py-2.5 text-sm"
+                className="vl-btn-secondary"
               >
                 {correctingTranscript ? loc.ui.fixing : loc.ui.fixTranscript}
               </button>
@@ -512,34 +534,27 @@ export default function StudyAssistantPage() {
                 type="button"
                 onClick={() => void submitQuestionToRag()}
                 disabled={!transcript.trim() || phase === 'asking' || correctingTranscript}
-                className="nb-btn-primary rounded-xl px-5 py-2.5 text-sm"
+                className="vl-btn-primary"
               >
                 {phase === 'asking' ? loc.ui.asking : phase === 'rag-error' ? loc.ui.retryAnswer : loc.ui.askArrow}
               </button>
             </div>
-          </Section>
+          </SectionWide>
         )}
 
         {/* ── Answer (shared by both modes) ── */}
         {result && (
           <>
-            <Section title={loc.ui.answer}>
-              {/* Answer mode badge — user-friendly label only */}
-              <div style={{ marginBottom: 14 }}>
+            <SectionWide title={loc.ui.answer}>
+              {/* Answer mode badge */}
+              <div style={{ marginBottom: 18 }}>
                 {result.documentGrounded ? (
                   <span
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '4px 10px',
-                      borderRadius: 999,
-                      background: 'var(--c-blue-soft)',
-                      color: 'var(--c-blue)',
-                      border: '1px solid var(--c-blue-border)',
-                      letterSpacing: '0.03em',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 50,
+                      background: 'var(--primary-soft)', color: 'var(--primary)',
+                      border: '1px solid var(--primary-border)', letterSpacing: '0.05em', textTransform: 'uppercase',
                     }}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -551,17 +566,10 @@ export default function StudyAssistantPage() {
                 ) : (
                   <span
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '4px 10px',
-                      borderRadius: 999,
-                      background: 'var(--c-green-soft)',
-                      color: 'var(--c-green)',
-                      border: '1px solid var(--c-green-border)',
-                      letterSpacing: '0.03em',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 50,
+                      background: 'var(--success-soft)', color: 'var(--success)',
+                      border: '1px solid var(--success-border)', letterSpacing: '0.05em', textTransform: 'uppercase',
                     }}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -574,64 +582,64 @@ export default function StudyAssistantPage() {
                 )}
               </div>
 
-              <MarkdownContent content={result.answer} className="text-sm" />
+              <MarkdownContent content={result.answer} className="text-base" />
 
               {/* TTS controls */}
-              <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border)' }}>
                 {audioLoading && (
-                  <div className="flex items-center gap-2 text-sm text-ink-faint"><Spinner /> {loc.ui.preparingAudio}</div>
+                  <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-dim)' }}><Spinner /> {loc.ui.preparingAudio}</div>
                 )}
                 {audioUrl && (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <button
                       type="button"
                       onClick={() => void audioRef.current?.play()}
-                      className="nb-btn-primary rounded-xl px-4 py-2.5 text-sm"
+                      className="vl-btn-primary"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                       {loc.ui.playAnswer}
                     </button>
-                    <audio ref={audioRef} src={audioUrl} controls className="h-10 w-full sm:max-w-sm" preload="metadata" />
+                    <audio ref={audioRef} src={audioUrl} controls className="h-10 flex-1" preload="metadata" />
                   </div>
                 )}
                 {audioError && (
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-xs text-amber-700">{audioError}</p>
+                    <p className="text-sm" style={{ color: 'var(--warning)' }}>{audioError}</p>
                     <button
                       type="button"
                       onClick={() => void synthesizeAnswer(result.answer, language)}
                       disabled={audioLoading}
-                      className="text-xs font-semibold transition-colors disabled:opacity-40"
-                      style={{ color: '#1A73E8' }}
+                      className="text-sm font-semibold transition-colors disabled:opacity-40"
+                      style={{ color: 'var(--primary)' }}
                     >
                       {loc.ui.retryAudio}
                     </button>
                   </div>
                 )}
               </div>
-            </Section>
+            </SectionWide>
 
-            {/* ── Sources — only for document-grounded answers with references ── */}
+            {/* ── Sources ── */}
             {showSources && (
-              <Section title={loc.ui.sources}>
-                <ol className="space-y-2">
+              <SectionWide title={loc.ui.sources}>
+                <ol className="space-y-3">
                   {result.references.map((reference, index) => (
-                    <li key={`${reference.document_id}-${index}`} className="rounded-xl px-4 py-3 nb-inset">
+                    <li key={`${reference.document_id}-${index}`} className="rounded-[16px] px-5 py-4 nb-inset">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-ink-soft">{reference.filename}</span>
+                        <span className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>{reference.filename}</span>
                         {reference.page != null && (
-                          <span className="rounded px-2 py-0.5 text-xs text-ink-faint" style={{ background: '#EAE8E0' }}>Page {reference.page}</span>
+                          <span className="rounded-[8px] px-2.5 py-0.5 text-xs" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>Page {reference.page}</span>
                         )}
                       </div>
                       {reference.excerpt && (
-                        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-ink-muted border-l-2 pl-2.5 italic mt-2" style={{ borderColor: '#DBD8CC' }}>
+                        <p className="mt-3 line-clamp-3 text-sm leading-relaxed italic" style={{ borderLeft: '2px solid var(--primary-border)', paddingLeft: 12, color: 'var(--text-muted)' }}>
                           {reference.excerpt}
                         </p>
                       )}
                     </li>
                   ))}
                 </ol>
-              </Section>
+              </SectionWide>
             )}
           </>
         )}
@@ -639,7 +647,7 @@ export default function StudyAssistantPage() {
         {/* ── Ask another question ── */}
         {(phase === 'answered' || phase === 'rag-error') && (
           <button type="button" onClick={clearAnswer}
-            className="self-center text-sm font-medium text-ink-faint transition-colors hover:text-ink">
+            className="self-center vl-btn-secondary" style={{ alignSelf: 'center' }}>
             {loc.ui.askAnother}
           </button>
         )}
@@ -650,10 +658,11 @@ export default function StudyAssistantPage() {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** Full-width section card — uses the new design token glass surface */
+function SectionWide({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="nb-card rounded-2xl p-5 sm:p-6">
-      <h2 className="mb-5 nb-label">{title}</h2>
+    <section className="nb-card p-6 sm:p-8 lg:p-9">
+      <h2 className="vl-label" style={{ marginBottom: 20 }}>{title}</h2>
       {children}
     </section>
   )
@@ -661,14 +670,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Spinner() {
   return (
-    <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(26,115,232,0.2)', borderTopColor: '#1A73E8' }} aria-hidden />
+    <span
+      className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2"
+      style={{ borderColor: 'var(--primary-soft)', borderTopColor: 'var(--primary)' }}
+      aria-hidden
+    />
   )
 }
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div className="mt-4 rounded-xl px-4 py-3 text-sm text-red-700 animate-fade-up"
-      style={{ background: '#FEF2F2', border: '1px solid rgba(234,67,53,0.2)' }}>
+    <div
+      className="mt-4 rounded-[13px] px-5 py-4 text-sm animate-fade-up"
+      style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger-border)', color: 'var(--danger)' }}
+    >
       {message}
     </div>
   )
