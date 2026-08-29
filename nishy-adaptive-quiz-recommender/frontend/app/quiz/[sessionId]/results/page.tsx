@@ -154,8 +154,15 @@ function ResourceCard({ resource }: { resource: ResourceLink }) {
 }
 
 // ── Weak Topic Card ───────────────────────────────────────────────
-function WeakTopicCard({ rec }: { rec: WeakTopicRecommendation }) {
-  const [expanded, setExpanded] = useState(false);
+function WeakTopicCard({
+  rec,
+  expanded,
+  onToggle,
+}: {
+  rec: WeakTopicRecommendation;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const isEnrichment = rec.recommendation_type === "enrichment";
   return (
     <div
@@ -164,7 +171,7 @@ function WeakTopicCard({ rec }: { rec: WeakTopicRecommendation }) {
     >
       {/* Header */}
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={onToggle}
         className="w-full flex items-center justify-between px-6 py-4 text-left transition-colors duration-150 hover:bg-orange-900/5"
       >
         <div className="flex items-center gap-3">
@@ -527,25 +534,38 @@ export default function ResultsPage() {
   const [error, setError] = useState("");
   // Rating modal state
   const [showRating, setShowRating] = useState(false);
+  // Accordion — only one weak-topic card open at a time
+  const [openTopicIndex, setOpenTopicIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async (attempt = 0) => {
+    // Deep study notes + scraped resource links can take a while to generate
+    // in the background (LLM call + live web lookups per weak topic). Keep
+    // polling for a long time rather than silently giving up while the
+    // "preparing" banner is still shown — a fetch/network error is a
+    // different, much rarer case and keeps its own short retry budget.
+    const MAX_PENDING_POLLS = 800; // ~20 min at 1.5s between polls
+    const MAX_FETCH_RETRIES = 60;  // ~1 min of retries on network/server errors
+    const load = async (fetchAttempt = 0, pendingPolls = 0) => {
       try {
         const nextReport = await getAnalyticsReport(sessionId);
         if (cancelled) return;
         setReport(nextReport);
         setError("");
-        if (nextReport.recommendations_pending && attempt < 60) {
-          timer = setTimeout(() => load(attempt + 1), 1500);
+        if (nextReport.recommendations_pending) {
+          if (pendingPolls < MAX_PENDING_POLLS) {
+            timer = setTimeout(() => load(0, pendingPolls + 1), 1500);
+          }
+          // else: exceeded the generous ceiling — stop polling, but never
+          // pretend the notes are ready when they are not.
         } else {
           timer = setTimeout(() => setShowRating(true), 600);
         }
       } catch (e) {
         if (cancelled) return;
-        if (attempt < 60) {
-          timer = setTimeout(() => load(attempt + 1), 1000);
+        if (fetchAttempt < MAX_FETCH_RETRIES) {
+          timer = setTimeout(() => load(fetchAttempt + 1, pendingPolls), 1000);
         } else {
           setError(e instanceof Error ? e.message : "Could not load results");
         }
@@ -721,7 +741,12 @@ export default function ResultsPage() {
               </p>
               <div className="space-y-3">
                 {studyRecs.map((rec, i) => (
-                  <WeakTopicCard key={i} rec={rec} />
+                  <WeakTopicCard
+                    key={i}
+                    rec={rec}
+                    expanded={openTopicIndex === i}
+                    onToggle={() => setOpenTopicIndex((v) => (v === i ? null : i))}
+                  />
                 ))}
               </div>
             </div>

@@ -18,6 +18,7 @@ import re
 import time
 import logging
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional
 
 import httpx
@@ -286,32 +287,50 @@ def find_tutorialspoint_tutorial(topic: str) -> Optional[Dict]:
 
 
 # ── YouTube — specific video (not search page) ─────────────────────────────
+def _oembed_title(video_url: str) -> str:
+    try:
+        with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
+            response = client.get(
+                "https://www.youtube.com/oembed",
+                params={"url": video_url, "format": "json"},
+                headers=_HEADERS,
+            )
+        if response.status_code >= 400:
+            return ""
+        return str(response.json().get("title", "")).strip()
+    except Exception:
+        return ""
+
+
 def _validated_youtube_candidate(topic: str, video_ids: List[str]) -> Optional[Dict]:
-    """Return the first direct watch URL whose real title closely matches the topic."""
+    """Return the first direct watch URL whose real title closely matches the topic.
+
+    oEmbed lookups for every candidate are fired concurrently (each is an
+    independent blocking HTTP call) so the worst case is one round trip
+    instead of up to ten sequential ones, while still honoring the original
+    candidate preference order.
+    """
     generic = {"sri", "lankan", "gce", "level", "biology", "tutorial", "about", "which"}
     topic_tokens = {
         token for token in re.findall(r"[a-z]{4,}", topic.casefold())
         if token not in generic
     }
     required_overlap = max(1, (len(topic_tokens) + 1) // 2)
-    for video_id in list(dict.fromkeys(video_ids))[:10]:
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-        try:
-            with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
-                response = client.get(
-                    "https://www.youtube.com/oembed",
-                    params={"url": video_url, "format": "json"},
-                    headers=_HEADERS,
-                )
-            if response.status_code >= 400:
-                continue
-            title = str(response.json().get("title", "")).strip()
-            title_tokens = set(re.findall(r"[a-z]{4,}", title.casefold()))
-            if topic_tokens and len(topic_tokens & title_tokens) < required_overlap:
-                continue
-            return {"label": "English", "title": title, "url": video_url, "source": "YouTube"}
-        except Exception:
+    candidates = list(dict.fromkeys(video_ids))[:10]
+    if not candidates:
+        return None
+
+    with ThreadPoolExecutor(max_workers=len(candidates)) as executor:
+        video_urls = [f"https://www.youtube.com/watch?v={vid}" for vid in candidates]
+        titles = list(executor.map(_oembed_title, video_urls))
+
+    for video_url, title in zip(video_urls, titles):
+        if not title:
             continue
+        title_tokens = set(re.findall(r"[a-z]{4,}", title.casefold()))
+        if topic_tokens and len(topic_tokens & title_tokens) < required_overlap:
+            continue
+        return {"label": "English", "title": title, "url": video_url, "source": "YouTube"}
     return None
 
 
@@ -445,29 +464,31 @@ def build_resources(topic: str) -> List[Dict]:
         return []
 
     logger.info(f"[WebScraper] Building A/L Biology resources for '{clean_topic}'")
-    resources: List[Dict] = []
 
-    video = find_youtube_video(clean_topic)
-    if video:
-        resources.append(video)
-
-    openstax = find_openstax_index_article(clean_topic)
-    if openstax:
-        resources.append(openstax)
-
-    trusted_sources = (
-        ("Khan Academy", "khanacademy.org", f'site:khanacademy.org/science/biology "{clean_topic}" biology'),
-    )
-    for source_name, domain, query in trusted_sources:
-        url = _ddg_first_url(query=query, must_contain=domain)
+    def _khan_academy(topic: str) -> Optional[Dict]:
+        query = f'site:khanacademy.org/science/biology "{topic}" biology'
+        url = _ddg_first_url(query=query, must_contain="khanacademy.org")
         if not url or not _is_reachable(url):
-            continue
-        resources.append({
+            return None
+        return {
             "label": "English",
-            "title": f"{clean_topic} — {source_name}",
+            "title": f"{topic} — Khan Academy",
             "url": url,
-            "source": source_name,
-        })
+            "source": "Khan Academy",
+        }
+
+    # These three sources are independent network round trips — run them
+    # concurrently instead of one after another so a slow lookup on one
+    # source doesn't hold up the other two.
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        video_future = executor.submit(find_youtube_video, clean_topic)
+        openstax_future = executor.submit(find_openstax_index_article, clean_topic)
+        khan_future = executor.submit(_khan_academy, clean_topic)
+
+        resources: List[Dict] = []
+        for result in (video_future.result(), openstax_future.result(), khan_future.result()):
+            if result:
+                resources.append(result)
 
     # Keep the exact A/L Biology topic in both the video title and search query.
     # Video is a useful fallback, but should not displace the official NIE,

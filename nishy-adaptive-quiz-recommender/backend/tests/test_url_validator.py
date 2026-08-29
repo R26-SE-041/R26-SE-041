@@ -52,17 +52,21 @@ class BiologyResourceTests(unittest.TestCase):
 
     @patch("app.services.url_validator.httpx.Client")
     def test_returns_exact_direct_youtube_watch_link(self, client_cls):
+        # Topic deliberately avoids "golgi"/"extracellular matrix"/"vascular
+        # plant"/"large tree" — those trigger an unrelated pre-verified
+        # known-video override in find_youtube_video that would otherwise
+        # shadow the scraped id this test exists to check.
         search = Mock(status_code=200, text='{"videoId":"abcdefghijk"}')
         metadata = Mock(status_code=200)
-        metadata.json.return_value = {"title": "Golgi apparatus structure and function"}
+        metadata.json.return_value = {"title": "Cellular respiration overview and stages"}
         client = client_cls.return_value.__enter__.return_value
         client.get.side_effect = [search, metadata]
 
         from app.services.url_validator import find_youtube_video
 
-        resource = find_youtube_video("Golgi apparatus")
+        resource = find_youtube_video("Cellular respiration")
         self.assertEqual(resource["url"], "https://www.youtube.com/watch?v=abcdefghijk")
-        self.assertEqual(resource["title"], "Golgi apparatus structure and function")
+        self.assertEqual(resource["title"], "Cellular respiration overview and stages")
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ class QuestionRecord(TypedDict):
     retrieved_text: str
     source_chunk_ids: List[str]
     source_chunks: List[dict]
+    marks_breakdown: NotRequired[Optional[dict]]  # structured only — per-question rubric used by evaluation
 
 
 class AnswerRecord(TypedDict):

@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dotenv import load_dotenv
 from app.graph.state import AssessmentState
@@ -217,70 +218,80 @@ def recommendation_agent(state: AssessmentState) -> dict:
         )
         enrichment_topics.append(best_fallback)
 
-    for topic in [*weak_topics, *enrichment_topics]:
-        if True:
-            scores = topic_scores.get(topic, {})
-            total = scores.get("total", 0)
-            correct = scores.get("correct", 0)
-            ratio = correct / total if total else 0.0
+    def _build_topic_recommendation(topic: str) -> dict:
+        scores = topic_scores.get(topic, {})
+        total = scores.get("total", 0)
+        correct = scores.get("correct", 0)
+        ratio = correct / total if total else 0.0
 
-            # Generate concept notes from student's own material
-            topic_source_chunks = []
-            seen_chunk_ids = set()
-            for question in questions:
-                if question.get("topic") != topic:
-                    continue
-                for chunk in question.get("source_chunks", []):
-                    chunk_id = str(chunk.get("chunk_id", ""))
-                    if chunk_id and chunk_id not in seen_chunk_ids:
-                        seen_chunk_ids.add(chunk_id)
-                        topic_source_chunks.append(chunk)
-                explanation = str(question.get("model_answer", "")).strip()
-                if explanation:
-                    synthetic_id = f"explanation:{question.get('q_id', '')}"
-                    if synthetic_id not in seen_chunk_ids:
-                        seen_chunk_ids.add(synthetic_id)
-                        topic_source_chunks.append({
-                            "chunk_id": synthetic_id,
-                            "text": explanation,
-                            "source": question.get("source_file", "Quiz explanation"),
-                            "page": question.get("page_number", 0),
-                        })
-            concept_notes = _generate_concept_notes(
-                topic,
-                rag,
-                llm,
-                collection_id,
-                subject,
-                source_chunks=topic_source_chunks,
+        # Generate concept notes from student's own material
+        topic_source_chunks = []
+        seen_chunk_ids = set()
+        for question in questions:
+            if question.get("topic") != topic:
+                continue
+            for chunk in question.get("source_chunks", []):
+                chunk_id = str(chunk.get("chunk_id", ""))
+                if chunk_id and chunk_id not in seen_chunk_ids:
+                    seen_chunk_ids.add(chunk_id)
+                    topic_source_chunks.append(chunk)
+            explanation = str(question.get("model_answer", "")).strip()
+            if explanation:
+                synthetic_id = f"explanation:{question.get('q_id', '')}"
+                if synthetic_id not in seen_chunk_ids:
+                    seen_chunk_ids.add(synthetic_id)
+                    topic_source_chunks.append({
+                        "chunk_id": synthetic_id,
+                        "text": explanation,
+                        "source": question.get("source_file", "Quiz explanation"),
+                        "page": question.get("page_number", 0),
+                    })
+        concept_notes = _generate_concept_notes(
+            topic,
+            rag,
+            llm,
+            collection_id,
+            subject,
+            source_chunks=topic_source_chunks,
+        )
+
+        # Priority 1: hand-curated resource_map (pre-verified, no network wait) —
+        # skip the expensive live scrape entirely when we already have exact links.
+        curated = _curated_resources(topic, resource_map)
+        if curated:
+            resources = curated
+            logger.info(f"[RecommendationAgent] '{topic}': using curated resources (scrape skipped)")
+        else:
+            # Priority 2: web scrape to find SPECIFIC article/video URLs
+            # — GFG: exact article via DDG site:geeksforgeeks.org search
+            # — TutorialsPoint: exact tutorial via DDG site:tutorialspoint.com search
+            # — YouTube: specific video ID from search results page JSON
+            logger.info(f"[RecommendationAgent] '{topic}': scraping specific resource URLs...")
+            resources = build_resources(topic)
+            logger.info(
+                f"[RecommendationAgent] '{topic}': scraped {len(resources)} resources "
+                f"({[r['source'] for r in resources]})"
             )
 
-            # Priority 1: use hand-curated resource_map if available (pre-verified links)
-            curated = _curated_resources(topic, resource_map)
-            if curated:
-                scraped = build_resources(topic)
-                resources = scraped + [item for item in curated if item.get("url") not in {r.get("url") for r in scraped}]
-                logger.info(f"[RecommendationAgent] '{topic}': using exact web and curated resources")
-            else:
-                # Priority 2: web scrape to find SPECIFIC article/video URLs
-                # — GFG: exact article via DDG site:geeksforgeeks.org search
-                # — TutorialsPoint: exact tutorial via DDG site:tutorialspoint.com search
-                # — YouTube: specific video ID from search results page JSON
-                logger.info(f"[RecommendationAgent] '{topic}': scraping specific resource URLs...")
-                resources = build_resources(topic)
-                logger.info(
-                    f"[RecommendationAgent] '{topic}': scraped {len(resources)} resources "
-                    f"({[r['source'] for r in resources]})"
-                )
+        return {
+            "topic":         topic,
+            "recommendation_type": "review" if topic in weak_topics else "enrichment",
+            "score_ratio":   round(ratio, 2),
+            "percentage":    round(ratio * 100, 1),
+            "concept_notes": concept_notes,
+            "resources":     resources[:4],
+        }
 
-            recommendations.append({
-                "topic":         topic,
-                "recommendation_type": "review" if topic in weak_topics else "enrichment",
-                "score_ratio":   round(ratio, 2),
-                "percentage":    round(ratio * 100, 1),
-                "concept_notes": concept_notes,
-                "resources":     resources[:4],
-            })
+    topics_to_process = [*weak_topics, *enrichment_topics]
+    if topics_to_process:
+        # Each topic's concept-note generation + resource lookup is dominated by
+        # blocking network I/O (LLM call, web scraping). Running topics
+        # concurrently turns the wall-clock cost from sum(topics) into
+        # roughly max(topics), which is the difference between a multi-minute
+        # wait and a usable one for students with several weak areas.
+        with ThreadPoolExecutor(max_workers=min(5, len(topics_to_process))) as executor:
+            recommendations = list(executor.map(_build_topic_recommendation, topics_to_process))
+
     strong_topics = [topic for topic in topic_scores if topic not in weak_topics]
 
     logs.append(f"[RecommendationAgent] Weak={len(weak_topics)} Strong={len(strong_topics)}")

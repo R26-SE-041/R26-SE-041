@@ -397,6 +397,7 @@ export default function QuizPage() {
   const [result, setResult] = useState<SubmitAnswerResponse | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState("");
+  const [waitingForNext, setWaitingForNext] = useState(false);
   const [startTime, setStartTime] = useState(Date.now());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submitGuardRef = useRef(false);
@@ -421,6 +422,7 @@ export default function QuizPage() {
         if (pollingRef.current) clearInterval(pollingRef.current);
         const q = await getCurrentQuestion(sessionId);
         setQuestion(q);
+        setError("");
         setStartTime(Date.now());
       } else if (status.status === "error") {
         if (pollingRef.current) clearInterval(pollingRef.current);
@@ -437,8 +439,15 @@ export default function QuizPage() {
   }, [pollStatus]);
 
   const recoverCurrentQuestion = async () => {
-    const delays = [250, 600, 1000, 1800, 3000, 5000];
-    for (let i = 0; i <= delays.length; i++) {
+    // The backend reported the held question as outdated because the real
+    // next question was still being generated in the background at the
+    // moment of submission. That generation is still running — poll fast at
+    // first, then keep trying patiently for a few minutes rather than
+    // telling the student to manually retry a few seconds later.
+    const fastDelays = [250, 600, 1000, 1800, 3000, 5000];
+    const steadyDelayMs = 5000;
+    const maxSteadyPolls = 30; // ~2.5 more minutes after the fast ramp
+    for (let i = 0; i < fastDelays.length + maxSteadyPolls; i++) {
       try {
         const q = await getCurrentQuestion(sessionId);
         setQuestion(q);
@@ -450,9 +459,8 @@ export default function QuizPage() {
         setStartTime(Date.now());
         return true;
       } catch {
-        if (i < delays.length) {
-          await new Promise((resolve) => setTimeout(resolve, delays[i]));
-        }
+        const delay = i < fastDelays.length ? fastDelays[i] : steadyDelayMs;
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
     return false;
@@ -505,22 +513,31 @@ export default function QuizPage() {
     setSelectedDisplayKey(null);
     setError("");
     setViewIndex(-1);
-    // Longer delays because adaptive_agent + quiz_agent need time to generate the next question
-    const delays = [800, 1500, 2500, 3500, 5000, 7000, 8000];
+    setWaitingForNext(true);
+    // The next question is generated in the background after the previous
+    // answer was submitted (LLM call plus grounding validation, sometimes
+    // with a retry or two on a cold GPU endpoint). Poll fast at first for the
+    // common case, then keep trying patiently for a few minutes instead of
+    // flashing a scary "session may still be processing" error while the
+    // backend is still legitimately working.
+    const fastDelays = [800, 1500, 2500, 3500, 5000, 7000, 8000];
+    const steadyDelayMs = 5000;
+    const maxSteadyPolls = 30; // ~2.5 more minutes after the fast ramp
     let lastErr: unknown;
-    for (let i = 0; i <= delays.length; i++) {
+    for (let i = 0; i < fastDelays.length + maxSteadyPolls; i++) {
       try {
         const q = await getCurrentQuestion(sessionId);
         setQuestion(q);
         setStartTime(Date.now());
+        setWaitingForNext(false);
         return;
       } catch (e) {
         lastErr = e;
-        if (i < delays.length) {
-          await new Promise((res) => setTimeout(res, delays[i]));
-        }
+        const delay = i < fastDelays.length ? fastDelays[i] : steadyDelayMs;
+        await new Promise((res) => setTimeout(res, delay));
       }
     }
+    setWaitingForNext(false);
     setError(lastErr instanceof Error ? lastErr.message : "Could not load next question.");
   };
 
@@ -695,15 +712,28 @@ export default function QuizPage() {
           /* After answer resolved */
           <div className="flex items-center gap-3 mb-4">
             <NavBtn id="btn-prev-after" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}><ArrowLeftIcon /> Prev</NavBtn>
-            <button id="btn-next-question" onClick={handleNextQuestion}
+            <button id="btn-next-question" onClick={handleNextQuestion} disabled={waitingForNext}
               className="flex-1 py-4 rounded-xl font-bold text-white text-base transition-all duration-200"
               style={{
-                background: result?.quiz_complete ? "linear-gradient(135deg, #059669, #0891b2)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
-                boxShadow: `0 4px 20px ${result?.quiz_complete ? "rgba(5,150,105,0.3)" : "rgba(224,108,79,0.4)"}`,
+                background: waitingForNext
+                  ? "rgba(0,0,0,0.15)"
+                  : result?.quiz_complete ? "linear-gradient(135deg, #059669, #0891b2)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
+                boxShadow: waitingForNext ? "none" : `0 4px 20px ${result?.quiz_complete ? "rgba(5,150,105,0.3)" : "rgba(224,108,79,0.4)"}`,
+                cursor: waitingForNext ? "not-allowed" : "pointer",
               }}>
-              <span className="flex items-center justify-center gap-2">
-                {result?.quiz_complete ? "View Results" : "Next Question"} <ArrowRightIcon />
-              </span>
+              {waitingForNext ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Preparing your next question...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  {result?.quiz_complete ? "View Results" : "Next Question"} <ArrowRightIcon />
+                </span>
+              )}
             </button>
           </div>
         )}

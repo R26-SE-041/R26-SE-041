@@ -292,8 +292,8 @@ export default function UploadPage() {
                 <label className="text-xs font-semibold uppercase tracking-widest text-stone-500 block mb-3">
                   Question Type
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["mcq", "fill_blank", "structured", "essay"] as ExamType[]).map((t) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {(["mcq", "structured", "essay"] as ExamType[]).map((t) => (
                     <button
                       key={t}
                       id={`exam-type-${t}`}
@@ -305,7 +305,7 @@ export default function UploadPage() {
                         color: config.examType === t ? "#9a4327" : "rgba(0,0,0,0.5)",
                       }}
                     >
-                      {t === "mcq" ? "MCQ" : t === "fill_blank" ? "Fill in the blank" : t === "structured" ? "Structured" : "Essay"}
+                      {t === "mcq" ? "MCQ" : t === "structured" ? "Structured" : "Essay"}
                     </button>
                   ))}
                 </div>

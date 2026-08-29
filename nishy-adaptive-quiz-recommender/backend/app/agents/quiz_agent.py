@@ -137,11 +137,25 @@ STRUCTURED_PROMPT = SOURCE_BOUND_PERSONA + """
 PDF EXCERPTS:
 {context}
 
-Generate one {bloom_level}-level {subject} structured question about "{topic}".
+Write ONE {bloom_level}-level {subject} structured question about "{topic}" with at least
+two distinct, labelled sub-parts (e.g. (a), (b), (c)), worth a combined 100 marks.
 Difficulty: {diff_label} ({difficulty:.2f}/1.0).
-Return only JSON with question, model_answer, correct_answer, and marks_breakdown.
-Every assessed point and every model-answer claim must be explicitly supported by the excerpts.
-Do not refer to the source in the question. If support is insufficient, return {{"insufficient_context":true}}.
+
+Return only compact JSON:
+{{"question":"(a) ...\\n(b) ...","model_answer":"Complete source-grounded model answer covering every sub-part.","correct_answer":"Same content as model_answer; this is the grading reference.","marks_breakdown":{{"content":40,"accuracy":30,"terminology":20,"examples":10}}}}
+
+Rules:
+- marks_breakdown keys must describe what that mark actually rewards for THIS question
+  (reuse content/accuracy/terminology/examples or write your own category names), and the
+  integer values must sum to exactly 100.
+- Every sub-part and every claim in model_answer must be directly supported by the excerpts.
+- model_answer must be a real, complete answer addressing every sub-part, not a label or one-liner.
+- Do not refer to the PDF, excerpts, context, document, text, source, or page in the question.
+- Match {subject} terminology and avoid trivial general-knowledge sub-parts.
+- HARD (0.66-1.00): Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match.
+- MEDIUM (0.33-0.65): Do not make it a direct question. Require one genuine application step using a short scenario, observation, relationship, or consequence. Never ask a direct definition or word-match item.
+- EASY (0.00-0.32): Make it a direct, straightforward question directly from the syllabus. Each sub-part should test clear recall or recognition of a single concept.
+- If the excerpts are weak, irrelevant, non-Biology, or insufficient, return {{"insufficient_context":true}}.
 """
 
 ESSAY_PROMPT = SOURCE_BOUND_PERSONA + """
@@ -149,11 +163,22 @@ ESSAY_PROMPT = SOURCE_BOUND_PERSONA + """
 PDF EXCERPTS:
 {context}
 
-Generate one {bloom_level}-level {subject} essay question about "{topic}".
+Write ONE {bloom_level}-level {subject} essay question about "{topic}" that requires an
+extended, structured written response (not a one-sentence answer).
 Difficulty: {diff_label} ({difficulty:.2f}/1.0).
-Return only JSON with question, model_answer, correct_answer, and marks_breakdown.
-Every assessed point and every model-answer claim must be explicitly supported by the excerpts.
-Do not refer to the source in the question. If support is insufficient, return {{"insufficient_context":true}}.
+
+Return only compact JSON:
+{{"question":"Discuss/Explain/Evaluate ...","model_answer":"Complete source-grounded model answer or key points the essay is expected to cover, in 4-8 sentences.","correct_answer":"Same content as model_answer; this is the grading reference."}}
+
+Rules:
+- The question must invite discussion, explanation, comparison, or evaluation — never a single fact or one-word answer.
+- Every claim in model_answer must be directly supported by the excerpts; it must be real content a grader can compare the student's essay against, not a label.
+- Do not refer to the PDF, excerpts, context, document, text, source, or page in the question.
+- Match {subject} terminology and avoid trivial general-knowledge framing.
+- HARD (0.66-1.00): Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require linking at least two concepts, comparing scenarios, or reasoning through a cause-effect chain across the essay.
+- MEDIUM (0.33-0.65): Require one genuine application or interpretation step across the essay; do not ask a direct definition or simple description.
+- EASY (0.00-0.32): Make it a direct, straightforward question directly from the syllabus, asking for a clear recall/explanation of the assigned concept.
+- If the excerpts are weak, irrelevant, non-Biology, or insufficient, return {{"insufficient_context":true}}.
 """
 
 FILL_BLANK_PROMPT = SOURCE_BOUND_PERSONA + """
@@ -245,6 +270,67 @@ def _validate_fill_blank(q_data: dict) -> dict:
             f"{answer} completes the statement according to the assessed biological relationship. "
             "Recall the relevant structure, process, and function together when reconstructing this fact."
         )
+    return q_data
+
+
+_DEFAULT_MARKS_BREAKDOWN = {"content": 40, "accuracy": 30, "terminology": 20, "examples": 10}
+
+
+def _validate_structured(q_data: dict) -> dict:
+    """Validate a structured item and normalize its marks_breakdown to sum to 100.
+
+    Without this, a malformed or missing question/model_answer silently became
+    an empty string shown to the student, and marks_breakdown was discarded
+    entirely — evaluation always fell back to a generic default regardless of
+    what the question actually asked (see evaluation_agent.py).
+    """
+    question = re.sub(r"\s+", " ", str(q_data.get("question", ""))).strip()
+    model_answer = re.sub(r"\s+", " ", str(q_data.get("model_answer", ""))).strip()
+    if len(question.split()) < 6:
+        raise ValueError("Structured question stem is missing or too short")
+    if len(model_answer.split()) < 15:
+        raise ValueError("Structured model answer is missing or too short")
+
+    breakdown = q_data.get("marks_breakdown")
+    cleaned: dict = {}
+    if isinstance(breakdown, dict):
+        for key, value in breakdown.items():
+            try:
+                amount = int(round(float(value)))
+            except (TypeError, ValueError):
+                continue
+            if amount > 0:
+                cleaned[str(key).strip() or "content"] = amount
+    if not cleaned:
+        cleaned = dict(_DEFAULT_MARKS_BREAKDOWN)
+    total = sum(cleaned.values())
+    if total != 100:
+        # Rescale proportionally so partial-mark evaluation always totals 100.
+        scaled = {key: max(1, round(value * 100 / total)) for key, value in cleaned.items()}
+        drift = 100 - sum(scaled.values())
+        if drift:
+            first_key = next(iter(scaled))
+            scaled[first_key] += drift
+        cleaned = scaled
+
+    q_data["question"] = question
+    q_data["model_answer"] = model_answer
+    q_data["correct_answer"] = str(q_data.get("correct_answer") or model_answer).strip()
+    q_data["marks_breakdown"] = cleaned
+    return q_data
+
+
+def _validate_essay(q_data: dict) -> dict:
+    """Validate an essay item has a real question and a substantive model answer."""
+    question = re.sub(r"\s+", " ", str(q_data.get("question", ""))).strip()
+    model_answer = re.sub(r"\s+", " ", str(q_data.get("model_answer", ""))).strip()
+    if len(question.split()) < 6:
+        raise ValueError("Essay question stem is missing or too short")
+    if len(model_answer.split()) < 15:
+        raise ValueError("Essay model answer is missing or too short")
+    q_data["question"] = question
+    q_data["model_answer"] = model_answer
+    q_data["correct_answer"] = str(q_data.get("correct_answer") or model_answer).strip()
     return q_data
 
 
@@ -539,7 +625,12 @@ def _infer_biology_topic(candidate: dict, slot: dict) -> str:
     if 1 <= len(declared_topic.split()) <= 8:
         return declared_topic
     stem = re.sub(r"\s+", " ", str(candidate.get("question", ""))).strip().rstrip("?")
-    if "which topic should" in stem.casefold() or "which biological topic is named" in stem.casefold():
+    stem_lower = stem.casefold()
+    if (
+        "which topic should" in stem_lower
+        or "which topic is most relevant" in stem_lower
+        or "which biological topic is named" in stem_lower
+    ):
         answer_key = str(candidate.get("correct_answer", "")).strip()
         answer_text = str((candidate.get("options") or {}).get(answer_key, "")).strip(' "')
         if 1 <= len(answer_text.split()) <= 8:
@@ -641,14 +732,33 @@ def build_concept_plan(state: AssessmentState, source_chunks: List[dict]) -> Lis
                 "q_type": state.get("exam_type", "mcq"),
                 "difficulty": INIT_DIFFICULTY.get(state.get("difficulty_mode", "adaptive"), 0.5),
             })
-            if len(candidates) >= requested:
-                return candidates
+            # Collect every distinct concept the document supports rather than
+            # stopping at the first `requested` — the full pool is shuffled
+            # below so a retake of the same document doesn't always land on
+            # the exact same first-N concepts in document order.
 
     if not candidates:
         return []
 
+    # Deterministic-per-session, but different across sessions: retaking a
+    # quiz on the same document previously always selected the same first
+    # `requested` concepts (in document order) every time, so every retake
+    # produced an identical quiz. Shuffling with a session-seeded RNG keeps
+    # a single session's repair/reserve passes consistent while giving each
+    # new session a different selection.
+    #
+    # retry_count is folded in too: when a slot exhausts every candidate and
+    # fails, error_handler_node retries quiz_generate from scratch up to 3
+    # times. Without this, every retry reshuffled to the identical order and
+    # re-tried the exact same doomed reserve candidates before giving up —
+    # wasted time with no real chance of success. Each retry now explores a
+    # genuinely different slice of the same concept pool.
+    session_seed = f"{state.get('session_id') or uuid.uuid4()}:{state.get('retry_count', 0)}"
+    rng = random.Random(session_seed)
+    rng.shuffle(candidates)
+
     # Reuse is allowed only when the source did not yield enough distinct anchors.
-    plan = list(candidates)
+    plan = candidates[:requested]
     while len(plan) < requested:
         reused = dict(candidates[len(plan) % len(candidates)])
         reused["source_reuse_required"] = True
@@ -923,6 +1033,10 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 candidate = _validate_mcq(candidate)
             elif q_type == "fill_blank":
                 candidate = _validate_fill_blank(candidate)
+            elif q_type == "structured":
+                candidate = _validate_structured(candidate)
+            elif q_type == "essay":
+                candidate = _validate_essay(candidate)
             audit = (
                 _embedding_grounding_audit(grounding, candidate, chunks)
                 if q_type == "fill_blank"
@@ -973,6 +1087,10 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                         candidate = _validate_mcq(candidate)
                     elif q_type == "fill_blank":
                         candidate = _validate_fill_blank(candidate)
+                    elif q_type == "structured":
+                        candidate = _validate_structured(candidate)
+                    elif q_type == "essay":
+                        candidate = _validate_essay(candidate)
                     audit = _embedding_grounding_audit(grounding, candidate, seed_chunks)
                     if audit["grounding_status"] == "grounded":
                         accepted = candidate
@@ -1017,6 +1135,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
         "retrieved_text": primary["text"],
         "source_chunk_ids": [chunk["chunk_id"] for chunk in accepted_chunks],
         "source_chunks": accepted_chunks,
+        "marks_breakdown": accepted.get("marks_breakdown"),
     }
     questions.append(question_record)
     _persist_question(state, current_idx, question_record)
@@ -1428,9 +1547,12 @@ def _source_fallback_mcq(slot: dict, source_chunks: List[dict], question_index: 
         difficulty = float(slot.get("difficulty", 0.8))
         diff_label, _ = get_diff_info(difficulty)
         if diff_label == "hard":
-            stem = f'A learner must analyze the relationship in "{clue}". Which topic should be integrated first?'
+            # Must contain a genuine reasoning marker (see
+            # _difficulty_candidate_rejection) or this last-resort fallback
+            # gets rejected by its own difficulty check, guaranteeing failure.
+            stem = f'If the evidence in "{clue}" is compared with a related process, which topic should be integrated first to explain the result?'
         elif diff_label == "medium":
-            stem = f'To apply the biological focus "{clue}", which topic is most relevant?'
+            stem = f'If the biological focus "{clue}" is applied to a related scenario, which topic is most relevant?'
         else:
             stem = f'Which biological topic is named by the focus "{clue}"?'
         return {
@@ -1488,7 +1610,9 @@ def _source_fallback_mcq(slot: dict, source_chunks: List[dict], question_index: 
     if diff_label == "hard":
         stem = f"When evidence about {subject} is combined with its biological relationship, which conclusion is best supported?"
     elif diff_label == "medium":
-        stem = f"Which statement should be applied when interpreting a case involving {subject}?"
+        # Needs a genuine reasoning marker (see _difficulty_candidate_rejection)
+        # or this last-resort fallback fails its own difficulty check.
+        stem = f"If the statement about {subject} is applied to a related case, which option follows?"
     else:
         stem = f"Which statement directly describes {subject}?"
     return {
@@ -1766,37 +1890,49 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     prior_questions = "\n".join(
         f"- {question.get('question', '')}" for question in questions
     ) or "- none"
-    prompt = TOPIC_ONLY_MCQ_PROMPT.format(
-        topic=topic,
-        subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
-        diff_label=diff_label,
-        difficulty=difficulty,
-        bloom_level=bloom,
-        prior_questions=prior_questions,
-        seed=str(uuid.uuid4())
-    )
 
+    # A single LLM draft is often rejected by the difficulty/relevance checks
+    # below (e.g. a "hard" question that reads as a direct recall stem). Give
+    # the model a few independent tries — each with a fresh seed — before
+    # falling back to the small curated bank, which only covers a handful of
+    # topics and otherwise hard-fails the whole quiz setup.
     candidate = None
-    try:
-        llm = LlmService()
-        # Skip the 3-second health-check probe — Modal GPU containers take
-        # 30-60 s to cold-start, so the probe always times out and blocks the
-        # topic-only path. Let the full-timeout inference call handle failures.
-        raw = llm.call_json(prompt, max_new_tokens=700)
-        candidate = _validate_mcq(raw)
-        rejection = _topic_candidate_rejection(candidate, topic, diff_label)
-        if rejection:
-            logger.warning("[QuizAgent] Rejected topic candidate: %s", rejection)
-            logs.append(f"[QuizAgent] Rejected model question: {rejection}")
-            candidate = None
-        duplicate_reason = _semantic_duplicate_reason(candidate, questions, None, {}) if candidate is not None else ""
-        if candidate is not None and duplicate_reason:
-            logger.warning("[QuizAgent] Duplicate detected, using fallback: %s", duplicate_reason)
-            candidate = None
-    except Exception as exc:
-        logger.warning("[QuizAgent] LLM call failed for topic '%s': %s — using fallback", topic, exc)
-        logs.append(f"[QuizAgent] LLM unavailable ({exc}); generating fallback question")
-        candidate = None
+    llm = LlmService()
+    for attempt in range(1, 4):
+        prompt = TOPIC_ONLY_MCQ_PROMPT.format(
+            topic=topic,
+            subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
+            diff_label=diff_label,
+            difficulty=difficulty,
+            bloom_level=bloom,
+            prior_questions=prior_questions,
+            seed=str(uuid.uuid4())
+        )
+        try:
+            # Skip the 3-second health-check probe — Modal GPU containers take
+            # 30-60 s to cold-start, so the probe always times out and blocks
+            # the topic-only path. Let the full-timeout inference call handle failures.
+            raw = llm.call_json(prompt, max_new_tokens=700)
+            parsed = _validate_mcq(raw)
+            rejection = _topic_candidate_rejection(parsed, topic, diff_label)
+            if rejection:
+                logger.warning("[QuizAgent] Rejected topic candidate (attempt %d): %s", attempt, rejection)
+                logs.append(f"[QuizAgent] Rejected model question (attempt {attempt}): {rejection}")
+                continue
+            duplicate_reason = _semantic_duplicate_reason(parsed, questions, None, {})
+            if duplicate_reason:
+                logger.warning("[QuizAgent] Duplicate detected (attempt %d), retrying: %s", attempt, duplicate_reason)
+                logs.append(f"[QuizAgent] Duplicate question rejected (attempt {attempt}): {duplicate_reason}")
+                continue
+            candidate = parsed
+            break
+        except Exception as exc:
+            logger.warning("[QuizAgent] LLM call failed for topic '%s' (attempt %d): %s", topic, attempt, exc)
+            logs.append(f"[QuizAgent] LLM attempt {attempt} failed ({exc})")
+            if isinstance(exc, RuntimeError):
+                # Service-level failure (Modal unreachable/timed out) — an
+                # immediate retry against the same dead endpoint won't help.
+                break
 
     if candidate is None:
         candidate = _make_fallback_topic_question(topic, questions, difficulty, diff_label)
@@ -1887,15 +2023,27 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
             "agent_logs": logs + ["[QuizAgent] Could not build a complete source-derived concept plan"],
         }
 
-    reserve_state = dict(state)
-    reserve_state["num_questions"] = min(requested * 3, requested + 20)
-    expanded_plan = build_concept_plan(reserve_state, source_chunks)
-    planned_focuses = {str(slot.get("concept_focus", "")).casefold() for slot in blueprint[:requested]}
-    reserve_slots = [
-        slot for slot in expanded_plan
-        if str(slot.get("concept_focus", "")).casefold() not in planned_focuses
-        and not slot.get("source_reuse_required")
-    ]
+    # The reserve concept plan is only consulted when a slot's primary
+    # generation attempt is rejected or missing (see the repair loop below).
+    # Building it eagerly re-scanned every source chunk with sentence-level
+    # dedup on every single next-question turn, even on the common path where
+    # the first candidate is accepted outright — pure added latency for
+    # something usually never read. Compute it lazily, once, only if needed.
+    _reserve_slots_cache: Optional[List[dict]] = None
+
+    def _reserve_slots() -> List[dict]:
+        nonlocal _reserve_slots_cache
+        if _reserve_slots_cache is None:
+            reserve_state = dict(state)
+            reserve_state["num_questions"] = min(requested * 3, requested + 20)
+            expanded_plan = build_concept_plan(reserve_state, source_chunks)
+            planned_focuses = {str(slot.get("concept_focus", "")).casefold() for slot in blueprint[:requested]}
+            _reserve_slots_cache = [
+                slot for slot in expanded_plan
+                if str(slot.get("concept_focus", "")).casefold() not in planned_focuses
+                and not slot.get("source_reuse_required")
+            ]
+        return _reserve_slots_cache
 
     # The complete concept plan is fixed up front, but question wording and
     # cognitive demand are generated only when that question becomes current.
@@ -2066,10 +2214,10 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                     break
         if (
             absolute_index not in generated_by_index
-            and reserve_slots
             and not generation_service_unavailable
+            and _reserve_slots()
         ):
-            replacement = _with_live_difficulty(reserve_slots.pop(0), active_difficulty)
+            replacement = _with_live_difficulty(_reserve_slots().pop(0), active_difficulty)
             slot = replacement
             pending_slots[local_index - 1] = replacement
             blueprint[absolute_index] = replacement
@@ -2113,8 +2261,8 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         # concept anchor. Keep walking the source-derived reserve plan until a
         # complete, unique, validated fallback is found instead of failing the
         # whole quiz because the first reserve anchor crossed a chunk boundary.
-        while absolute_index not in generated_by_index and reserve_slots:
-            replacement = _with_live_difficulty(reserve_slots.pop(0), active_difficulty)
+        while absolute_index not in generated_by_index and _reserve_slots():
+            replacement = _with_live_difficulty(_reserve_slots().pop(0), active_difficulty)
             slot = replacement
             pending_slots[local_index - 1] = replacement
             blueprint[absolute_index] = replacement
