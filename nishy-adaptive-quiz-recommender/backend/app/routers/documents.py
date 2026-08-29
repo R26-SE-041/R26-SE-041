@@ -91,7 +91,8 @@ async def upload_document(file: UploadFile = File(...)):
         full_text = full_text[:25000]
         
     prompt = f"""
-    Extract 3-10 main topics from the following material.
+    Use only the uploaded material below. Extract 3-10 specific Biology topics
+    actually present in it; never return a generic topic such as "General".
     Return ONLY valid JSON: {{"topics": ["Topic 1", "Topic 2"]}}
     Material:
     {full_text}
@@ -100,8 +101,10 @@ async def upload_document(file: UploadFile = File(...)):
     try:
         data = llm.call_json(prompt)
         topics = data.get("topics", [])
-    except:
-        topics = ["General"]
+    except Exception:
+        # A filename-derived label is source metadata. Question generation will
+        # still re-extract topics and validate every fact against PDF chunks.
+        topics = [Path(file.filename).stem]
         
     doc_record = {
         "document_id": document_id,

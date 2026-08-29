@@ -23,6 +23,7 @@ import {
   TagIcon,
   RefreshIcon,
   ArrowLeftIcon,
+  ArrowRightIcon,
 } from "@/components/ui/Icons";
 
 // ── Seeded deterministic shuffle ────────────────────────────────
@@ -45,14 +46,14 @@ function seededShuffle<T>(arr: T[], seed: string): T[] {
 function DifficultyBadge({ score }: { score: number }) {
   const { label, color } =
     score < 0.33
-      ? { label: "Easy", color: "#34d399" }
+      ? { label: "Easy", color: "var(--success)" }
       : score < 0.66
-        ? { label: "Medium", color: "#fbbf24" }
-        : { label: "Hard", color: "#f87171" };
+        ? { label: "Medium", color: "var(--warning)" }
+        : { label: "Hard", color: "var(--danger)" };
   return (
     <span
       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border"
-      style={{ color, borderColor: `${color}40`, background: `${color}15` }}
+      style={{ color, borderColor: "var(--border)", background: "var(--surface-soft)" }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
       {label}
@@ -62,7 +63,7 @@ function DifficultyBadge({ score }: { score: number }) {
 
 function BloomBadge({ level }: { level: string }) {
   return (
-    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 capitalize">
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-600/20 text-orange-700 border border-orange-600/30 capitalize">
       {level}
     </span>
   );
@@ -72,7 +73,10 @@ function BloomBadge({ level }: { level: string }) {
 function ProcessingScreen({ status }: { status: SessionStatusResponse | null }) {
   const isReady = status?.status === "ready";
   const isError = status?.status === "error";
-  const steps = [
+  const isTopicSession = status?.is_topic_session === true;
+  const steps = isTopicSession ? [
+    { id: "quiz", label: `Generating questions on "${status?.topics_detected?.[0] || 'Topic'}"...`, done: isReady }
+  ] : [
     { id: "upload",    label: "Files uploaded",                        done: true },
     { id: "ingest",    label: "Extracting text chunks",                done: isReady || (status?.chunk_count ?? 0) > 0 },
     { id: "knowledge", label: "Identifying topics",                    done: isReady || (status?.topics_detected?.length ?? 0) > 0 },
@@ -83,12 +87,12 @@ function ProcessingScreen({ status }: { status: SessionStatusResponse | null }) 
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="mb-6 flex justify-center">
-            <XCircleIcon className="w-16 h-16 text-red-400" />
+            <XCircleIcon className="w-16 h-16 text-red-600" />
           </div>
-          <h1 className="text-2xl font-bold text-red-300 mb-3">Setup Failed</h1>
-          <p className="text-white/50 text-sm mb-6">{status?.message}</p>
-          <a href="/upload" className="inline-block px-6 py-3 rounded-xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}>← Try Again</a>
+          <h1 className="text-2xl font-bold text-red-700 mb-3">Setup Failed</h1>
+          <p className="text-stone-500 text-sm mb-6">{status?.message}</p>
+          <a href="/upload" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white"
+            style={{ background: "linear-gradient(135deg, #e06c4f, #cc5234)" }}><ArrowLeftIcon /> Try Again</a>
         </div>
       </div>
     );
@@ -97,36 +101,36 @@ function ProcessingScreen({ status }: { status: SessionStatusResponse | null }) 
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         <div className="relative w-24 h-24 mx-auto mb-8">
-          <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+          <div className="absolute inset-0 rounded-full border-4 border-orange-600/20" />
           <div className={`absolute inset-0 rounded-full border-4 border-transparent border-t-violet-500 ${isReady ? "" : "animate-spin"}`} style={{ animationDuration: "1.2s" }} />
           <div className="absolute inset-3 rounded-full flex items-center justify-center">
             {isReady
-              ? <CheckCircleIcon className="w-9 h-9 text-emerald-400" />
-              : <ZapIcon className="w-9 h-9 text-violet-400" />}
+              ? <CheckCircleIcon className="w-9 h-9 text-emerald-600" />
+              : <ZapIcon className="w-9 h-9 text-orange-600" />}
           </div>
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">{isReady ? "Almost ready!" : "Processing your documents"}</h1>
-        <p className="text-white/50 text-sm mb-8">{status?.message ?? "Initializing agents..."}</p>
+        <h1 className="text-2xl font-bold text-stone-900 mb-2">{isReady ? "Almost ready!" : (isTopicSession ? "Generating your quiz" : "Processing your documents")}</h1>
+        <p className="text-stone-500 text-sm mb-8">{status?.message ?? "Initializing agents..."}</p>
         <div className="space-y-3 text-left">
           {steps.map((step) => (
             <div key={step.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-              style={{ background: step.done ? "rgba(52,211,153,0.08)" : "rgba(255,255,255,0.03)", borderColor: step.done ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.08)" }}>
+              style={{ background: step.done ? "rgba(52,211,153,0.08)" : "rgba(0,0,0,0.03)", borderColor: step.done ? "rgba(52,211,153,0.2)" : "rgba(0,0,0,0.08)" }}>
               <span>
                 {step.done
-                  ? <CheckIcon className="w-5 h-5 text-emerald-400" />
-                  : <ClockIcon className="w-5 h-5 text-white/30" />}
+                  ? <CheckIcon className="w-5 h-5 text-emerald-600" />
+                  : <ClockIcon className="w-5 h-5 text-stone-400" />}
               </span>
-              <span className={`text-sm font-medium ${step.done ? "text-emerald-300" : "text-white/40"}`}>{step.label}</span>
-              {!step.done && <span className="ml-auto text-xs text-white/30 animate-pulse">running...</span>}
+              <span className={`text-sm font-medium ${step.done ? "text-emerald-700" : "text-stone-500"}`}>{step.label}</span>
+              {!step.done && <span className="ml-auto text-xs text-stone-400 animate-pulse">running...</span>}
             </div>
           ))}
         </div>
         {status?.topics_detected && status.topics_detected.length > 0 && (
           <div className="mt-6 text-left">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/30 mb-2">Topics detected</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">Topics detected</p>
             <div className="flex flex-wrap gap-2">
               {status.topics_detected.slice(0, 6).map((t) => (
-                <span key={t} className="px-2.5 py-1 rounded-full text-xs bg-violet-500/15 text-violet-300 border border-violet-500/25">{t}</span>
+                <span key={t} className="px-2.5 py-1 rounded-full text-xs bg-orange-600/15 text-orange-700 border border-orange-600/25">{t}</span>
               ))}
             </div>
           </div>
@@ -139,18 +143,18 @@ function ProcessingScreen({ status }: { status: SessionStatusResponse | null }) 
 // ── Hint level badge — attempt 1=Hard, 2=Medium, 3=Easy ─────────
 function HintLevelBadge({ attempts }: { attempts: number }) {
   const levels: Record<number, { label: string; color: string; desc: string }> = {
-    1: { label: "Hard Hint",   color: "#ef4444", desc: "Conceptual nudge — think deeper" },
-    2: { label: "Medium Hint", color: "#f59e0b", desc: "Focused concept explanation" },
-    3: { label: "Easy Hint",   color: "#34d399", desc: "Step-by-step walkthrough" },
+    1: { label: "Hard Hint",   color: "var(--danger)", desc: "A conceptual prompt to guide deeper reasoning" },
+    2: { label: "Medium Hint", color: "var(--warning)", desc: "Focused concept explanation" },
+    3: { label: "Easy Hint",   color: "var(--success)", desc: "Step-by-step walkthrough" },
   };
   const info = levels[attempts] ?? levels[1];
   return (
     <div className="flex items-center gap-2 mb-3">
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
-        style={{ background: `${info.color}20`, color: info.color, border: `1px solid ${info.color}40` }}>
+        style={{ background: "var(--surface-soft)", color: info.color, border: "1px solid var(--border)" }}>
         <LightbulbIcon className="w-3.5 h-3.5" /> {info.label}
       </span>
-      <span className="text-xs text-white/40">{info.desc}</span>
+      <span className="text-xs text-stone-500">{info.desc}</span>
     </div>
   );
 }
@@ -179,13 +183,18 @@ function FeedbackCard({
   const isFinalWrong = !result.is_correct && !canTryAgain;
   const hintText = result.hint;
 
-  // Map original correct answer letter → display position label
+  const legacyAnswerMatch = result.feedback?.match(/\*\*([1-5])(?:\s+-\s+(.+?))?\*\*/);
+  const correctOriginalKey = result.correct_answer ?? legacyAnswerMatch?.[1] ?? null;
+  const correctAnswerText = result.correct_answer_text ?? legacyAnswerMatch?.[2] ?? null;
+  const finalExplanation = result.explanation ?? result.feedback
+    ?.split("**Detailed Explanation:**")[1]
+    ?.trim();
+
+  // Map the original correct option number to its shuffled display number.
   const correctDisplayKey = (() => {
-    const m = result.feedback?.match(/\*\*([A-D])\*\*/);
-    if (!m) return null;
-    const origKey = m[1];
-    const dispIdx = shuffledKeys.indexOf(origKey);
-    return dispIdx >= 0 ? String.fromCharCode(65 + dispIdx) : origKey;
+    if (!correctOriginalKey) return null;
+    const dispIdx = shuffledKeys.indexOf(correctOriginalKey);
+    return dispIdx >= 0 ? String(dispIdx + 1) : correctOriginalKey;
   })();
 
   const hintBg = result.attempts === 1
@@ -213,21 +222,21 @@ function FeedbackCard({
         <div className="flex items-center gap-3 mb-4">
           <span>
             {result.is_correct
-              ? <CheckCircleIcon className="w-10 h-10 text-emerald-400" />
+              ? <CheckCircleIcon className="w-10 h-10 text-emerald-600" />
               : canTryAgain
-              ? <LightbulbIcon className="w-10 h-10 text-amber-400" />
-              : <XCircleIcon className="w-10 h-10 text-red-400" />}
+              ? <LightbulbIcon className="w-10 h-10 text-amber-600" />
+              : <XCircleIcon className="w-10 h-10 text-red-600" />}
           </span>
           <div>
-            <h3 className={`font-bold text-xl ${result.is_correct ? "text-emerald-300" : canTryAgain ? "text-amber-300" : "text-red-300"}`}>
-              {result.is_correct ? "Correct!" : canTryAgain ? "Not quite — here's a hint" : "Incorrect"}
+            <h3 className={`font-bold text-xl ${result.is_correct ? "text-emerald-700" : canTryAgain ? "text-amber-700" : "text-red-700"}`}>
+              {result.is_correct ? "Correct" : canTryAgain ? "Not quite. Here is a hint" : "Incorrect"}
             </h3>
-            <p className="text-white/50 text-sm">
+            <p className="text-stone-500 text-sm">
               {result.is_correct
                 ? `Score: ${Math.round(result.score * 100)}%`
                 : canTryAgain
-                  ? `Attempt ${result.attempts} of 4 — ${4 - result.attempts} attempt${4 - result.attempts !== 1 ? "s" : ""} left`
-                  : "Answer revealed — move to next"}
+                  ? `Attempt ${result.attempts} of 4. ${4 - result.attempts} attempt${4 - result.attempts !== 1 ? "s" : ""} left`
+                  : "Answer revealed. Move to the next question"}
             </p>
           </div>
         </div>
@@ -236,7 +245,7 @@ function FeedbackCard({
         {!result.is_correct && canTryAgain && hintText && (
           <div className="mb-5">
             <HintLevelBadge attempts={result.attempts} />
-            <div className="rounded-xl px-4 py-3 text-sm text-white/80 leading-relaxed"
+            <div className="rounded-xl px-4 py-3 text-sm text-stone-900/80 leading-relaxed"
               style={{ background: hintBg.bg, border: `1px solid ${hintBg.border}` }}>
               {hintText}
             </div>
@@ -247,25 +256,45 @@ function FeedbackCard({
         {isFinalWrong && (
           <div className="mb-5">
             {correctDisplayKey && (
-              <p className="text-red-300 font-bold text-sm mb-2 flex items-center gap-1.5">
+              <p className="text-red-700 font-bold text-sm mb-2 flex items-center gap-1.5">
                 <XIcon className="w-3.5 h-3.5 shrink-0" />
-                Correct answer: <span className="text-white bg-red-500/20 px-2 py-0.5 rounded font-mono">{correctDisplayKey}</span>
+                Correct answer: <span className="text-stone-900 bg-red-500/20 px-2 py-0.5 rounded font-mono">{correctDisplayKey}</span>
+                {correctAnswerText && <span className="text-stone-900/80 font-medium">{correctAnswerText}</span>}
               </p>
             )}
-            <p className="text-white/70 text-sm leading-relaxed">{result.feedback}</p>
+            {finalExplanation && (
+              <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
+                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">Explanation</p>
+                <p className="text-stone-900/70 text-sm leading-relaxed whitespace-pre-line">{finalExplanation}</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Correct — explanation only */}
+        {/* Correct — use the shuffled display key, never the backend's internal key. */}
         {result.is_correct && (
-          <p className="text-white/70 text-sm leading-relaxed">{result.feedback}</p>
+          <div className="mb-1">
+            {correctDisplayKey && (
+              <p className="text-emerald-700 font-bold text-sm mb-3 flex items-center gap-1.5">
+                <CheckIcon className="w-3.5 h-3.5 shrink-0" />
+                Correct answer: <span className="text-stone-900 bg-emerald-500/20 px-2 py-0.5 rounded font-mono">{correctDisplayKey}</span>
+                {correctAnswerText && <span className="text-stone-900/80 font-medium">{correctAnswerText}</span>}
+              </p>
+            )}
+            {finalExplanation && (
+              <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
+                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">Explanation</p>
+                <p className="text-stone-900/70 text-sm leading-relaxed whitespace-pre-line">{finalExplanation}</p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Try Again — only for hints, no Next here */}
         {canTryAgain && !isRetrying && (
           <div className="mt-5">
             <button id="btn-try-again" onClick={onTryAgain}
-              className="w-full py-3 rounded-xl font-bold text-white transition-all duration-200"
+              className="w-full py-3 rounded-xl font-bold text-stone-900 transition-all duration-200"
               style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", boxShadow: "0 4px 20px rgba(245,158,11,0.3)" }}>
               <span className="flex items-center justify-center gap-2">
                 Try Again <RefreshIcon className="w-4 h-4" />
@@ -285,40 +314,44 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
   return (
     <div className="opacity-90">
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/5 text-white/50 border border-white/10">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-900/5 text-stone-500 border border-orange-900/15">
           <TagIcon className="w-3 h-3" /> {question.topic}
         </span>
         <BloomBadge level={question.bloom_level} />
         <DifficultyBadge score={question.difficulty} />
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-400/60 border border-violet-500/20">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-600/10 text-orange-600/60 border border-orange-600/20">
           <LockIcon className="w-3 h-3" /> Reviewed
         </span>
       </div>
-      <p className="text-white text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
+      <p className="text-stone-900 text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
       {opts && (
         <div className="space-y-3">
           {shuffledKeys.map((origKey, idx) => {
-            const displayKey = String.fromCharCode(65 + idx);
+            const displayKey = String(idx + 1);
             const optText = opts[origKey as keyof typeof opts];
             const userPicked = record.selectedDisplayKey === displayKey;
-            const isAnswerKey = result.is_correct ? userPicked : !!result.feedback?.includes(`**${origKey}**`);
-            let bg = "rgba(255,255,255,0.03)";
-            let border = "rgba(255,255,255,0.08)";
-            let labelBg = "rgba(255,255,255,0.06)";
-            let labelColor = "rgba(255,255,255,0.5)";
+            const isAnswerKey = result.correct_answer
+              ? result.correct_answer === origKey
+              : result.is_correct
+                ? userPicked
+                : !!result.feedback?.includes(`**${origKey} -`);
+            let bg = "rgba(0,0,0,0.03)";
+            let border = "rgba(0,0,0,0.08)";
+            let labelBg = "rgba(0,0,0,0.06)";
+            let labelColor = "rgba(0,0,0,0.5)";
             if (isAnswerKey) { bg = "rgba(52,211,153,0.1)"; border = "rgba(52,211,153,0.3)"; labelBg = "rgba(52,211,153,0.2)"; labelColor = "#34d399"; }
             else if (userPicked) { bg = "rgba(239,68,68,0.1)"; border = "rgba(239,68,68,0.3)"; labelBg = "rgba(239,68,68,0.2)"; labelColor = "#f87171"; }
             return (
               <div key={origKey} className="flex items-center gap-4 px-5 py-4 rounded-xl border" style={{ background: bg, borderColor: border }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0" style={{ background: labelBg, color: labelColor }}>{displayKey}</span>
-                <span className="text-sm font-medium text-white/70">{optText}</span>
+                <span className="text-sm font-medium text-stone-900/70">{optText}</span>
                 {isAnswerKey && (
-                  <span className="ml-auto text-emerald-400 text-xs font-bold flex items-center gap-1">
+                  <span className="ml-auto text-emerald-600 text-xs font-bold flex items-center gap-1">
                     <CheckIcon className="w-3 h-3" /> Correct
                   </span>
                 )}
                 {userPicked && !isAnswerKey && (
-                  <span className="ml-auto text-red-400 text-xs font-bold flex items-center gap-1">
+                  <span className="ml-auto text-red-600 text-xs font-bold flex items-center gap-1">
                     <XIcon className="w-3 h-3" /> Your answer
                   </span>
                 )}
@@ -329,7 +362,7 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
       )}
       <div className="mt-4 px-4 py-3 rounded-xl border"
         style={{ background: result.is_correct ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)", borderColor: result.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)" }}>
-        <p className="text-white/60 text-sm leading-relaxed">{result.feedback}</p>
+        <p className="text-stone-900/60 text-sm leading-relaxed">{result.feedback}</p>
       </div>
     </div>
   );
@@ -341,9 +374,9 @@ function NavBtn({ id, disabled, onClick, children, className = "" }: { id: strin
     <button id={id} disabled={disabled} onClick={onClick}
       className={`px-5 py-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 border ${className}`}
       style={{
-        background: disabled ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.06)",
-        borderColor: disabled ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.12)",
-        color: disabled ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.7)",
+        background: disabled ? "rgba(0,0,0,0.02)" : "rgba(0,0,0,0.06)",
+        borderColor: disabled ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.12)",
+        color: disabled ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.7)",
         cursor: disabled ? "not-allowed" : "pointer",
       }}>
       {children}
@@ -366,6 +399,7 @@ export default function QuizPage() {
   const [error, setError] = useState("");
   const [startTime, setStartTime] = useState(Date.now());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const submitGuardRef = useRef(false);
 
   // Answered question history for prev navigation
   const [history, setHistory] = useState<AnsweredRecord[]>([]);
@@ -374,8 +408,8 @@ export default function QuizPage() {
 
   // Stable shuffled option keys for current question (seeded by q_id)
   const shuffledKeys = useMemo<string[]>(() => {
-    if (!question?.options) return ["A", "B", "C", "D"];
-    return seededShuffle(["A", "B", "C", "D"], question.q_id);
+    if (!question?.options) return ["1", "2", "3", "4", "5"];
+    return seededShuffle(["1", "2", "3", "4", "5"], question.q_id);
   }, [question?.q_id, question?.options]);
 
   // Poll for session readiness
@@ -402,12 +436,36 @@ export default function QuizPage() {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [pollStatus]);
 
+  const recoverCurrentQuestion = async () => {
+    const delays = [250, 600, 1000, 1800, 3000, 5000];
+    for (let i = 0; i <= delays.length; i++) {
+      try {
+        const q = await getCurrentQuestion(sessionId);
+        setQuestion(q);
+        setResult(null);
+        setIsRetrying(false);
+        setSelectedDisplayKey(null);
+        setViewIndex(-1);
+        setError("");
+        setStartTime(Date.now());
+        return true;
+      } catch {
+        if (i < delays.length) {
+          await new Promise((resolve) => setTimeout(resolve, delays[i]));
+        }
+      }
+    }
+    return false;
+  };
+
   const handleSubmit = async () => {
-    if (!selectedDisplayKey || !question) return;
+    if (!selectedDisplayKey || !question || submitGuardRef.current) return;
+    submitGuardRef.current = true;
     setSubmitting(true);
+    setError("");
     const timeSec = Math.round((Date.now() - startTime) / 1000);
     // Map display position → original answer key for backend
-    const dispIdx = selectedDisplayKey.charCodeAt(0) - 65;
+    const dispIdx = Number(selectedDisplayKey) - 1;
     const originalKey = shuffledKeys[dispIdx] ?? selectedDisplayKey;
     try {
       setIsRetrying(false);
@@ -418,8 +476,17 @@ export default function QuizPage() {
         setHistory((prev) => [...prev, { question, shuffledKeys, selectedDisplayKey, result: res }]);
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Submission failed");
+      const message = e instanceof Error ? e.message : "Submission failed";
+      if (/no active question|outdated question/i.test(message)) {
+        const recovered = await recoverCurrentQuestion();
+        if (!recovered) {
+          setError("Your answer was saved, but the next question is still being prepared. Please try again shortly.");
+        }
+      } else {
+        setError(message);
+      }
     } finally {
+      submitGuardRef.current = false;
       setSubmitting(false);
     }
   };
@@ -438,12 +505,25 @@ export default function QuizPage() {
     setSelectedDisplayKey(null);
     setError("");
     setViewIndex(-1);
-    try {
-      const q = await getCurrentQuestion(sessionId);
-      setQuestion(q);
-      setStartTime(Date.now());
-    } catch { setError("Could not load next question."); }
+    // Longer delays because adaptive_agent + quiz_agent need time to generate the next question
+    const delays = [800, 1500, 2500, 3500, 5000, 7000, 8000];
+    let lastErr: unknown;
+    for (let i = 0; i <= delays.length; i++) {
+      try {
+        const q = await getCurrentQuestion(sessionId);
+        setQuestion(q);
+        setStartTime(Date.now());
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (i < delays.length) {
+          await new Promise((res) => setTimeout(res, delays[i]));
+        }
+      }
+    }
+    setError(lastErr instanceof Error ? lastErr.message : "Could not load next question.");
   };
+
 
   // ── Render: still loading ────────────────────────────────────
   if (!question) return <ProcessingScreen status={sessionStatus} />;
@@ -462,89 +542,107 @@ export default function QuizPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}>
-              <span className="text-white font-bold text-xs">AQ</span>
+            <div className="brand-mark w-7 h-7 rounded-lg">
+              <span className="font-bold text-xs">AQ</span>
             </div>
-            <span className="font-bold text-base text-white">AdaptiveIQ</span>
+            <span className="font-bold text-base text-stone-900">AdaptiveIQ</span>
           </Link>
-          <span className="text-sm text-white/40">
+          <span className="text-sm text-stone-500">
             {isViewingHistory
-              ? <span className="text-violet-300/60">Reviewing Q{displayedQNum}</span>
+              ? <span className="text-orange-700/60">Reviewing Q{displayedQNum}</span>
               : `Question ${question.q_index + 1} of ${question.total_questions}`}
           </span>
         </div>
 
         {/* Progress bar */}
-        <div className="w-full h-1.5 rounded-full bg-white/10 mb-8 overflow-hidden">
+        <div className="w-full h-1.5 rounded-full bg-orange-900/10 mb-8 overflow-hidden">
           <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${progress}%`, background: "linear-gradient(90deg, #8b5cf6, #22d3ee)" }} />
+            style={{ width: `${progress}%`, background: "linear-gradient(90deg, #d8653b, #ad7b54)" }} />
         </div>
 
         {/* Review banner */}
         {isViewingHistory && (
-          <div className="mb-4 px-4 py-2.5 rounded-xl border border-violet-500/20 bg-violet-500/5 flex items-center gap-2">
-            <span className="text-violet-300 text-xs font-semibold flex items-center gap-1.5">
+          <div className="mb-4 px-4 py-2.5 rounded-xl border border-orange-600/20 bg-orange-600/5 flex items-center gap-2">
+            <span className="text-orange-700 text-xs font-semibold flex items-center gap-1.5">
               <EyeIcon className="w-3.5 h-3.5" /> Reviewing Q{displayedQNum}
             </span>
-            <span className="text-white/30 text-xs">— Read only</span>
+            <span className="text-stone-400 text-xs">Read only</span>
           </div>
         )}
 
         {/* Question card */}
-        <div className="rounded-2xl p-8 border mb-6 animate-[fadeIn_0.4s_ease-out]"
-          style={{ background: "rgba(255,255,255,0.04)", borderColor: isViewingHistory ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.1)", backdropFilter: "blur(12px)" }}>
+        <div className="glass-card p-[22px] mb-6 animate-[fadeIn_0.4s_ease-out]"
+          style={{ borderColor: isViewingHistory ? "rgba(216,101,59,0.28)" : undefined }}>
           {isViewingHistory ? (
             <PreviousQuestionView record={history[viewIndex]} />
           ) : (
             <>
               {/* Meta */}
               <div className="flex items-center gap-3 mb-6 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/5 text-white/50 border border-white/10">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-900/5 text-stone-500 border border-orange-900/15">
                   <TagIcon className="w-3 h-3" /> {question.topic}
                 </span>
                 <BloomBadge level={question.bloom_level} />
                 <DifficultyBadge score={question.difficulty} />
                 {question.is_flagged && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/25">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/25">
                     <AlertTriangleIcon className="w-3 h-3" /> Low grounding
                   </span>
                 )}
               </div>
-              <p className="text-white text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
+              <p className="text-stone-900 text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
 
               {/* MCQ options — shuffled display */}
               {question.q_type === "mcq" && question.options && (
                 <div className="space-y-3">
                   {shuffledKeys.map((origKey, idx) => {
-                    const displayKey = String.fromCharCode(65 + idx);
+                    const displayKey = String(idx + 1);
                     const opt = question.options![origKey as keyof typeof question.options];
                     const selected = selectedDisplayKey === displayKey;
                     return (
                       <button key={origKey} id={`option-${displayKey}`}
                         onClick={() => (!result || isRetrying) && setSelectedDisplayKey(displayKey)}
                         disabled={!!result && !isRetrying}
+                        aria-pressed={selected}
                         className="w-full text-left flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-200"
                         style={{
-                          background: selected ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.03)",
-                          borderColor: selected ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.08)",
-                          transform: selected ? "scale(1.01)" : "scale(1)",
+                          background: selected ? "rgba(216,101,59,0.12)" : "rgba(255,252,246,0.64)",
+                          borderColor: selected ? "rgba(216,101,59,0.55)" : "rgba(97,70,52,0.14)",
+                          transform: selected ? "translateX(2px)" : "translateX(0)",
                           cursor: (result && !isRetrying) ? "default" : "pointer",
                         }}>
                         <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
-                          style={{ background: selected ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.06)", color: selected ? "#c4b5fd" : "rgba(255,255,255,0.5)" }}>
+                          style={{ background: selected ? "#d8653b" : "rgba(97,70,52,0.07)", color: selected ? "#fffaf3" : "rgba(53,45,39,0.62)" }}>
                           {displayKey}
                         </span>
-                        <span className={`text-sm font-medium ${selected ? "text-white" : "text-white/70"}`}>{opt}</span>
+                        <span className={`text-sm font-medium ${selected ? "text-stone-900" : "text-stone-900/70"}`}>{opt}</span>
                       </button>
                     );
                   })}
                 </div>
               )}
 
+              {question.q_type === "fill_blank" && (
+                <div>
+                  <label htmlFor="fill-blank-answer" className="section-label block mb-2">Exact answer</label>
+                  <input
+                    id="fill-blank-answer"
+                    type="text"
+                    autoComplete="off"
+                    value={selectedDisplayKey ?? ""}
+                    placeholder="Type the exact missing word or phrase"
+                    className="input-glass min-h-[52px]"
+                    onChange={(e) => setSelectedDisplayKey(e.target.value)}
+                    disabled={!!result && !isRetrying}
+                  />
+                  <p className="mt-2 text-xs text-stone-500">Capital letters do not matter. The word or phrase itself must match exactly.</p>
+                </div>
+              )}
+
               {/* Essay / structured */}
-              {question.q_type !== "mcq" && (
+              {(question.q_type === "structured" || question.q_type === "essay") && (
                 <textarea id="essay-answer" placeholder="Type your answer here..."
-                  className="w-full min-h-[160px] rounded-xl px-4 py-3 text-white placeholder-white/30 border border-white/10 bg-white/5 backdrop-blur-sm outline-none focus:border-violet-500/60 text-sm leading-relaxed resize-none transition-all duration-200"
+                  className="w-full min-h-[160px] rounded-xl px-4 py-3 text-stone-900 placeholder-white/30 border border-orange-900/15 bg-orange-900/5 backdrop-blur-sm outline-none focus:border-orange-600/60 text-sm leading-relaxed resize-none transition-all duration-200"
                   onChange={(e) => setSelectedDisplayKey(e.target.value)} disabled={!!result && !isRetrying} />
               )}
             </>
@@ -553,7 +651,7 @@ export default function QuizPage() {
 
         {/* Error */}
         {error && (
-          <div className="mb-4 rounded-xl px-4 py-3 border border-red-500/30 bg-red-500/10 text-red-300 text-sm flex items-center gap-2">
+          <div className="mb-4 rounded-xl px-4 py-3 border border-red-500/30 bg-red-500/10 text-red-700 text-sm flex items-center gap-2">
             <AlertTriangleIcon className="w-4 h-4 shrink-0" /> {error}
           </div>
         )}
@@ -562,23 +660,23 @@ export default function QuizPage() {
         {isViewingHistory ? (
           /* History nav */
           <div className="flex items-center gap-3 mb-4">
-            <NavBtn id="btn-hist-prev" disabled={viewIndex <= 0} onClick={() => setViewIndex((v) => v - 1)}>← Prev</NavBtn>
+            <NavBtn id="btn-hist-prev" disabled={viewIndex <= 0} onClick={() => setViewIndex((v) => v - 1)}><ArrowLeftIcon /> Prev</NavBtn>
             <button id="btn-hist-return" onClick={() => setViewIndex(-1)}
-              className="flex-1 py-4 rounded-xl font-semibold text-white/80 text-sm transition-all duration-200 border flex items-center justify-center gap-2"
-              style={{ background: "rgba(139,92,246,0.12)", borderColor: "rgba(139,92,246,0.3)" }}>
+              className="flex-1 py-4 rounded-xl font-semibold text-stone-900/80 text-sm transition-all duration-200 border flex items-center justify-center gap-2"
+              style={{ background: "rgba(224,108,79,0.12)", borderColor: "rgba(224,108,79,0.3)" }}>
               <ArrowLeftIcon className="w-4 h-4" /> Back to Current Question
             </button>
-            <NavBtn id="btn-hist-next" disabled={false} onClick={() => setViewIndex((v) => v >= history.length - 1 ? -1 : v + 1)}>Next →</NavBtn>
+            <NavBtn id="btn-hist-next" disabled={false} onClick={() => setViewIndex((v) => v >= history.length - 1 ? -1 : v + 1)}>Next <ArrowRightIcon /></NavBtn>
           </div>
         ) : !answerResolved ? (
           /* Submit bar */
           <div className="flex items-center gap-3 mb-4">
-            <NavBtn id="btn-prev-question" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}>← Prev</NavBtn>
+            <NavBtn id="btn-prev-question" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}><ArrowLeftIcon /> Prev</NavBtn>
             <button id="btn-submit-answer" onClick={handleSubmit} disabled={!selectedDisplayKey || submitting}
               className="flex-1 py-4 rounded-xl font-bold text-white text-base transition-all duration-200"
               style={{
-                background: !selectedDisplayKey || submitting ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                boxShadow: selectedDisplayKey && !submitting ? "0 4px 20px rgba(124,58,237,0.4)" : "none",
+                background: !selectedDisplayKey || submitting ? "rgba(0,0,0,0.06)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
+                boxShadow: selectedDisplayKey && !submitting ? "0 4px 20px rgba(224,108,79,0.4)" : "none",
                 cursor: !selectedDisplayKey || submitting ? "not-allowed" : "pointer",
               }}>
               {submitting ? (
@@ -587,23 +685,25 @@ export default function QuizPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Evaluating...
+                  Checking answer...
                 </span>
-              ) : "Submit Answer →"}
+              ) : <span className="flex items-center justify-center gap-2">Submit Answer <ArrowRightIcon /></span>}
             </button>
-            <NavBtn id="btn-next-disabled" disabled={true} onClick={() => {}}>Next →</NavBtn>
+            <NavBtn id="btn-next-disabled" disabled={true} onClick={() => {}}>Next <ArrowRightIcon /></NavBtn>
           </div>
         ) : (
           /* After answer resolved */
           <div className="flex items-center gap-3 mb-4">
-            <NavBtn id="btn-prev-after" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}>← Prev</NavBtn>
+            <NavBtn id="btn-prev-after" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}><ArrowLeftIcon /> Prev</NavBtn>
             <button id="btn-next-question" onClick={handleNextQuestion}
               className="flex-1 py-4 rounded-xl font-bold text-white text-base transition-all duration-200"
               style={{
-                background: result?.quiz_complete ? "linear-gradient(135deg, #059669, #0891b2)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                boxShadow: `0 4px 20px ${result?.quiz_complete ? "rgba(5,150,105,0.3)" : "rgba(124,58,237,0.4)"}`,
+                background: result?.quiz_complete ? "linear-gradient(135deg, #059669, #0891b2)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
+                boxShadow: `0 4px 20px ${result?.quiz_complete ? "rgba(5,150,105,0.3)" : "rgba(224,108,79,0.4)"}`,
               }}>
-              {result?.quiz_complete ? "View Results →" : "Next Question →"}
+              <span className="flex items-center justify-center gap-2">
+                {result?.quiz_complete ? "View Results" : "Next Question"} <ArrowRightIcon />
+              </span>
             </button>
           </div>
         )}
@@ -611,7 +711,7 @@ export default function QuizPage() {
         {/* Adaptive difficulty dots */}
         {isLive && (
           <div className="mt-2 flex items-center justify-center gap-2">
-            <span className="text-xs text-white/25">Adaptive difficulty</span>
+            <span className="text-xs text-stone-400">Adaptive difficulty</span>
             <div className="flex gap-1">
               {[1, 2, 3].map((n) => (
                 <div key={n} className="w-1.5 h-1.5 rounded-full" style={{
@@ -619,7 +719,7 @@ export default function QuizPage() {
                     question.difficulty < 0.33 && n === 1 ? "#34d399"
                       : question.difficulty >= 0.33 && question.difficulty < 0.66 && n <= 2 ? "#fbbf24"
                         : question.difficulty >= 0.66 && n <= 3 ? "#f87171"
-                          : "rgba(255,255,255,0.1)",
+                          : "rgba(0,0,0,0.1)",
                 }} />
               ))}
             </div>

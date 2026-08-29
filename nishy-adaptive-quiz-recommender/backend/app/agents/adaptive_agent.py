@@ -25,17 +25,17 @@ def adaptive_agent(state: AssessmentState) -> dict:
     d = state.get("current_difficulty", 0.5)
     old_d = d
 
-    # Skip if we shouldn't adapt (not adaptive mode and not the first question)
-    if state.get("difficulty_mode") != "adaptive" and len(answers) > 1:
+    # Fixed modes must never be silently changed after an answer.
+    if state.get("difficulty_mode") != "adaptive":
         return {"agent_logs": logs}
 
     # ── Attempt-based difficulty logic ──────────────────────────
     attempts = last.get("attempts", 1)
     
-    if attempts == 1:
+    if attempts <= 2:
         new_d = 0.8  # Hard
         level_name = "Hard"
-    elif attempts in [2, 3]:
+    elif attempts == 3:
         new_d = 0.5  # Medium
         level_name = "Medium"
     else:

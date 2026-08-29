@@ -12,6 +12,9 @@ class QuestionResponse(BaseModel):
     bloom_level: str
     difficulty: float
     grounding_score: float
+    grounding_status: str
+    source_file: str
+    page_number: int
     is_flagged: bool = False
 
 class SubmitAnswerRequest(BaseModel):
@@ -28,3 +31,6 @@ class SubmitAnswerResponse(BaseModel):
     attempts: int
     next_question_available: bool
     quiz_complete: bool = False
+    correct_answer: Optional[str] = None
+    correct_answer_text: Optional[str] = None
+    explanation: Optional[str] = None

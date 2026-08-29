@@ -240,6 +240,29 @@ class RagService:
         logger.debug(f"Retrieved {len(chunks)} chunks for: {query[:60]}")
         return chunks
 
+    def get_source_chunks(self, collection_id: str, limit: int = 40) -> List[Dict]:
+        """Read source chunks with metadata without inventing a semantic query."""
+        try:
+            collection = self.client.get_collection(name=collection_id)
+        except Exception:
+            logger.warning("Collection '%s' not found", collection_id)
+            return []
+        count = min(max(limit, 0), collection.count())
+        if count == 0:
+            return []
+        results = collection.get(limit=count, include=["documents", "metadatas"])
+        return [
+            {
+                "chunk_id": results["ids"][index],
+                "text": document,
+                "source": results["metadatas"][index].get("source", ""),
+                "page": results["metadatas"][index].get("page", 0),
+                "heading": results["metadatas"][index].get("heading", ""),
+                "distance": 0.0,
+            }
+            for index, document in enumerate(results["documents"])
+        ]
+
     def delete_collection(self, collection_id: str) -> None:
         """Delete a session's ChromaDB collection (cleanup)."""
         try:
@@ -248,27 +271,61 @@ class RagService:
         except Exception as e:
             logger.warning(f"Could not delete collection '{collection_id}': {e}")
 
-    def merge_collections(self, target_collection_id: str, source_collection_ids: List[str]) -> None:
-        """Copy all chunks from multiple source collections into a target collection."""
+    def merge_collections(self, target_collection_id: str, source_collection_ids: List[str]) -> int:
+        """Copy all chunks from multiple source collections into a target collection.
+
+        Re-embeds the documents instead of fetching stored embeddings, which is
+        more reliable across ChromaDB versions and avoids empty-embedding errors.
+        """
         target = self.client.get_or_create_collection(
             name=target_collection_id,
             metadata={"hnsw:space": "cosine"}
         )
         total_copied = 0
+        failures = []
         for src_id in source_collection_ids:
             try:
                 src = self.client.get_collection(name=src_id)
-                data = src.get(include=["embeddings", "documents", "metadatas"])
+                # Fetch documents and metadata only — re-embed locally to avoid
+                # ChromaDB embedding-fetch failures on some versions.
+                data = src.get(include=["documents", "metadatas"])
                 if not data["ids"]:
+                    logger.warning(f"Collection '{src_id}' exists but has no documents")
                     continue
-                # Add to target
-                target.add(
-                    ids=data["ids"],
-                    embeddings=data["embeddings"],
-                    documents=data["documents"],
-                    metadatas=data["metadatas"]
-                )
-                total_copied += len(data["ids"])
+
+                # Re-embed in batches and add to the target collection
+                BATCH = 64
+                ids = data["ids"]
+                documents = data["documents"]
+                metadatas = data["metadatas"]
+                for i in range(0, len(ids), BATCH):
+                    batch_ids = ids[i: i + BATCH]
+                    batch_docs = documents[i: i + BATCH]
+                    batch_meta = metadatas[i: i + BATCH]
+                    # Skip IDs that are already present in the target collection
+                    existing = set(target.get(ids=batch_ids)["ids"])
+                    new_mask = [j for j, doc_id in enumerate(batch_ids) if doc_id not in existing]
+                    if not new_mask:
+                        total_copied += len(batch_ids)  # count as copied (already there)
+                        continue
+                    new_ids = [batch_ids[j] for j in new_mask]
+                    new_docs = [batch_docs[j] for j in new_mask]
+                    new_meta = [batch_meta[j] for j in new_mask]
+                    embeddings = self.embed.get_batch_embeddings(new_docs)
+                    target.add(
+                        ids=new_ids,
+                        embeddings=embeddings,
+                        documents=new_docs,
+                        metadatas=new_meta,
+                    )
+                    total_copied += len(new_ids)
+                logger.info(f"Merged {len(ids)} chunks from '{src_id}' into '{target_collection_id}'")
             except Exception as e:
                 logger.warning(f"Failed to copy from '{src_id}': {e}")
-        logger.info(f"Merged {total_copied} chunks into '{target_collection_id}'")
+                failures.append(f"{src_id}: {e}")
+        if total_copied == 0 and failures:
+            raise RuntimeError(
+                "Selected document collection(s) could not be read: " + "; ".join(failures)
+            )
+        logger.info(f"Merged {total_copied} chunks total into '{target_collection_id}'")
+        return total_copied

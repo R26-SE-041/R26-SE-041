@@ -35,6 +35,28 @@ class DbService:
         if "chunk_count" not in existing:
             self.conn.execute("ALTER TABLE sessions ADD COLUMN chunk_count INTEGER DEFAULT 0")
             logger.info("Migration: added chunk_count column")
+        if "rating" not in existing:
+            self.conn.execute("ALTER TABLE sessions ADD COLUMN rating INTEGER DEFAULT NULL")
+            logger.info("Migration: added rating column")
+        if "feedback_comment" not in existing:
+            self.conn.execute("ALTER TABLE sessions ADD COLUMN feedback_comment TEXT DEFAULT NULL")
+            logger.info("Migration: added feedback_comment column")
+        if "is_topic_session" not in existing:
+            self.conn.execute("ALTER TABLE sessions ADD COLUMN is_topic_session INTEGER DEFAULT 0")
+            logger.info("Migration: added is_topic_session column")
+        question_columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(questions)").fetchall()
+        }
+        question_migrations = {
+            "source_file": "TEXT DEFAULT ''",
+            "page_number": "INTEGER DEFAULT 0",
+            "retrieved_text": "TEXT DEFAULT ''",
+            "grounding_status": "TEXT DEFAULT 'rejected'",
+        }
+        for column, definition in question_migrations.items():
+            if column not in question_columns:
+                self.conn.execute(f"ALTER TABLE questions ADD COLUMN {column} {definition}")
+                logger.info("Migration: added questions.%s", column)
         self.conn.commit()
 
     def _create_tables(self):
@@ -60,7 +82,8 @@ class DbService:
                 status          TEXT DEFAULT 'processing',
                 chroma_collection_id TEXT,
                 topics_detected TEXT DEFAULT '[]',
-                chunk_count     INTEGER DEFAULT 0
+                chunk_count     INTEGER DEFAULT 0,
+                is_topic_session INTEGER DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS questions (
@@ -77,6 +100,10 @@ class DbService:
                 model_answer    TEXT,
                 grounding_score REAL,
                 is_flagged      INTEGER DEFAULT 0,
+                source_file     TEXT DEFAULT '',
+                page_number     INTEGER DEFAULT 0,
+                retrieved_text  TEXT DEFAULT '',
+                grounding_status TEXT DEFAULT 'rejected',
                 created_at      TEXT DEFAULT (datetime('now'))
             );
 
@@ -147,9 +174,9 @@ class DbService:
     def create_session(self, session: dict) -> None:
         self.conn.execute("""
             INSERT INTO sessions (session_id, student_id, exam_type, num_questions,
-                difficulty_mode, time_limit_min, status, chroma_collection_id)
+                difficulty_mode, time_limit_min, status, chroma_collection_id, is_topic_session)
             VALUES (:session_id, :student_id, :exam_type, :num_questions,
-                :difficulty_mode, :time_limit_min, :status, :chroma_collection_id)
+                :difficulty_mode, :time_limit_min, :status, :chroma_collection_id, :is_topic_session)
         """, session)
         self.conn.commit()
 
@@ -175,16 +202,27 @@ class DbService:
         ).fetchone()
         return dict(row) if row else None
 
+    def save_feedback(self, session_id: str, rating: int, comment: Optional[str]) -> None:
+        """Persist post-quiz star rating and optional comment."""
+        self.conn.execute(
+            "UPDATE sessions SET rating=?, feedback_comment=? WHERE session_id=?",
+            (rating, comment, session_id)
+        )
+        self.conn.commit()
+        logger.info(f"Feedback saved | session={session_id} rating={rating}")
+
     # ── Questions ──────────────────────────────────
     def save_question(self, q: dict) -> None:
         self.conn.execute("""
             INSERT OR REPLACE INTO questions
             (q_id, session_id, q_index, topic, bloom_level, difficulty, q_type,
              question_text, options_json, correct_answer, model_answer,
-             grounding_score, is_flagged)
+             grounding_score, is_flagged, source_file, page_number,
+             retrieved_text, grounding_status)
             VALUES (:q_id, :session_id, :q_index, :topic, :bloom_level, :difficulty,
              :q_type, :question_text, :options_json, :correct_answer, :model_answer,
-             :grounding_score, :is_flagged)
+             :grounding_score, :is_flagged, :source_file, :page_number,
+             :retrieved_text, :grounding_status)
         """, q)
         self.conn.commit()
 

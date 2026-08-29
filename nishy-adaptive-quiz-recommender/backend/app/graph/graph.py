@@ -4,8 +4,9 @@ Builds and compiles the multi-agent assessment workflow.
 """
 import logging
 import os
+import sqlite3
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.graph.state import AssessmentState
 from app.agents.ingestion_agent import ingestion_agent
@@ -19,7 +20,7 @@ from app.agents.error_handler import error_handler_node
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.getenv("SQLITE_DB_PATH", "./db/sessions.db")
+CHECKPOINT_DB_PATH = os.getenv("CHECKPOINT_DB_PATH", "./db/checkpoints.db")
 
 
 def route_after_ingestion(state: AssessmentState) -> str:
@@ -65,7 +66,9 @@ def route_after_evaluation(state: AssessmentState) -> str:
 def route_after_error(state: AssessmentState) -> str:
     """After error handler: retry or go to analytics."""
     if state.get("retry_count", 0) >= 3:
-        return "analytics"  # Give up — produce partial results
+        if state.get("current_q_index", 0) < state.get("num_questions", 0):
+            return END
+        return "analytics"
     return "quiz_generate"  # Retry
 
 
@@ -131,13 +134,19 @@ def build_graph() -> any:
     builder.add_conditional_edges(
         "error_handler",
         route_after_error,
-        {"quiz_generate": "quiz_generate", "analytics": "analytics"}
+        {"quiz_generate": "quiz_generate", "analytics": "analytics", END: END}
     )
 
     # ── Compile with SQLite checkpointer ──────────
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    memory = MemorySaver()
-    graph = builder.compile(checkpointer=memory)
+    os.makedirs(os.path.dirname(CHECKPOINT_DB_PATH), exist_ok=True)
+    checkpoint_conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
+    checkpointer = SqliteSaver(checkpoint_conn)
+    # Return answer evaluation immediately.  The API resumes adaptive question
+    # generation/recommendation work after the HTTP response has been sent.
+    graph = builder.compile(checkpointer=checkpointer, interrupt_after=["evaluation"])
+
+    # Keep the connection alive for the lifetime of the compiled singleton.
+    graph._checkpoint_connection = checkpoint_conn
 
     logger.info("LangGraph compiled successfully")
     return graph
