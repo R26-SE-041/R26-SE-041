@@ -9,7 +9,6 @@ class Language(StrEnum):
     ENGLISH = "english"
     TAMIL = "tamil"
     SINHALA = "sinhala"
-    MIXED = "mixed"  # Thanglish / Singlish
 
 
 class TranscribeResponse(BaseModel):

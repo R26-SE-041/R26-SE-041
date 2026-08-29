@@ -1,0 +1,15 @@
+{
+  "organ": "heart",
+  "version": "1.0.0",
+  "sources": [
+    {
+      "id": "ncbi-heart-anatomy",
+      "title": "Anatomy, Thorax, Heart",
+      "publisher": "NCBI Bookshelf",
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK470256/",
+      "accessed": "2026-08-21",
+      "reviewed": true,
+      "usage": "Factual reference; verify individual figure rights separately before reusing images."
+    }
+  ]
+}

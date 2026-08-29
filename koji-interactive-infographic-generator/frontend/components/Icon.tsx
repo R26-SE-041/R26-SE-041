@@ -22,6 +22,8 @@ export type IconName =
   | "sun"
   | "tag"
   | "target"
+  | "thumb-down"
+  | "thumb-up"
   | "wand";
 
 interface IconProps {
@@ -55,6 +57,8 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "sun" && <><Circle {...common} cx="12" cy="12" r="4" /><Path {...common} d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>}
       {name === "tag" && <><Path {...common} d="M20 13 13 20 4 11V4h7l9 9Z" /><Circle {...common} cx="8.5" cy="8.5" r="1" /></>}
       {name === "target" && <><Circle {...common} cx="12" cy="12" r="9" /><Circle {...common} cx="12" cy="12" r="4" /><Circle cx="12" cy="12" fill={color} r="1.5" /></>}
+      {name === "thumb-up" && <><Path {...common} d="M7 10v11H3V10h4ZM7 19h10.2a2 2 0 0 0 2-1.6l1.4-7A2 2 0 0 0 18.6 8H14l.7-3.2A2.3 2.3 0 0 0 10.4 3L7 10Z" /></>}
+      {name === "thumb-down" && <><Path {...common} d="M7 14V3H3v11h4ZM7 5h10.2a2 2 0 0 1 2 1.6l1.4 7a2 2 0 0 1-2 2.4H14l.7 3.2a2.3 2.3 0 0 1-4.3 1.8L7 14Z" /></>}
       {name === "wand" && <><Path {...common} d="m4 20 10-10" /><Path {...common} d="m13 4 1-2 1 2 2 1-2 1-1 2-1-2-2-1 2-1ZM18 13l1-2 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" /></>}
     </Svg>
   );

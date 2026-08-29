@@ -1,12 +1,12 @@
 """
 TTS Agent — LangGraph node (Phase 2).
 
-Responsibility: Convert the localized answer to speech. Tamil uses the
-Tamil-specific Indic Parler-TTS model; other languages use MMS-TTS.
+Responsibility: Convert the localized answer to speech. English uses
+Kokoro-82M, Tamil uses Indic Parler-TTS, and Sinhala uses SinhalaVITS.
 Stores the audio in Supabase Storage and returns a signed URL.
 """
 
-from app.services.modal_client import call_tamil_tts, call_tts
+from app.services.modal_client import call_english_tts, call_sinhala_vits_tts_direct, call_tamil_tts
 from app.services.storage import upload_audio
 from app.db.supabase import get_supabase
 from app.core.logging import get_logger
@@ -36,12 +36,14 @@ async def tts_node(state: dict) -> dict:
     logger.info("TTS agent: synthesizing %d chars in %s", len(text), language)
 
     try:
-        if language == "tamil":
+        if language == "english":
+            audio_bytes = await call_english_tts(text)
+        elif language == "tamil":
             audio_bytes = await call_tamil_tts(text)
-            if audio_bytes is None:
-                raise RuntimeError("Tamil TTS is unavailable.")
         else:
-            audio_bytes = await call_tts(text, language)
+            audio_bytes = await call_sinhala_vits_tts_direct(text)
+        if not audio_bytes:
+            raise RuntimeError(f"{language.title()} TTS is unavailable.")
         path = await upload_audio(session_id, audio_bytes)
 
         # Generate signed URL (1 hour)

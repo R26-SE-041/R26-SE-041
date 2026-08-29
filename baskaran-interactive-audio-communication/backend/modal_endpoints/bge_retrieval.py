@@ -24,7 +24,7 @@ GPU: T4 (16 GB VRAM) — both models fit with room to spare.
 Cold-start strategy:
   - Model weights are cached in the Modal volume "voicelearn-bge-models".
   - @modal.enter() loads the model ONCE per container lifetime.
-  - scaledown_window=300 keeps the container warm for 5 minutes after the
+  - scaledown_window=1200 keeps the container warm for 20 minutes after the
     last request, eliminating cold starts within a conversation session.
   - Weights are never downloaded during a live request.
 """
@@ -41,12 +41,22 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "sentence-transformers==3.1.1",
-        "torch>=2.2.0",
+        # Transformers rejects torch.load on torch<2.6 because of
+        # CVE-2025-32434. Pin a CUDA 12-era secure release instead of allowing
+        # pip to drift to the much larger newest CUDA stack.
+        "torch==2.6.0",
+        # Torch and sentence-transformers extensions in this image are not
+        # compatible with the NumPy 2 ABI yet.
+        "numpy>=1.26,<2",
         "transformers>=4.41.0",
         "accelerate>=0.28.0",
         "fastapi[standard]>=0.115.0",
         "pydantic>=2.0.0",
     )
+    .env({
+        "HF_HOME": "/bge_models",
+        "TRANSFORMERS_CACHE": "/bge_models",
+    })
 )
 
 app = modal.App("voicelearn-bge-retrieval", image=image)
@@ -58,6 +68,25 @@ EMBEDDING_MODEL = "BAAI/bge-m3"
 RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 EMBEDDING_DIMENSION = 1024
 MODELS_DIR = "/bge_models"
+
+
+@app.function(
+    volumes={MODELS_DIR: bge_volume},
+    cpu=2.0,
+    memory=4096,
+    timeout=1800,
+)
+def cache_reranker_model():
+    """Populate the shared reranker cache on CPU; never spend GPU time downloading."""
+    from huggingface_hub import snapshot_download
+
+    cached_path = snapshot_download(
+        repo_id=RERANKER_MODEL,
+        cache_dir=MODELS_DIR,
+    )
+    bge_volume.commit()
+    print(f"[BGERerankerCache] READY model={RERANKER_MODEL}; path={cached_path}")
+    return {"model": RERANKER_MODEL, "cached": True}
 
 
 # ── Request / Response schemas ───────────────────────────────────────────────
@@ -88,7 +117,7 @@ class RerankResponse(BaseModel):
 @app.cls(
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
-    scaledown_window=300,   # keep container warm for 5 min after last request
+    scaledown_window=1200,
     memory=8192,
 )
 class BGEEmbedder:
@@ -115,6 +144,7 @@ class BGEEmbedder:
             EMBEDDING_MODEL,
             cache_folder=MODELS_DIR,
         )
+        bge_volume.commit()
         # Move to GPU explicitly (sentence-transformers usually does this
         # automatically, but we make it explicit for clarity and diagnostics).
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -157,7 +187,10 @@ class BGEEmbedder:
 @app.cls(
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
-    scaledown_window=300,
+    min_containers=0,
+    max_containers=1,
+    buffer_containers=0,
+    scaledown_window=60,
     memory=8192,
 )
 class BGEReranker:
@@ -177,8 +210,11 @@ class BGEReranker:
         self.model = CrossEncoder(
             RERANKER_MODEL,
             max_length=512,
+            cache_dir=MODELS_DIR,
+            local_files_only=True,
             # CrossEncoder automatically uses the GPU when torch.cuda is available.
         )
+        bge_volume.commit()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         print(f"[BGEReranker] {RERANKER_MODEL} loaded on {device} ✓")

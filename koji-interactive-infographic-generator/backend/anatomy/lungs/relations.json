@@ -1,0 +1,18 @@
+{
+  "organ":"lungs","version":"1.0.0","relations":[
+    {"source":"trachea","relation":"air_flows_to","target":"carina"},
+    {"source":"carina","relation":"divides_into","target":"right_main_bronchus"},
+    {"source":"carina","relation":"divides_into","target":"left_main_bronchus"},
+    {"source":"right_main_bronchus","relation":"supplies","target":"right_upper_lobe"},
+    {"source":"right_main_bronchus","relation":"supplies","target":"right_middle_lobe"},
+    {"source":"right_main_bronchus","relation":"supplies","target":"right_lower_lobe"},
+    {"source":"left_main_bronchus","relation":"supplies","target":"left_upper_lobe"},
+    {"source":"left_main_bronchus","relation":"supplies","target":"left_lower_lobe"},
+    {"source":"horizontal_fissure","relation":"separates","target":"right_upper_lobe"},
+    {"source":"horizontal_fissure","relation":"separates","target":"right_middle_lobe"},
+    {"source":"right_oblique_fissure","relation":"borders","target":"right_lower_lobe"},
+    {"source":"left_oblique_fissure","relation":"separates","target":"left_upper_lobe"},
+    {"source":"left_oblique_fissure","relation":"separates","target":"left_lower_lobe"},
+    {"source":"bronchioles","relation":"conduct_air_to","target":"alveoli"}
+  ]
+}

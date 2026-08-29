@@ -1,6 +1,6 @@
 /** Shared TypeScript types across the frontend. */
 
-export type Language = 'english' | 'tamil' | 'sinhala' | 'mixed'
+export type Language = 'english' | 'tamil' | 'sinhala'
 
 export type FileType = 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'txt' | 'md'
 
@@ -44,13 +44,24 @@ export interface AskResponse {
   references: ChunkReference[]
 }
 
+export interface HistoryItem {
+  id: string
+  question: string
+  answer: string
+  language: Language
+  references: ChunkReference[]
+  has_audio: boolean
+  created_at: string
+}
+
 export interface SessionMessage {
   role: 'user' | 'assistant'
   content: string
   audio_url?: string | null
+  audio_pending?: boolean
+  audio_error?: string | null
   references?: ChunkReference[]
   created_at: string
 }
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'done' | 'error'
-

@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "fixed_seeds": [17, 41, 73],
+  "prompts": [
+    {"id": "heart_01", "grade": "primary", "prompt": "Show the main parts of a human heart for a primary school lesson"},
+    {"id": "heart_02", "grade": "middle_school", "prompt": "Create a heart cutaway showing the four chambers"},
+    {"id": "heart_03", "grade": "middle_school", "prompt": "Explain blood flow through the human heart visually"},
+    {"id": "heart_04", "grade": "high_school", "prompt": "Anterior cutaway of the heart with chambers, valves and major vessels"},
+    {"id": "heart_05", "grade": "high_school", "prompt": "Educational cardiac anatomy diagram emphasizing the interventricular septum"},
+    {"id": "heart_06", "grade": "university", "prompt": "Anatomically accurate anterior heart section for teaching circulation"},
+    {"id": "heart_07", "grade": "middle_school", "prompt": "Human heart showing venae cavae, pulmonary artery, pulmonary veins and aorta"},
+    {"id": "heart_08", "grade": "high_school", "prompt": "Compare oxygenated and deoxygenated blood pathways in one heart image"},
+    {"id": "heart_09", "grade": "primary", "prompt": "Simple clean human heart picture for children"},
+    {"id": "heart_10", "grade": "university", "prompt": "Heart cut section with atrioventricular and semilunar valves visible"},
+    {"id": "heart_11", "grade": "middle_school", "prompt": "Idhayam four chambers educational illustration"},
+    {"id": "heart_12", "grade": "high_school", "prompt": "Cardiac anatomy image for an interactive infographic"}
+  ]
+}

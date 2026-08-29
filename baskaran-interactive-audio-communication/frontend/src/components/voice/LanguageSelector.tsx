@@ -1,64 +1,54 @@
 'use client'
 
-import { clsx } from 'clsx'
 import type { Language } from '@/types'
 
 interface LanguageSelectorProps {
   value: Language
-  onChange: (lang: Language) => void
+  onChange: (language: Language) => void
   disabled?: boolean
 }
 
-const LANGUAGES = [
-  { value: 'english' as Language, label: 'English', native: 'Full English',         flag: '🇬🇧' },
-  { value: 'tamil'   as Language, label: 'Tamil',   native: 'தமிழ்',                flag: '🇮🇳' },
-  { value: 'sinhala' as Language, label: 'Sinhala', native: 'සිංහල',               flag: '🇱🇰' },
-  { value: 'mixed'   as Language, label: 'Mixed',   native: 'Thanglish / Singlish', flag: '🌐' },
+const LANGUAGES: Array<{ value: Language; label: string; native: string; flag: string }> = [
+  { value: 'english', label: 'English', native: 'EN',    flag: '🇬🇧' },
+  { value: 'tamil',   label: 'Tamil',   native: 'தமிழ்', flag: '🇮🇳' },
+  { value: 'sinhala', label: 'Sinhala', native: 'සිං',   flag: '🇱🇰' },
 ]
 
-export function LanguageSelector({ value, onChange, disabled = false }: LanguageSelectorProps) {
+export function LanguageSelector({ value, onChange, disabled }: LanguageSelectorProps) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label="Language mode">
+    <div className="flex flex-row gap-2 flex-wrap">
       {LANGUAGES.map((lang) => {
         const active = value === lang.value
         return (
           <button
             key={lang.value}
-            id={`lang-${lang.value}`}
-            type="button"
-            disabled={disabled}
             onClick={() => !disabled && onChange(lang.value)}
+            disabled={disabled}
             aria-pressed={active}
-            className={clsx(
-              'relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-2xl border transition-all duration-200 select-none',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900',
-              'disabled:opacity-40 disabled:pointer-events-none',
-              active ? 'lang-btn-active' : 'lang-btn'
-            )}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              borderRadius: 50,
+              fontSize: 13,
+              fontWeight: active ? 600 : 500,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.45 : 1,
+              transition: 'all 0.15s ease',
+              background: active ? 'var(--primary-soft)' : 'var(--surface-soft)',
+              border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+              color: active ? 'var(--primary)' : 'var(--text-muted)',
+              whiteSpace: 'nowrap',
+            }}
           >
-            {/* Active dot */}
+            <span>{lang.label}</span>
             {active && (
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-brand-400" />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             )}
-
-            {/* Flag */}
-            <span
-              className={clsx('text-2xl transition-transform duration-150', active ? 'scale-110' : 'group-hover:scale-105')}
-              role="img"
-              aria-label={lang.label}
-            >
-              {lang.flag}
-            </span>
-
-            {/* Name */}
-            <span className={clsx('text-sm font-semibold leading-tight', active ? 'text-white' : 'text-white/70')}>
-              {lang.label}
-            </span>
-
-            {/* Native script */}
-            <span className="text-[10px] text-white/35 leading-tight truncate w-full text-center px-1">
-              {lang.native}
-            </span>
           </button>
         )
       })}

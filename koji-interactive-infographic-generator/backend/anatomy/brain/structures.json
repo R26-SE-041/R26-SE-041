@@ -1,0 +1,22 @@
+{
+  "organ": "brain",
+  "version": "1.0.0",
+  "aliases": ["brain", "cerebral", "moolai"],
+  "trigger_word": "BRNANAT",
+  "structures": [
+    {"id":"cerebrum","label":"Cerebrum","aliases":["cerebral hemispheres"],"importance":"primary","function":"Largest brain region supporting sensory, motor, language, memory, emotion, and cognition.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"frontal_lobe","label":"Frontal lobe","aliases":["frontal cortex"],"importance":"primary","function":"Supports executive functions, voluntary motor control, and aspects of language.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"parietal_lobe","label":"Parietal lobe","aliases":["parietal cortex"],"importance":"primary","function":"Integrates somatosensory and spatial information.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"temporal_lobe","label":"Temporal lobe","aliases":["temporal cortex"],"importance":"primary","function":"Supports hearing, memory, and language comprehension.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"occipital_lobe","label":"Occipital lobe","aliases":["visual cortex region"],"importance":"primary","function":"Contains major cortical regions for visual processing.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"corpus_callosum","label":"Corpus callosum","aliases":["callosal commissure"],"importance":"primary","function":"Major white-matter tract connecting the cerebral hemispheres.","source_ids":["ncbi-cerebral-hemisphere"]},
+    {"id":"thalamus","label":"Thalamus","aliases":[],"importance":"secondary","function":"Relays and integrates many sensory and motor signals with the cerebral cortex.","source_ids":["ncbi-brain-physiology"]},
+    {"id":"hypothalamus","label":"Hypothalamus","aliases":[],"importance":"secondary","function":"Coordinates autonomic and endocrine functions that support homeostasis.","source_ids":["ncbi-brain-physiology"]},
+    {"id":"pituitary_gland","label":"Pituitary gland","aliases":["hypophysis"],"importance":"secondary","function":"Endocrine gland regulated closely by the hypothalamus.","source_ids":["ncbi-brain-physiology"]},
+    {"id":"midbrain","label":"Midbrain","aliases":["mesencephalon"],"importance":"secondary","function":"Superior portion of the brainstem involved in motor and sensory pathways.","source_ids":["ncbi-brainstem"]},
+    {"id":"pons","label":"Pons","aliases":[],"importance":"primary","function":"Brainstem region connecting major neural pathways and contributing to respiratory and sleep functions.","source_ids":["ncbi-brainstem"]},
+    {"id":"medulla_oblongata","label":"Medulla oblongata","aliases":["medulla"],"importance":"primary","function":"Inferior brainstem region continuous with the spinal cord and involved in vital autonomic control.","source_ids":["ncbi-brainstem"]},
+    {"id":"cerebellum","label":"Cerebellum","aliases":["little brain"],"importance":"primary","function":"Coordinates movement, balance, posture, muscle tone, and motor learning.","source_ids":["ncbi-cerebellum"]},
+    {"id":"spinal_cord","label":"Spinal cord","aliases":[],"importance":"secondary","function":"Carries neural signals between the brain and the body.","source_ids":["ncbi-brainstem"]}
+  ]
+}

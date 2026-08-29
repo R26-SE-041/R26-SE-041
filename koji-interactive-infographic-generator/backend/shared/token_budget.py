@@ -66,6 +66,7 @@ class TokenBudgetController:
             "web_fallback": 200,
             "mode_instruction": 50,
             "user_question": 50,
+            "retry_feedback": 100,
         },
         "eval_agent": {
             "system": 100,

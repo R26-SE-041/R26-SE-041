@@ -1,0 +1,18 @@
+{
+  "organ":"lungs","version":"1.0.0","aliases":["lung","lungs","pulmonary","nuraiyeeral"],"trigger_word":"LNGANAT","structures":[
+    {"id":"trachea","label":"Trachea","aliases":["windpipe"],"importance":"primary","function":"Conducts air toward the main bronchi.","source_ids":["ncbi-lung-anatomy","ncbi-bronchial-anatomy"]},
+    {"id":"carina","label":"Carina","aliases":["tracheal bifurcation"],"importance":"secondary","function":"Ridge at the point where the trachea divides into the main bronchi.","source_ids":["ncbi-bronchial-anatomy"]},
+    {"id":"right_main_bronchus","label":"Right main bronchus","aliases":["right primary bronchus","right mainstem bronchus"],"importance":"primary","function":"Conducts air from the trachea into the right lung.","source_ids":["ncbi-bronchial-anatomy"]},
+    {"id":"left_main_bronchus","label":"Left main bronchus","aliases":["left primary bronchus","left mainstem bronchus"],"importance":"primary","function":"Conducts air from the trachea into the left lung.","source_ids":["ncbi-bronchial-anatomy"]},
+    {"id":"right_upper_lobe","label":"Right upper lobe","aliases":["RUL"],"importance":"primary","function":"Superior lobe of the right lung.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"right_middle_lobe","label":"Right middle lobe","aliases":["RML"],"importance":"primary","function":"Middle lobe unique to the right lung.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"right_lower_lobe","label":"Right lower lobe","aliases":["RLL"],"importance":"primary","function":"Inferior lobe of the right lung.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"left_upper_lobe","label":"Left upper lobe","aliases":["LUL"],"importance":"primary","function":"Superior lobe of the left lung.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"left_lower_lobe","label":"Left lower lobe","aliases":["LLL"],"importance":"primary","function":"Inferior lobe of the left lung.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"horizontal_fissure","label":"Horizontal fissure","aliases":["right horizontal fissure","minor fissure"],"importance":"secondary","function":"Separates the right upper and middle lobes.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"right_oblique_fissure","label":"Right oblique fissure","aliases":["right major fissure"],"importance":"secondary","function":"Separates the right lower lobe from the upper and middle lobes.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"left_oblique_fissure","label":"Left oblique fissure","aliases":["left major fissure"],"importance":"secondary","function":"Separates the left upper and lower lobes.","source_ids":["ncbi-lung-anatomy"]},
+    {"id":"bronchioles","label":"Bronchioles","aliases":["small airways"],"importance":"secondary","function":"Small airways that conduct air toward respiratory regions.","source_ids":["ncbi-bronchial-anatomy"]},
+    {"id":"alveoli","label":"Alveoli","aliases":["air sacs","alveolar sacs"],"importance":"secondary","function":"Microscopic air spaces where gas exchange occurs across the blood-air barrier.","source_ids":["ncbi-lung-histology"]}
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "ear": {
+    "required_structures": [
+      "pinna",
+      "external auditory canal",
+      "tympanic membrane",
+      "ossicles",
+      "cochlea",
+      "semicircular canals",
+      "eustachian tube",
+      "auditory nerve"
+    ]
+  },
+  "eye": {
+    "required_structures": [
+      "cornea",
+      "iris",
+      "pupil",
+      "lens",
+      "sclera",
+      "retina",
+      "vitreous body",
+      "optic nerve"
+    ]
+  }
+}

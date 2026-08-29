@@ -9,10 +9,12 @@ Local mode is triggered when CHROMA_HOST is "localhost" or "127.0.0.1"
 """
 
 import asyncio
+import sqlite3
 from functools import lru_cache
 from pathlib import Path
 
 import chromadb
+from chromadb.api.configuration import CollectionConfigurationInternal
 from app.core.config import get_settings
 from app.core.logging import get_logger
 
@@ -20,6 +22,37 @@ logger = get_logger(__name__)
 
 # Local ChromaDB data directory (relative to backend/)
 _LOCAL_DB_PATH = Path(__file__).parent.parent.parent / "chroma_data"
+
+
+def _repair_legacy_collection_configuration() -> None:
+    """Upgrade legacy empty Chroma configuration rows without touching vectors.
+
+    Older local stores can contain ``config_json_str='{}'``. Chroma 0.5.15
+    cannot deserialize those rows because its configuration discriminator is
+    absent. Only those empty configuration cells are updated; collections,
+    embeddings, metadata, and HNSW files are left unchanged.
+    """
+    database_path = _LOCAL_DB_PATH / "chroma.sqlite3"
+    if not database_path.is_file():
+        return
+
+    compatible_config = CollectionConfigurationInternal().to_json_str()
+    try:
+        with sqlite3.connect(database_path, timeout=10) as connection:
+            updated = connection.execute(
+                """UPDATE collections
+                   SET config_json_str = ?
+                   WHERE config_json_str IS NULL OR trim(config_json_str) = '{}'""",
+                (compatible_config,),
+            ).rowcount
+        if updated:
+            logger.info(
+                "Chroma compatibility migration updated %d legacy configuration row(s); "
+                "index data was preserved",
+                updated,
+            )
+    except sqlite3.Error as exc:
+        logger.warning("Chroma compatibility migration could not run: %s", exc)
 
 
 def _is_local_mode() -> bool:
@@ -38,6 +71,7 @@ def _collection_name() -> str:
 def _get_persistent_client() -> chromadb.ClientAPI:
     """Return a local persistent ChromaDB client (no server needed)."""
     _LOCAL_DB_PATH.mkdir(parents=True, exist_ok=True)
+    _repair_legacy_collection_configuration()
     logger.info("ChromaDB: using local persistent store at %s", _LOCAL_DB_PATH)
     return chromadb.PersistentClient(path=str(_LOCAL_DB_PATH))
 
@@ -75,6 +109,20 @@ async def get_or_create_collection(client=None):
             name=_collection_name(),
             metadata={"hnsw:space": "cosine"},
         )
+
+
+async def persistent_index_status(expected_document_ids: set[str]) -> tuple[bool, int, set[str]]:
+    """Check whether the local versioned collection covers all stored documents."""
+    collection = await get_or_create_collection()
+    chunk_count = await collection.count()
+    result = await collection.get(include=["metadatas"])
+    indexed_document_ids = {
+        str(metadata["document_id"])
+        for metadata in (result.get("metadatas") or [])
+        if metadata and metadata.get("document_id")
+    }
+    missing_document_ids = expected_document_ids - indexed_document_ids
+    return not missing_document_ids, chunk_count, missing_document_ids
 
 
 class _AsyncCollectionWrapper:

@@ -39,7 +39,12 @@ class LocalizerRequest(BaseModel):
     language: str
 
 LANGUAGE_INSTRUCTIONS = {
-    "tamil": "Translate the following academic answer to Tamil (தமிழ்). Keep technical terms in English.",
+    "tamil": (
+        "Translate the following academic answer into natural spoken Tamil (தமிழ்). "
+        "Keep necessary English technical terms in English and place them naturally "
+        "inside Tamil sentences. Preserve their spelling. Use short, complete sentences "
+        "that sound clear when read aloud. Do not output Markdown symbols."
+    ),
     "sinhala": "Translate the following academic answer to Sinhala (සිංහල). Keep technical terms in English.",
     "mixed": "Rewrite the following in Thanglish (mix of Tamil and English, using English script for Tamil words). Keep it natural and conversational.",
 }

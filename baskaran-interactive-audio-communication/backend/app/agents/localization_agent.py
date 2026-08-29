@@ -3,7 +3,7 @@ Localization Agent — LangGraph node (Phase 2).
 
 Responsibility: Format/translate the generated answer into the
 user's chosen language using Qwen2.5-7B on Modal.
-Supports: English, Tamil, Sinhala, Mixed (Thanglish/Singlish).
+Supports: English, Tamil, and Sinhala.
 """
 
 from app.services.modal_client import call_localizer

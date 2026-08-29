@@ -20,7 +20,7 @@ Next.js Frontend  →  FastAPI Backend  →  LangGraph Agents  →  Modal.com AI
 | Qwen2.5-3B-Instruct | Prompt Enhancement | T4 |
 | Llama 3.1 8B Instruct | RAG Answer Generation | A10G |
 | Qwen2.5-7B-Instruct | Tamil/Sinhala Localization | T4 |
-| Facebook MMS-TTS | Text → Speech | T4 |
+| Kokoro-82M / Indic Parler-TTS / SinhalaVITS | Text → Speech | CPU / A10G / T4 |
 
 ## Quick Start
 
@@ -47,6 +47,9 @@ modal setup   # authenticate
 
 modal deploy backend/modal_endpoints/whisper_stt.py
 # → Copy the printed URL to MODAL_WHISPER_URL in backend/.env
+
+modal deploy backend/modal_endpoints/english_kokoro_tts.py
+# → Copy the printed URL to MODAL_ENGLISH_KOKORO_TTS_URL in backend/.env
 ```
 
 ### 3. Start with Docker Compose

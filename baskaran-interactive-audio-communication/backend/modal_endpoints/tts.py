@@ -12,7 +12,11 @@ Returns: audio/wav bytes (raw WAV file)
 MMS-TTS supports 1100+ languages including Tamil (tam) and Sinhala (sin).
 """
 
+import io
+
 import modal
+from fastapi.responses import Response
+from pydantic import BaseModel
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -31,10 +35,15 @@ model_volume = modal.Volume.from_name("voicelearn-models", create_if_missing=Tru
 # MMS-TTS language codes
 LANG_TO_MMS = {
     "english": "eng",
-    "tamil": "tam",
+    "tamil":   "tam",
     "sinhala": "sin",
-    "mixed": "eng",  # Mixed uses English TTS; text already localized
+    "mixed":   "eng",  # Mixed uses English TTS; text already localized
 }
+
+
+class TTSRequest(BaseModel):
+    text: str
+    language: str = "english"
 
 
 @app.cls(
@@ -46,13 +55,9 @@ LANG_TO_MMS = {
 class MMSTTS:
     @modal.enter()
     def load_model(self):
-        from transformers import VitsModel, AutoTokenizer
-
-        # MMS-TTS — loaded per-language (cache all common ones on first call)
+        # Pre-load English as default; other languages loaded on first request.
         self._models: dict = {}
         self._tokenizers: dict = {}
-
-        # Pre-load English as default
         self._load_lang("eng")
 
     def _load_lang(self, lang_code: str):
@@ -62,18 +67,20 @@ class MMSTTS:
             return
 
         model_id = f"facebook/mms-tts-{lang_code}"
-        self._tokenizers[lang_code] = AutoTokenizer.from_pretrained(model_id, cache_dir="/models")
-        self._models[lang_code] = VitsModel.from_pretrained(model_id, cache_dir="/models")
+        self._tokenizers[lang_code] = AutoTokenizer.from_pretrained(
+            model_id, cache_dir="/models"
+        )
+        self._models[lang_code] = VitsModel.from_pretrained(
+            model_id, cache_dir="/models"
+        )
 
     @modal.fastapi_endpoint(method="POST")
-    async def synthesize(self, request):
-        import io
+    def synthesize(self, req: TTSRequest) -> Response:
         import torch
         import scipy.io.wavfile
 
-        body = await request.json()
-        text: str = body.get("text", "")
-        language: str = body.get("language", "english").lower()
+        text: str = (req.text or "").strip()
+        language: str = (req.language or "english").lower()
 
         lang_code = LANG_TO_MMS.get(language, "eng")
         self._load_lang(lang_code)
@@ -89,10 +96,9 @@ class MMSTTS:
         waveform = output.squeeze().numpy()
         sample_rate = model.config.sampling_rate
 
-        # Write WAV to bytes buffer
         buf = io.BytesIO()
         scipy.io.wavfile.write(buf, sample_rate, waveform)
         buf.seek(0)
 
-        from fastapi.responses import Response
         return Response(content=buf.read(), media_type="audio/wav")
+

@@ -1,0 +1,6 @@
+{
+  "organ":"kidneys","version":"1.0.0","sources":[
+    {"id":"ncbi-kidney-anatomy","title":"Anatomy, Abdomen and Pelvis: Kidneys","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK482385/","accessed":"2026-08-21","reviewed":true},
+    {"id":"ncbi-nephron-histology","title":"Histology, Nephron","publisher":"NCBI Bookshelf / StatPearls","url":"https://www.ncbi.nlm.nih.gov/books/NBK554411/","accessed":"2026-08-21","reviewed":true}
+  ]
+}
