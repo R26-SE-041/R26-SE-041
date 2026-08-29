@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { StudyModeSelector, type StudyMode } from '@/components/ui/StudyModeSelector'
 import { MuscleTopicGrid } from '@/components/ui/MuscleTopicGrid'
+import { HistoryPanel } from '@/components/history/HistoryPanel'
 import {
   askDocument,
   deleteDocument,
@@ -16,6 +17,14 @@ import {
 } from '@/lib/api'
 import type { AskResponse, DocumentItem, Language, TranscribeResponse } from '@/types'
 import { getMuscleLocale } from '@/lib/muscleLocale'
+import {
+  addLocalHistoryEntry,
+  clearLocalHistory,
+  deleteLocalHistoryEntry,
+  listLocalHistory,
+  updateLocalHistoryAudio,
+  type LocalHistoryEntry,
+} from '@/lib/historyDb'
 
 type Phase = 'idle' | 'transcript-ready' | 'asking' | 'answered' | 'rag-error' | 'asr-error'
 
@@ -71,6 +80,19 @@ export default function StudyAssistantPage() {
   const [audioError, setAudioError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioRequestRef = useRef(0)
+
+  // ─── Local history (IndexedDB — this page has no login/backend history) ───
+  const [historyEntries, setHistoryEntries] = useState<LocalHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const lastQuestionAudioRef = useRef<Blob | null>(null)
+  const currentHistoryEntryIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    listLocalHistory()
+      .then(setHistoryEntries)
+      .catch(() => undefined)
+      .finally(() => setHistoryLoading(false))
+  }, [])
 
   // ─── Load documents on mount ───────────────────────────────────────────────
   const loadDocuments = useCallback(async () => {
@@ -162,6 +184,15 @@ export default function StudyAssistantPage() {
       const blob = await synthesizeSpeech(answer, responseLanguage)
       if (requestId === audioRequestRef.current) {
         setAudioUrl(URL.createObjectURL(blob))
+        const historyId = currentHistoryEntryIdRef.current
+        if (historyId) {
+          void updateLocalHistoryAudio(historyId, blob)
+            .then(() => {
+              setHistoryEntries((current) =>
+                current.map((item) => (item.id === historyId ? { ...item, answerAudio: blob } : item)))
+            })
+            .catch(() => undefined)
+        }
       }
     } catch {
       if (requestId === audioRequestRef.current) {
@@ -171,6 +202,44 @@ export default function StudyAssistantPage() {
     } finally {
       if (requestId === audioRequestRef.current) setAudioLoading(false)
     }
+  }, [])
+
+  // ─── Local history handlers ────────────────────────────────────────────────
+  const handleAudioCaptured = useCallback((blob: Blob) => {
+    lastQuestionAudioRef.current = blob
+  }, [])
+
+  const persistHistoryEntry = useCallback(async (
+    questionText: string,
+    answerText: string,
+    references: AskResponse['references'],
+    documentGrounded: boolean,
+  ) => {
+    try {
+      const entry = await addLocalHistoryEntry({
+        studyMode,
+        language,
+        transcript: questionText,
+        answer: answerText,
+        references,
+        documentGrounded,
+        questionAudio: lastQuestionAudioRef.current ?? undefined,
+      })
+      currentHistoryEntryIdRef.current = entry.id
+      setHistoryEntries((current) => [entry, ...current])
+    } catch {
+      // Local history is a convenience layer — it must never block the Q&A flow.
+    }
+  }, [studyMode, language])
+
+  const handleDeleteHistoryEntry = useCallback((id: string) => {
+    setHistoryEntries((current) => current.filter((item) => item.id !== id))
+    void deleteLocalHistoryEntry(id).catch(() => undefined)
+  }, [])
+
+  const handleClearHistory = useCallback(() => {
+    setHistoryEntries([])
+    void clearLocalHistory().catch(() => undefined)
   }, [])
 
   // ─── ASR / transcript handlers ─────────────────────────────────────────────
@@ -196,6 +265,7 @@ export default function StudyAssistantPage() {
 
   /** Fill transcript from a quick-prompt chip click (Muscle Tutor mode). */
   const handlePromptSelect = useCallback((prompt: string) => {
+    lastQuestionAudioRef.current = null
     setTranscript(prompt)
     setResult(null)
     setAsrError(null)
@@ -247,6 +317,7 @@ export default function StudyAssistantPage() {
         answer.answer.startsWith('RAG generation is not available') ||
         answer.answer.startsWith("I couldn't generate") ||
         answer.answer.startsWith("I couldn't find relevant content")
+      await persistHistoryEntry(question, answer.answer, answer.references, isDocumentGrounded)
       if (!isErrorAnswer) {
         void synthesizeAnswer(answer.answer, language)
       }
@@ -260,7 +331,7 @@ export default function StudyAssistantPage() {
     } finally {
       ragRequestActiveRef.current = false
     }
-  }, [detectedLanguage, language, studyMode, synthesizeAnswer, transcript])
+  }, [detectedLanguage, language, studyMode, synthesizeAnswer, persistHistoryEntry, transcript])
 
   // ─── Fix Transcript ────────────────────────────────────────────────────────
   const handleFixTranscript = useCallback(async () => {
@@ -490,6 +561,7 @@ export default function StudyAssistantPage() {
           <VoiceRecorder
             language={language}
             onTranscript={handleTranscript}
+            onAudioCaptured={handleAudioCaptured}
             onError={handleVoiceError}
             disabled={phase === 'asking'}
           />
@@ -651,6 +723,16 @@ export default function StudyAssistantPage() {
             {loc.ui.askAnother}
           </button>
         )}
+
+        {/* ── History ── */}
+        <SectionWide title="History">
+          <HistoryPanel
+            entries={historyEntries}
+            loading={historyLoading}
+            onDelete={handleDeleteHistoryEntry}
+            onClearAll={handleClearHistory}
+          />
+        </SectionWide>
       </main>
     </div>
   )

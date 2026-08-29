@@ -34,6 +34,7 @@ services:
     volumes:
       - ./backend/app:/app/app  # Hot reload in dev
       - ./backend/local_documents:/app/local_documents
+      - ./backend/local_history:/app/local_history
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -52,7 +53,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     env_file:
-      - ./frontend/.env
+      - ./frontend/.env.local
     depends_on:
       - backend
     restart: unless-stopped

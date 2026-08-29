@@ -44,6 +44,16 @@ export interface AskResponse {
   references: ChunkReference[]
 }
 
+export interface HistoryItem {
+  id: string
+  question: string
+  answer: string
+  language: Language
+  references: ChunkReference[]
+  has_audio: boolean
+  created_at: string
+}
+
 export interface SessionMessage {
   role: 'user' | 'assistant'
   content: string

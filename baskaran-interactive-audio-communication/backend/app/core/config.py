@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     document_ingestion_timeout_seconds: int = 300
     supabase_request_timeout_seconds: int = 10
     local_document_store_path: str = "local_documents"
+    local_history_store_path: str = "local_history"
 
 
 @lru_cache

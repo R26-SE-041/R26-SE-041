@@ -10,6 +10,8 @@ interface VoiceRecorderProps {
   language: Language
   onTranscript: (result: TranscribeResponse) => void
   onError: (msg: string) => void
+  /** Fired with the raw recording right before a successful transcription, so callers can archive it. */
+  onAudioCaptured?: (blob: Blob) => void
   disabled?: boolean
 }
 
@@ -211,7 +213,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
 }
 
 /* ── Main ── */
-export function VoiceRecorder({ language, onTranscript, onError, disabled = false }: VoiceRecorderProps) {
+export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false }: VoiceRecorderProps) {
   const { recordingState, audioBlob, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -241,6 +243,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
     setIsTranscribing(true)
     try {
       const result = await transcribeAudio(previewBlob, language, uploadedFileName ?? 'recording.webm')
+      onAudioCaptured?.(previewBlob)
       onTranscript(result)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Transcription failed')
@@ -251,7 +254,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
       setUploadedFileName(null)
       clearRecording()
     }
-  }, [previewBlob, language, uploadedFileName, onTranscript, onError, clearRecording])
+  }, [previewBlob, language, uploadedFileName, onTranscript, onError, onAudioCaptured, clearRecording])
 
   const handleReRecord = useCallback(() => {
     setPreviewBlob(null)

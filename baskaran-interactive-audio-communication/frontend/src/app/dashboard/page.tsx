@@ -9,7 +9,7 @@ import { ChatWindow } from '@/components/chat/ChatWindow'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import type { TranscribeResponse } from '@/types'
-import { askDocument, synthesizeSpeech } from '@/lib/api'
+import { askDocument, saveHistory, saveHistoryAudio, synthesizeSpeech } from '@/lib/api'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -58,6 +58,10 @@ export default function DashboardPage() {
         created_at: answerCreatedAt,
       })
 
+      // Persist the text immediately; attach the WAV when slower TTS completes.
+      const historyItem = saveHistory(result.transcript, queryResult.answer, language,
+        queryResult.references ?? []).catch(() => null)
+
       void synthesizeSpeech(queryResult.answer, language)
         .then((audioBlob) => {
           updateMessage(answerCreatedAt, {
@@ -65,6 +69,9 @@ export default function DashboardPage() {
             audio_pending: false,
             audio_error: null,
           })
+          void historyItem.then((item) => item
+            ? saveHistoryAudio(item.id, audioBlob).catch(() => undefined)
+            : undefined)
         })
         .catch(() => {
           updateMessage(answerCreatedAt, {
@@ -137,6 +144,15 @@ export default function DashboardPage() {
           {/* Right: Nav + Theme toggle */}
           <nav className="flex items-center gap-1">
             <ThemeToggle />
+            <Link href="/dashboard/history" id="nav-history"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-all"
+              style={{ color: 'var(--c-ink-muted)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v6h6" /><path d="M12 7v5l3 2" />
+              </svg>
+              History
+            </Link>
             <Link href="/dashboard/documents" id="nav-documents"
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-all"
               style={{ color: 'var(--c-ink-muted)' }}
