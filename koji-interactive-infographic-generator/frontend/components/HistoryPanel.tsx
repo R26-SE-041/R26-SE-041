@@ -13,13 +13,23 @@ function download(item: GenerationHistoryItem) {
   anchor.click();
 }
 
-export default function HistoryPanel() {
+interface HistoryPanelProps { onResume?: (item: GenerationHistoryItem) => void }
+
+export default function HistoryPanel({ onResume }: HistoryPanelProps) {
   const { colors } = useAppTheme();
   const shared = makeSharedStyles(colors);
   const styles = makeStyles(colors);
   const [items, setItems] = useState<GenerationHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GenerationHistoryItem | null>(null);
+  const chats = React.useMemo(() => {
+    const grouped = new Map<string, GenerationHistoryItem[]>();
+    items.forEach((item) => {
+      const key = item.chatId ?? item.id;
+      grouped.set(key, [...(grouped.get(key) ?? []), item]);
+    });
+    return [...grouped.values()].map((versions) => versions.sort((a, b) => (a.version ?? 1) - (b.version ?? 1)));
+  }, [items]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -52,23 +62,30 @@ export default function HistoryPanel() {
         <View style={[shared.card, styles.detail]}>
           <View style={styles.detailHeader}>
             <View><Text style={styles.eyebrow}>{selected.mode === "anatomy" ? "HUMAN ANATOMY" : "GENERAL IMAGE"}</Text><Text style={styles.detailTitle}>Saved creation</Text></View>
-            <Pressable onPress={() => setSelected(null)} style={styles.clearButton}><Text style={styles.clearText}>Close</Text></Pressable>
+            <View style={styles.actions}>
+              {onResume && <Pressable onPress={() => onResume(selected)} style={styles.download}><Text style={styles.downloadText}>Continue chat</Text></Pressable>}
+              <Pressable onPress={() => setSelected(null)} style={styles.clearButton}><Text style={styles.clearText}>Close</Text></Pressable>
+            </View>
           </View>
+          <View style={styles.versions}>{items.filter((item) => (item.chatId ?? item.id) === (selected.chatId ?? selected.id)).sort((a, b) => (a.version ?? 1) - (b.version ?? 1)).map((item) => <Pressable key={item.id} onPress={() => setSelected(item)} style={[styles.versionChip, item.id === selected.id && styles.versionChipActive]}><Text style={styles.versionText}>Version {item.version ?? 1}</Text></Pressable>)}</View>
           <Image resizeMode="contain" source={{ uri: `data:image/png;base64,${selected.imageBase64}` }} style={styles.detailImage} />
           <View style={styles.detailCopy}><Text style={styles.detailLabel}>Original prompt</Text><Text style={styles.detailText}>{selected.prompt}</Text></View>
           <View style={styles.detailCopy}><Text style={styles.detailLabel}>Model prompt</Text><Text style={styles.detailText}>{selected.enhancedPrompt}</Text></View>
           {!!selected.anatomyAnnotations?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Verified anatomy labels</Text><View style={styles.labels}>{selected.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View></View>}
           {selected.evaluation && <Text style={styles.score}>Visual {selected.evaluation.visualScore.toFixed(1)} · Educational {selected.evaluation.pedagogicalScore.toFixed(1)}</Text>}
+          {!!selected.interactions?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Questions &amp; answers</Text>{selected.interactions.map((interaction) => <View key={interaction.id} style={styles.qaTurn}><Text style={styles.prompt}>{interaction.question || (interaction.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text><Text style={styles.detailText}>{interaction.answer}</Text></View>)}</View>}
           {selected.glbBase64 ? <View style={styles.modelSection}><Text style={styles.detailLabel}>Interactive 3D model</Text><ThreeDViewer glbBase64={selected.glbBase64} sizeKb={selected.glbSizeKb} /></View> : <Text style={styles.subtitle}>No 3D model was created for this image.</Text>}
         </View>
       )}
       <View style={styles.grid}>
-        {items.map((item) => (
-          <Pressable key={item.id} onPress={() => setSelected(item)} style={({ pressed }) => [shared.card, styles.card, pressed && styles.cardPressed]}>
+        {chats.map((versions) => {
+          const item = versions[versions.length - 1];
+          return <Pressable key={item.chatId ?? item.id} onPress={() => setSelected(item)} style={({ pressed }) => [shared.card, styles.card, pressed && styles.cardPressed]}>
             <Image resizeMode="cover" source={{ uri: `data:image/png;base64,${item.imageBase64}` }} style={styles.image} />
             <View style={styles.cardBody}>
               <View style={styles.metaRow}><Text style={styles.mode}>{item.mode === "anatomy" ? "Human anatomy" : "General image"}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString()}</Text></View>
               <Text numberOfLines={2} style={styles.prompt}>{item.prompt}</Text>
+              <Text style={styles.score}>{versions.length} version{versions.length === 1 ? "" : "s"} · {versions.reduce((count, version) => count + (version.interactions?.length ?? 0), 0)} Q&amp;A</Text>
               <Text numberOfLines={2} style={styles.enhanced}>{item.enhancedPrompt}</Text>
               {item.evaluation && <Text style={styles.score}>Visual {item.evaluation.visualScore.toFixed(1)} · Educational {item.evaluation.pedagogicalScore.toFixed(1)}</Text>}
               {!!item.anatomyAnnotations?.length && <View style={styles.labels}>{item.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View>}
@@ -78,8 +95,8 @@ export default function HistoryPanel() {
                 <Pressable onPress={(event) => { event.stopPropagation(); void remove(item.id); }} style={styles.delete}><Text style={styles.deleteText}>Delete</Text></Pressable>
               </View>
             </View>
-          </Pressable>
-        ))}
+          </Pressable>;
+        })}
       </View>
     </View>
   );
@@ -117,6 +134,11 @@ const makeStyles = (colors: ReturnType<typeof useAppTheme>["colors"]) => StyleSh
   detailText: { color: colors.text, fontSize: 14, lineHeight: 22 },
   modelSection: { gap: 10 },
   actions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  versions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  versionChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 50, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
+  versionChipActive: { borderColor: colors.primary, backgroundColor: "rgba(139,92,246,0.18)" },
+  versionText: { color: colors.text, fontSize: 11, fontWeight: "800" },
+  qaTurn: { gap: 5, padding: 12, borderRadius: 12, backgroundColor: colors.surfaceSoft },
   download: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11, backgroundColor: colors.primary },
   downloadText: { color: "#fff", fontSize: 11, fontWeight: "800" },
   delete: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11, backgroundColor: colors.surfaceSoft },

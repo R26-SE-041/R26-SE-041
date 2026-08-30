@@ -287,9 +287,11 @@ class _VLMAgentBase:
         question: Optional[str] = None,
         rag_context: Optional[str] = None,
         identified_concept: Optional[str] = None,
+        crop_image_bytes: Optional[bytes] = None,
     ) -> dict[str, Any]:
         """
-        Input: raw image_bytes, highlighted_image_bytes (image with mask overlay), mode, optional question
+        Input: raw image_bytes, highlighted_image_bytes (image with mask overlay), mode, optional question,
+               optional crop_image_bytes (zoomed-in close-up of exactly the selected region)
         Output: {"response_text": str, "error": str | None}
         """
         import torch
@@ -298,6 +300,7 @@ class _VLMAgentBase:
 
         try:
             highlighted_img = Image.open(io.BytesIO(highlighted_image_bytes)).convert("RGB")
+            crop_img = Image.open(io.BytesIO(crop_image_bytes)).convert("RGB") if crop_image_bytes else None
 
             # Build mode-dependent text prompt
             if mode == "identify":
@@ -318,6 +321,13 @@ class _VLMAgentBase:
             else:
                 prompt_text = "Describe the highlighted region in the image."
 
+            if crop_img is not None:
+                prompt_text = (
+                    "Image 1 is the full image with the selected region highlighted in cyan, for overall context. "
+                    "Image 2 is a zoomed-in close-up crop of exactly that highlighted region — use it to read fine "
+                    "detail that is too small to see in Image 1. " + prompt_text
+                )
+
             from shared.token_budget import TokenBudgetController
 
             prompt_text = TokenBudgetController().assemble("interactive_agent", {
@@ -337,15 +347,11 @@ class _VLMAgentBase:
                 "user_question": question or "",
             })
 
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": highlighted_img},
-                        {"type": "text", "text": prompt_text},
-                    ],
-                }
-            ]
+            content: list[dict[str, Any]] = [{"type": "image", "image": highlighted_img}]
+            if crop_img is not None:
+                content.append({"type": "image", "image": crop_img})
+            content.append({"type": "text", "text": prompt_text})
+            messages = [{"role": "user", "content": content}]
 
             text = self.processor.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
@@ -691,6 +697,38 @@ def create_box_highlighted_image(image_bytes: bytes, coords: list[float]) -> tup
     return buffer.getvalue(), [x1, y1, x2, y2]
 
 
+def create_zoomed_crop(image_bytes: bytes, bbox: list[float], *, padding: float = 0.08, min_side: int = 448) -> bytes:
+    """Crop a padded close-up of the interaction region, upsized for small selections.
+
+    The full highlighted image alone can hide fine detail on a small tap/box
+    once Qwen-VL downsamples it, so this crop is sent alongside the full
+    image to preserve detail on the selected structure specifically.
+    """
+    from PIL import Image
+
+    image_value = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    width, height = image_value.size
+    x1, y1, x2, y2 = bbox
+    pad_x = (x2 - x1) * padding + 0.01
+    pad_y = (y2 - y1) * padding + 0.01
+    left = max(0.0, x1 - pad_x)
+    top = max(0.0, y1 - pad_y)
+    right = min(1.0, x2 + pad_x)
+    bottom = min(1.0, y2 + pad_y)
+    crop_box = (round(left * width), round(top * height), round(right * width), round(bottom * height))
+    crop_box = (crop_box[0], crop_box[1], max(crop_box[0] + 1, crop_box[2]), max(crop_box[1] + 1, crop_box[3]))
+    crop = image_value.crop(crop_box)
+    if min(crop.size) < min_side:
+        scale = min_side / max(1, min(crop.size))
+        crop = crop.resize(
+            (max(1, round(crop.width * scale)), max(1, round(crop.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    buffer = io.BytesIO()
+    crop.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 # ── FastAPI Application ───────────────────────────────────────────────────────
 
 web_app = FastAPI(
@@ -729,7 +767,7 @@ def health() -> dict:
         "segmentation_model": SAM2_MODEL_ID,
         "vlm_model": VLM_MODEL_ID,
         "automatic_labeling": "four_batches_full_image_plus_four_marker_crops_qwen_vl",
-        "manual_interaction": "tap_sam2_then_qwen_vl; box_direct_to_qwen_vl",
+        "manual_interaction": "tap_sam2_then_qwen_vl_full_image_plus_zoom_crop; box_direct_to_qwen_vl_full_image_plus_zoom_crop",
     }
 
 
@@ -762,6 +800,8 @@ def analyze(req: AnalyzeRequest) -> dict:
                 image_bytes, req.interaction.coords,
             )
 
+        crop_bytes = create_zoomed_crop(highlighted_bytes, interaction_bbox) if interaction_bbox else None
+
         # 4. Call VLM agent — A10G for Normal, A100 for Pro, H100 for Pro Max
         if req.speed_mode == "normal":
             vlm_agent = VLMAgentA10G()
@@ -771,6 +811,7 @@ def analyze(req: AnalyzeRequest) -> dict:
             vlm_agent = VLMAgentA100()
         identify_res = vlm_agent.analyze.remote(
             image_bytes=image_bytes,
+            crop_image_bytes=crop_bytes,
             highlighted_image_bytes=highlighted_bytes,
             mode="identify",
             question=None,
@@ -796,6 +837,7 @@ def analyze(req: AnalyzeRequest) -> dict:
 
         vlm_res = vlm_agent.analyze.remote(
             image_bytes=image_bytes,
+            crop_image_bytes=crop_bytes,
             highlighted_image_bytes=highlighted_bytes,
             mode=req.mode,
             question=req.question,

@@ -99,6 +99,7 @@ image = (
 )
 
 app = modal.App("threed-agent", image=image)
+conversion_jobs = modal.Dict.from_name("threed-conversion-jobs", create_if_missing=True)
 
 
 # ── One-time setup: Download Hunyuan3D-2 weights into volume ─────────────────
@@ -240,8 +241,8 @@ class _ThreeDAgentBase:
     gpu="A10G",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=1200,  # raised from 900 — cold-start + shape + texture can exceed 15 min on A10G
-    scaledown_window=300,
+    timeout=3600,  # cold-start + shape + texture can exceed 20 min
+    scaledown_window=900,
 )
 class ThreeDAgentA10G(_ThreeDAgentBase):
     """Hunyuan3D-2 on A10G (24 GB VRAM) — Normal mode."""
@@ -250,8 +251,8 @@ class ThreeDAgentA10G(_ThreeDAgentBase):
     gpu="A100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=1200,  # raised from 900 — headroom for cold-start texture synthesis
-    scaledown_window=300,
+    timeout=3600,
+    scaledown_window=900,
 )
 class ThreeDAgentA100(_ThreeDAgentBase):
     """Hunyuan3D-2 on A100 (40 GB VRAM) — Pro mode."""
@@ -264,8 +265,8 @@ class ThreeDAgentA100(_ThreeDAgentBase):
     gpu="H100",
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
-    timeout=1200,  # raised from 900 — consistent with A10G/A100 tiers
-    scaledown_window=300,   # ~2-3× faster than A10G on H100
+    timeout=3600,
+    scaledown_window=900,   # retain loaded pipelines to avoid repeated cold starts
 )
 class ThreeDAgentH100(_ThreeDAgentBase):
     """Hunyuan3D-2 on H100 (80 GB VRAM) — Pro Max mode. Fastest 3D conversion."""
@@ -289,6 +290,7 @@ web_app.add_middleware(
 
 class ConvertRequest(BaseModel):
     image_base64: str
+    request_id: str | None = None
     speed_mode: str = "pro"       # "normal" | "pro" | "promax"
     texture: bool = True          # False = shape-only (faster, no colour)
     num_inference_steps: int = 30  # reduced from 50 → 30: ~40% faster, avoids timeout on A10G cold starts
@@ -370,13 +372,42 @@ def start_convert(req: ConvertRequest) -> dict:
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Image is empty")
 
+    # A browser may retry this endpoint after losing the response, and a page
+    # refresh loses React's in-memory "converting" flag. Reuse the original
+    # Modal call so either case cannot start another expensive GPU job.
+    if req.request_id:
+        existing_call_id = conversion_jobs.get(req.request_id)
+        if existing_call_id:
+            try:
+                existing_call = modal.FunctionCall.from_id(existing_call_id)
+                # A timeout means the job is genuinely still queued/running.
+                # A completed result is also safe to reuse until the browser
+                # retrieves it. Cancelled/failed/stale calls must be replaced.
+                existing_call.get(timeout=0)
+            except TimeoutError:
+                return {
+                    "call_id": existing_call_id,
+                    "status": "processing",
+                    "reused": True,
+                }
+            except Exception:
+                conversion_jobs.pop(req.request_id, None)
+            else:
+                return {
+                    "call_id": existing_call_id,
+                    "status": "done",
+                    "reused": True,
+                }
+
     agent = _agent_for_mode(req.speed_mode)
     call = agent.convert.spawn(
         image_bytes=image_bytes,
         num_inference_steps=req.num_inference_steps,
         texture=req.texture,
     )
-    return {"call_id": call.object_id, "status": "processing"}
+    if req.request_id:
+        conversion_jobs[req.request_id] = call.object_id
+    return {"call_id": call.object_id, "status": "processing", "reused": False}
 
 
 @web_app.get("/convert/result/{call_id}")

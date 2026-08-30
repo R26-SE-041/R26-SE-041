@@ -41,6 +41,7 @@ def _run() -> dict:
             memento_min_pairs=int(os.getenv("MEMENTO_MIN_PAIRS", "10")),
             skill_min_pairs=int(os.getenv("AGENT_SKILL_MIN_PAIRS", "25")),
             minimum_sessions=int(os.getenv("MEMORY_MIN_SESSIONS", "3")),
+            minimum_users=int(os.getenv("MEMORY_MIN_USERS", "3")),
         )
     except Exception as exc:
         # Keep the established prompt-skill evolution job available during a
@@ -98,3 +99,26 @@ def scheduled_evolution() -> dict:
 def run_now() -> dict:
     """Manually trigger the same guarded workflow."""
     return _run()
+
+
+@app.function(
+    image=image,
+    secrets=[
+        modal.Secret.from_name("agent-urls-secret"),
+        modal.Secret.from_name("supabase-secret"),
+    ],
+    volumes={SKILLS_VOLUME_PATH: skills_vol},
+    timeout=60,
+)
+def approve_skill_version(version: int) -> dict:
+    """Human-triggered deploy of a reviewed candidate onto the live skills-vol Volume.
+
+    Review candidates first with `python scripts/manage_skill_versions.py show <version>`,
+    then run: modal run agents/skill-generator/modal_app.py::approve_skill_version --version N
+    """
+    from pathlib import Path
+    from shared.skill_evolution import approve_and_deploy_skill_version
+
+    return approve_and_deploy_skill_version(
+        Path(SKILL_DIRECTORY), version, deployment_callback=skills_vol.commit
+    )

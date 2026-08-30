@@ -8,6 +8,10 @@ export interface GenerationHistoryItem {
   imageBase64: string;
   mode: HistoryMode;
   speedMode: "normal" | "pro" | "promax";
+  /** One user-submitted prompt. Regenerations are versions of the same chat. */
+  chatId?: string;
+  version?: number;
+  interactions?: GenerationInteraction[];
   anatomy?: unknown;
   anatomyAnnotations?: Array<{
     structure_id: string;
@@ -26,6 +30,14 @@ export interface GenerationHistoryItem {
     pedagogicalScore: number;
     feedback: string;
   } | null;
+}
+
+export interface GenerationInteraction {
+  id: string;
+  createdAt: string;
+  mode: "identify" | "explain" | "ask";
+  question?: string;
+  answer: string;
 }
 
 const DATABASE_NAME = "eduvision-local";
@@ -104,6 +116,22 @@ export async function updateHistoryItem(
   const request = store.get(id);
   request.onsuccess = () => {
     if (request.result) store.put({ ...request.result, ...patch, id });
+  };
+  await complete(transaction);
+  database.close();
+}
+
+export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction): Promise<void> {
+  const database = await openDatabase();
+  if (!database) return;
+  const transaction = database.transaction(STORE_NAME, "readwrite");
+  const store = transaction.objectStore(STORE_NAME);
+  const request = store.get(id);
+  request.onsuccess = () => {
+    if (request.result) {
+      const interactions = Array.isArray(request.result.interactions) ? request.result.interactions : [];
+      store.put({ ...request.result, interactions: [...interactions, interaction] });
+    }
   };
   await complete(transaction);
   database.close();

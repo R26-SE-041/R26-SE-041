@@ -84,14 +84,14 @@ def build_general_anatomy_schema() -> dict[str, Any]:
                     "is_anatomy": {"type": "boolean", "enum": [True]},
                     "catalog_verified": {"type": "boolean", "enum": [False]},
                     "organ": {"type": "string", "minLength": 1, "maxLength": 80},
-                    "view_description": {"type": "string", "maxLength": 240},
+                    "view_description": {"type": "string", "minLength": 1, "maxLength": 240},
                     "grade_level": {"type": "string", "enum": sorted(GRADE_LEVELS)},
                     "required_structures": {
                         "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": True,
                         "items": {"type": "string", "minLength": 1, "maxLength": 80},
                     },
                     "focus_structures": {
-                        "type": "array", "maxItems": 8, "uniqueItems": True,
+                        "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": True,
                         "items": {"type": "string", "minLength": 1, "maxLength": 80},
                     },
                     "detail_level": {"type": "string", "enum": sorted(DETAIL_LEVELS)},

@@ -479,6 +479,34 @@ def get_latest_skill_version_number() -> int | None:
             return int(row[0]) if row and row[0] is not None else None
 
 
+def list_skill_versions(status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    sql = """
+        SELECT id::text, version, status, old_score, new_score, validation_count,
+               source_experience_count, created_at, deployed_at
+        FROM skill_versions
+        WHERE (%s IS NULL OR status = %s)
+        ORDER BY version DESC
+        LIMIT %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (status, status, max(1, min(limit, 500))))
+            return [dict(row) for row in cur.fetchall()]
+
+
+def get_skill_version(version: int) -> dict[str, Any] | None:
+    sql = """
+        SELECT id::text, version, content, status, old_score, new_score,
+               feedback_pattern_ids, created_at
+        FROM skill_versions WHERE version = %s
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (version,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
 def record_skill_version(
     version: int,
     content: str,
@@ -635,12 +663,21 @@ def record_agent_feedback(
 def list_preference_reason_aggregates(
     minimum_pairs: int = 10,
     minimum_sessions: int = 3,
+    minimum_users: int = 3,
 ) -> list[dict[str, Any]]:
-    """Aggregate controlled negative reason codes; comments never become instructions."""
+    """Aggregate controlled negative reason codes; comments never become instructions.
+
+    Gated on distinct sessions AND distinct users: session count alone lets one
+    person satisfy the bar by opening several sessions, so promotion also
+    requires the pattern to be corroborated by separate people (auth_user_id
+    when the request was authenticated, falling back to the client-supplied
+    user_id otherwise; anonymous feedback with neither never counts toward it).
+    """
     sql = """
         SELECT pp.agent_name, reason.reason_code,
                COUNT(DISTINCT pp.id)::int AS evidence_count,
                COUNT(DISTINCT negative.session_id)::int AS distinct_sessions,
+               COUNT(DISTINCT COALESCE(negative.auth_user_id::text, negative.user_id))::int AS distinct_users,
                (ARRAY_AGG(DISTINCT pp.id::text))[1:100] AS pair_ids,
                ARRAY_AGG(DISTINCT positive.reason_code)
                    FILTER (WHERE positive.reason_code IS NOT NULL) AS positive_reasons
@@ -650,12 +687,14 @@ def list_preference_reason_aggregates(
         LEFT JOIN LATERAL unnest(pp.positive_reasons) AS positive(reason_code) ON TRUE
         WHERE pp.status = 'active'
         GROUP BY pp.agent_name, reason.reason_code
-        HAVING COUNT(DISTINCT pp.id) >= %s AND COUNT(DISTINCT negative.session_id) >= %s
+        HAVING COUNT(DISTINCT pp.id) >= %s
+           AND COUNT(DISTINCT negative.session_id) >= %s
+           AND COUNT(DISTINCT COALESCE(negative.auth_user_id::text, negative.user_id)) >= %s
         ORDER BY COUNT(DISTINCT pp.id) DESC
     """
     with _get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (minimum_pairs, minimum_sessions))
+            cur.execute(sql, (minimum_pairs, minimum_sessions, minimum_users))
             return [dict(row) for row in cur.fetchall()]
 
 
@@ -663,12 +702,13 @@ def upsert_memory_candidate(candidate: dict[str, Any]) -> str:
     sql = """
         INSERT INTO memory_candidates
             (fingerprint, scope, agent_name, memory_type, lesson, evidence_count,
-             distinct_sessions, confidence, evidence_pair_ids, metadata)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s::jsonb)
+             distinct_sessions, distinct_users, confidence, evidence_pair_ids, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s::jsonb)
         ON CONFLICT (fingerprint) DO UPDATE SET
             lesson = EXCLUDED.lesson,
             evidence_count = EXCLUDED.evidence_count,
             distinct_sessions = EXCLUDED.distinct_sessions,
+            distinct_users = EXCLUDED.distinct_users,
             confidence = EXCLUDED.confidence,
             evidence_pair_ids = EXCLUDED.evidence_pair_ids,
             metadata = EXCLUDED.metadata,
@@ -680,7 +720,7 @@ def upsert_memory_candidate(candidate: dict[str, Any]) -> str:
             cur.execute(sql, (
                 candidate["fingerprint"], candidate["scope"], candidate.get("agent_name"),
                 candidate["memory_type"], candidate["lesson"], candidate["evidence_count"],
-                candidate["distinct_sessions"], candidate["confidence"],
+                candidate["distinct_sessions"], candidate["distinct_users"], candidate["confidence"],
                 candidate.get("evidence_pair_ids") or [], json.dumps(candidate.get("metadata") or {}),
             ))
             return cur.fetchone()[0]
@@ -913,6 +953,20 @@ def list_agent_memories(status: str | None = None, limit: int = 100) -> list[dic
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (status, status, max(1, min(limit, 500))))
             return [dict(row) for row in cur.fetchall()]
+
+
+def get_agent_memory(memory_id: str) -> dict[str, Any] | None:
+    sql = """
+        SELECT id::text, fingerprint, scope, agent_name, memory_type, content,
+               confidence, evidence_count, status, source_candidate_id::text,
+               metadata, created_at, updated_at, deployed_at
+        FROM agent_memories WHERE id = %s::uuid
+    """
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (memory_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
 
 
 def transition_agent_memory(memory_id: str, target_status: str) -> dict[str, Any]:

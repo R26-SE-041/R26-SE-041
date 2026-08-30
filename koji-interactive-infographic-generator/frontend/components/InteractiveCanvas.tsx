@@ -36,6 +36,7 @@ interface InteractiveCanvasProps {
   feedbackApiUrl: string;
   imageBase64: string;
   onOperationComplete?: (durationMs: number) => void;
+  onInteractionComplete?: (interaction: { id: string; createdAt: string; mode: AnalysisMode; question?: string; answer: string }) => void;
   speedMode?: SpeedMode;
   sessionId: string;
 }
@@ -60,7 +61,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -203,7 +204,15 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
       if (!response.ok) throw new Error(apiError(data, `HTTP ${response.status}`));
       if (data.error) throw new Error(String(data.error));
       if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
-      setAnalysisResult(data.response_text || "No analysis provided.");
+      const answer = data.response_text || "No analysis provided.";
+      setAnalysisResult(answer);
+      onInteractionComplete?.({
+        id: createOutputId("question"),
+        createdAt: new Date().toISOString(),
+        mode: analysisMode,
+        question: analysisMode === "ask" ? customQuestion.trim() : undefined,
+        answer,
+      });
       setOutputId(createOutputId("interactive"));
       const duration = Date.now() - startedAt;
       setAnalysisDuration(duration);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,7 +18,7 @@ import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
 import ThreeDViewer from "./components/ThreeDViewer";
 import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
-import { saveHistoryItem, updateHistoryItem } from "./historyStorage";
+import { appendHistoryInteraction, GenerationHistoryItem, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
 import { ColorPalette, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
 import {
   PROMPT_AGENT_URL,
@@ -131,9 +131,58 @@ const IMAGE_POSITIVE: FeedbackReason[] = [
 ];
 
 const THREED_POLL_INTERVAL_MS = 3_000;
-const THREED_MAX_WAIT_MS = 20 * 60 * 1_000;
+// The Modal worker allows 60 minutes. Stop polling slightly earlier so the UI
+// can report a controlled timeout instead of surfacing a platform task kill.
+const THREED_MAX_WAIT_MS = 55 * 60 * 1_000;
+const THREED_ACTIVE_JOB_KEY = "eduvision:active-3d-conversion";
 const ESTIMATED_WARM_WINDOW_MS = 5 * 60 * 1_000;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+interface StoredThreeDJob {
+  requestId: string;
+  imageFingerprint: string;
+  speedMode: SpeedMode;
+}
+
+function imageFingerprint(imageBase64: string): string {
+  return `${imageBase64.length}:${imageBase64.slice(0, 24)}:${imageBase64.slice(-24)}`;
+}
+
+function readStoredThreeDJob(): StoredThreeDJob | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(THREED_ACTIVE_JOB_KEY);
+    return value ? JSON.parse(value) as StoredThreeDJob : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeThreeDJob(job: StoredThreeDJob): void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(THREED_ACTIVE_JOB_KEY, JSON.stringify(job));
+  } catch {
+    // Storage can be disabled in private/restricted browser contexts. The
+    // synchronous in-memory guard still prevents duplicate clicks.
+  }
+}
+
+function clearStoredThreeDJob(): void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(THREED_ACTIVE_JOB_KEY);
+  } catch {
+    // Nothing else to clean up when browser storage is unavailable.
+  }
+}
+
+function createRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `3d-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const SPEED_MODES: Array<{
   id: SpeedMode;
@@ -144,7 +193,7 @@ const SPEED_MODES: Array<{
   imageGpu: string;
   interactiveGpu: string;
 }> = [
-  { id: "normal", label: "Normal", icon: "bolt", desc: "T4 / A10G / A10G", promptGpu: "T4", imageGpu: "A10G", interactiveGpu: "A10G" },
+  { id: "normal", label: "Normal", icon: "bolt", desc: "A10G / A10G / A10G", promptGpu: "A10G", imageGpu: "A10G", interactiveGpu: "A10G" },
   { id: "pro", label: "Pro", icon: "rocket", desc: "A10G / A100 / A100", promptGpu: "A10G", imageGpu: "A100", interactiveGpu: "A100" },
   { id: "promax", label: "Pro Max", icon: "layers", desc: "A10G / H100 / H100", promptGpu: "A10G", imageGpu: "H100", interactiveGpu: "H100" },
 ];
@@ -174,6 +223,27 @@ function errorMessage(payload: unknown, fallback: string): string {
     if (typeof nested.error === "string") return nested.error;
   }
   return fallback;
+}
+
+async function readApiResponse(response: Response): Promise<{ payload: Record<string, unknown>; raw: string }> {
+  const raw = await response.text();
+  if (!raw) return { payload: {}, raw: "" };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return {
+      payload: parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {},
+      raw,
+    };
+  } catch {
+    return { payload: {}, raw };
+  }
+}
+
+function threeDApiError(response: Response, payload: unknown, raw: string, fallback: string): string {
+  if (response.status === 404 && /modal-http:\s*workspace\b.*\bis disabled/i.test(raw)) {
+    return "The 3D service's Modal workspace is disabled. Re-enable the Modal workspace and redeploy threed-agent.";
+  }
+  return errorMessage(payload, fallback);
 }
 
 interface AppProps { accessToken?: string }
@@ -220,6 +290,15 @@ function Home({ accessToken }: AppProps) {
   const [evaluationRetries, setEvaluationRetries] = useState(0);
   const [evaluationWarning, setEvaluationWarning] = useState<string | null>(null);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const currentChatId = useRef<string | null>(null);
+  const threedRequestInFlight = useRef(false);
+  const workspaceSnapshots = useRef<Partial<Record<"general" | "anatomy", {
+    prompt: string; stage: Stage; speedMode: SpeedMode; enhancedPrompt: string | null;
+    enhancedPromptJson: EnhancedPromptPayload | null; imageBase64: string | null;
+    anatomySpec: AnatomySpec; anatomyAnnotations: AnatomyAnnotation[]; evaluation: EvaluationResult | null;
+    evaluationRetries: number; evaluationWarning: string | null; glbBase64: string | null;
+    glbSizeKb?: number; threedStage: ThreeDStage; historyId: string | null; chatId: string | null;
+  }>>>({});
 
   const isLoading = stage === "enhancing" || stage === "generating";
   // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
@@ -327,6 +406,7 @@ function Home({ accessToken }: AppProps) {
     setEvaluationRetries(0);
     setEvaluationWarning(null);
     setCurrentHistoryId(null);
+    currentChatId.current = null;
   };
 
   const handlePromptChange = (value: string) => {
@@ -336,8 +416,29 @@ function Home({ accessToken }: AppProps) {
 
   const selectWorkspace = (next: GenerationWorkspace) => {
     if (next === workspace || isLoading) return;
-    reset();
-    setPrompt("");
+    if (workspace !== "history") {
+      workspaceSnapshots.current[workspace] = {
+        prompt, stage, speedMode, enhancedPrompt, enhancedPromptJson, imageBase64, anatomySpec,
+        anatomyAnnotations, evaluation, evaluationRetries, evaluationWarning, glbBase64, glbSizeKb,
+        threedStage, historyId: currentHistoryId, chatId: currentChatId.current,
+      };
+    }
+    if (next !== "history") {
+      const saved = workspaceSnapshots.current[next];
+      reset();
+      if (saved) {
+        setPrompt(saved.prompt); setStage(saved.stage); setSpeedMode(saved.speedMode);
+        setEnhancedPrompt(saved.enhancedPrompt); setEnhancedPromptJson(saved.enhancedPromptJson);
+        setImageBase64(saved.imageBase64); setAnatomySpec(saved.anatomySpec);
+        setAnatomyAnnotations(saved.anatomyAnnotations); setEvaluation(saved.evaluation);
+        setEvaluationRetries(saved.evaluationRetries); setEvaluationWarning(saved.evaluationWarning);
+        setGlbBase64(saved.glbBase64); setGlbSizeKb(saved.glbSizeKb); setThreedStage(saved.threedStage);
+        setCurrentHistoryId(saved.historyId); currentChatId.current = saved.chatId;
+      } else {
+        setPrompt("");
+        currentChatId.current = null;
+      }
+    }
     setWorkspace(next);
   };
 
@@ -345,6 +446,9 @@ function Home({ accessToken }: AppProps) {
     const id = createOutputId("history");
     const mode = result.anatomy.is_anatomy ? "anatomy" : "general";
     try {
+      const chatId = currentChatId.current ?? createOutputId("chat");
+      currentChatId.current = chatId;
+      const version = (await listHistory()).filter((item) => (item.chatId ?? item.id) === chatId).length + 1;
       await saveHistoryItem({
         id,
         createdAt: new Date().toISOString(),
@@ -353,6 +457,8 @@ function Home({ accessToken }: AppProps) {
         imageBase64: result.image,
         mode,
         speedMode,
+        chatId,
+        version,
         anatomy: result.anatomy,
         evaluation: result.evaluation ? {
           visualScore: result.evaluation.visualScore,
@@ -365,6 +471,28 @@ function Home({ accessToken }: AppProps) {
     } catch {
       return null;
     }
+  };
+
+  const restoreHistory = (item: GenerationHistoryItem) => {
+    const nextWorkspace = item.mode;
+    const restoredAnatomy = (item.anatomy as AnatomySpec | undefined) ?? { is_anatomy: item.mode === "anatomy" };
+    reset();
+    setWorkspace(nextWorkspace);
+    setPrompt(item.prompt);
+    setSpeedMode(item.speedMode);
+    setEnhancedPrompt(item.enhancedPrompt);
+    setEnhancedPromptJson(item.mode === "anatomy" ? {
+      schema_version: "1.0", final_prompt: item.enhancedPrompt, anatomy_spec: restoredAnatomy,
+      route: "anatomy", anatomy_mode: "verified",
+    } : null);
+    setImageBase64(item.imageBase64);
+    setAnatomySpec(restoredAnatomy);
+    setAnatomyAnnotations(item.anatomyAnnotations ?? []);
+    setEvaluation(item.evaluation ? { clipScore: null, vlmScore: null, visualScore: item.evaluation.visualScore, pedagogicalScore: item.evaluation.pedagogicalScore, feedback: item.evaluation.feedback, anatomyHardFailures: [] } : null);
+    setGlbBase64(item.glbBase64 ?? null); setGlbSizeKb(item.glbSizeKb);
+    setThreedStage(item.glbBase64 ? "done" : "idle");
+    setCurrentHistoryId(item.id); currentChatId.current = item.chatId ?? item.id;
+    setImageOutputId(createOutputId("image")); setStage("done");
   };
 
   const callEnhance = async (
@@ -646,6 +774,7 @@ function Home({ accessToken }: AppProps) {
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
     reset();
+    currentChatId.current = createOutputId("chat");
     if (workspace === "general") {
       const rawPrompt = prompt.trim();
       const anatomy: AnatomySpec = { is_anatomy: false };
@@ -806,7 +935,14 @@ function Home({ accessToken }: AppProps) {
   };
 
   const handleConvertTo3D = async () => {
-    if (!imageBase64 || threedStage === "converting") return;
+    if (!imageBase64 || threedStage === "converting" || threedRequestInFlight.current) return;
+    threedRequestInFlight.current = true;
+    const fingerprint = imageFingerprint(imageBase64);
+    const storedJob = readStoredThreeDJob();
+    const requestId = storedJob?.imageFingerprint === fingerprint && storedJob.speedMode === speedMode
+      ? storedJob.requestId
+      : createRequestId();
+    storeThreeDJob({ requestId, imageFingerprint: fingerprint, speedMode });
     const conversionStartedAt = Date.now();
     setActiveTimers((current) => ({ ...current, threed: conversionStartedAt }));
     setThreedStage("converting");
@@ -820,17 +956,22 @@ function Home({ accessToken }: AppProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             image_base64: imageBase64,
+            request_id: requestId,
             speed_mode: speedMode,
             texture: true,
-            num_inference_steps: speedMode === "promax" ? 50 : 30,
+            num_inference_steps: 30,
           }),
         });
       } catch {
         throw new Error(`Could not reach 3D Agent at ${THREED_AGENT_URL}. Check that threed-agent is served or deployed.`);
       }
-      const started = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(errorMessage(started, `3D Convert HTTP ${response.status}`));
-      if (!started.call_id) throw new Error("3D agent did not return a job ID");
+      const { payload: started, raw: startedRaw } = await readApiResponse(response);
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) clearStoredThreeDJob();
+        throw new Error(threeDApiError(response, started, startedRaw, `3D Convert HTTP ${response.status}`));
+      }
+      const callId = typeof started.call_id === "string" ? started.call_id : null;
+      if (!callId) throw new Error("3D agent did not return a job ID");
 
       const deadline = Date.now() + THREED_MAX_WAIT_MS;
       while (Date.now() < deadline) {
@@ -838,7 +979,7 @@ function Home({ accessToken }: AppProps) {
         let resultResponse: Response;
         try {
           resultResponse = await fetch(
-            `${THREED_AGENT_URL}/convert/result/${encodeURIComponent(started.call_id)}`,
+            `${THREED_AGENT_URL}/convert/result/${encodeURIComponent(callId)}`,
           );
         } catch {
           // Polling is idempotent; tolerate a transient Modal connection drop.
@@ -846,24 +987,37 @@ function Home({ accessToken }: AppProps) {
           continue;
         }
         if (resultResponse.status === 202) continue;
-        const data = await resultResponse.json().catch(() => ({}));
-        if (!resultResponse.ok) throw new Error(errorMessage(data, `3D Result HTTP ${resultResponse.status}`));
-        if (data.error) throw new Error(String(data.error));
-        if (!data.glb_base64) throw new Error("Empty GLB response");
-        setGlbBase64(data.glb_base64);
-        setGlbSizeKb(data.size_kb);
+        const { payload: data, raw: resultRaw } = await readApiResponse(resultResponse);
+        if (!resultResponse.ok) {
+          clearStoredThreeDJob();
+          throw new Error(threeDApiError(resultResponse, data, resultRaw, `3D Result HTTP ${resultResponse.status}`));
+        }
+        if (data.error) {
+          clearStoredThreeDJob();
+          throw new Error(String(data.error));
+        }
+        const generatedGlb = typeof data.glb_base64 === "string" ? data.glb_base64 : null;
+        const generatedSizeKb = typeof data.size_kb === "number" ? data.size_kb : undefined;
+        if (!generatedGlb) {
+          clearStoredThreeDJob();
+          throw new Error("Empty GLB response");
+        }
+        setGlbBase64(generatedGlb);
+        setGlbSizeKb(generatedSizeKb);
         setThreedStage("done");
+        clearStoredThreeDJob();
         markWarm("threed");
         if (currentHistoryId) {
-          await updateHistoryItem(currentHistoryId, { glbBase64: data.glb_base64, glbSizeKb: data.size_kb });
+          await updateHistoryItem(currentHistoryId, { glbBase64: generatedGlb, glbSizeKb: generatedSizeKb });
         }
         return;
       }
-      throw new Error("3D conversion timed out after 20 minutes");
+      throw new Error("3D conversion timed out after 55 minutes");
     } catch (caught) {
       setThreedError(caught instanceof Error ? caught.message : "3D conversion failed");
       setThreedStage("idle");
     } finally {
+      threedRequestInFlight.current = false;
       setTimings((current) => ({ ...current, threed: Date.now() - conversionStartedAt }));
       setActiveTimers((current) => {
         const next = { ...current };
@@ -874,7 +1028,7 @@ function Home({ accessToken }: AppProps) {
   };
 
   const loadingLabel = stage === "enhancing"
-    ? `Enhancing with Qwen 2.5-3B on ${speed.promptGpu}...`
+    ? `Enhancing with Qwen3.5-9B on ${speed.promptGpu}...`
     : workspace === "general"
       ? `Sending your raw prompt directly to FLUX.1-dev on ${speed.imageGpu}...`
       : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
@@ -884,6 +1038,17 @@ function Home({ accessToken }: AppProps) {
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
       <View pointerEvents="none" style={styles.ambientTop} />
       <View pointerEvents="none" style={styles.ambientBottom} />
+      {workspace !== "history" && (
+        <Pressable
+          accessibilityLabel="Start a new chat"
+          disabled={isLoading}
+          onPress={() => { reset(); setPrompt(""); }}
+          style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}
+        >
+          <Icon color="#fff" name="wand" size={16} />
+          <Text style={styles.floatingNewPromptText}>New chat</Text>
+        </Pressable>
+      )}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -975,7 +1140,7 @@ function Home({ accessToken }: AppProps) {
               </Pressable>
             </View>
 
-            {workspace === "history" ? <HistoryPanel /> : <>
+            {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
             <View style={styles.speedSection}>
               <Text style={[shared.label, styles.centerText]}>Speed Mode</Text>
               <View style={[shared.wrap, styles.speedPicker]}>
@@ -1148,6 +1313,9 @@ function Home({ accessToken }: AppProps) {
                   anatomyOrgan={anatomySpec.organ}
                   feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
+                  onInteractionComplete={(interaction) => {
+                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction);
+                  }}
                   onOperationComplete={(duration) => {
                     setTimings((current) => ({ ...current, interactive: duration }));
                     markWarm("interactive");
@@ -1187,11 +1355,6 @@ function Home({ accessToken }: AppProps) {
               </View>
             )}
 
-            {stage === "done" && (
-              <Pressable onPress={reset} style={styles.ghostButton}>
-                <Icon color={colors.textMuted} name="arrow-left" size={16} /><Text style={styles.ghostText}>New prompt</Text>
-              </Pressable>
-            )}
             </>}
           </View>
         </ScrollView>
@@ -1291,6 +1454,8 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
+  floatingNewPrompt: { position: "absolute", zIndex: 100, top: 18, right: 22, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 50, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
+  floatingNewPromptText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },
   ambientBottom: { position: "absolute", width: 520, height: 520, borderRadius: 260, left: -230, bottom: -170, backgroundColor: "rgba(175, 125, 73, 0.16)" },
   scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 44 },

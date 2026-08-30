@@ -707,6 +707,11 @@ class _PromptAgentBase:
                     anatomy_spec, enhanced = compile_anatomy_prompt(default_anatomy_spec)
                     parsed = None
         elif routing.route == "anatomy":
+            from anatomy.enrichment import (
+                merge_general_anatomy_enrichment,
+                missing_general_anatomy_fields,
+            )
+
             candidate_spec = dict(parsed.get("anatomy_spec") or {})
             candidate_spec["is_anatomy"] = True
             candidate_spec["catalog_verified"] = False
@@ -720,9 +725,43 @@ class _PromptAgentBase:
             if not candidate_spec.get("required_structures"):
                 candidate_spec["required_structures"] = general_required_defaults
             candidate_spec["focus_structures"] = candidate_spec.get("focus_structures") or []
+            candidate_spec, _ = merge_general_anatomy_enrichment(candidate_spec, candidate_spec)
+            initially_missing = missing_general_anatomy_fields(default_anatomy_spec)
+            generated_fields = [
+                field for field in initially_missing
+                if field not in missing_general_anatomy_fields(candidate_spec)
+            ]
+
+            # JSON-schema constrained generation should normally populate these
+            # values. This focused second pass handles providers that accept the
+            # schema but still emit empty strings/arrays for unsupported organs.
+            missing_fields = missing_general_anatomy_fields(candidate_spec)
+            if missing_fields:
+                enrichment_prompt = (
+                    user_context
+                    + "\n\nThe anatomy catalog has no values for: "
+                    + ", ".join(missing_fields)
+                    + ". Generate medically plausible values for the requested human anatomical subject and view. "
+                    + "Return the complete anatomy_spec. required_structures must contain 3-8 visible named parts; "
+                    + "focus_structures must contain 1-3 of those required parts; view_description must name a concrete view or section."
+                )
+                enrichment_raw = self._infer_json(
+                    enrichment_prompt,
+                    output_schema,
+                    max_new_tokens=384,
+                    system_prompt=system_prompt,
+                )
+                enrichment_parsed = parse_output(enrichment_raw) or {}
+                candidate_spec, newly_filled = merge_general_anatomy_enrichment(
+                    candidate_spec,
+                    enrichment_parsed.get("anatomy_spec") or {},
+                )
+                generated_fields.extend(field for field in newly_filled if field not in generated_fields)
             candidate_spec["_minimal_prompt"] = minimal_anatomy_request
             try:
                 anatomy_spec, enhanced = compile_general_anatomy_prompt(candidate_spec)
+                if generated_fields:
+                    anatomy_spec["generated_fields"] = generated_fields
             except Exception as validation_error:
                 try:
                     if repair_attempts >= MAX_REPAIR_ATTEMPTS:
@@ -804,7 +843,7 @@ class _PromptAgentBase:
     timeout=120,
     scaledown_window=300,
 )
-class PromptAgentT4(_PromptAgentBase):
+class PromptAgentNormal(_PromptAgentBase):
     """Qwen2.5-3B-Instruct on T4 (Normal mode)."""
 
 @app.cls(
@@ -815,7 +854,7 @@ class PromptAgentT4(_PromptAgentBase):
     scaledown_window=300,
 )
 class PromptAgentA10G(_PromptAgentBase):
-    """Same model as PromptAgentT4 but on A10G for faster inference (Pro / Pro Max modes)."""
+    """Same model as PromptAgentNormal but on A10G for faster inference (Pro / Pro Max modes)."""
 
 
 @app.cls(
@@ -897,7 +936,7 @@ def enhance(req: EnhanceRequest) -> dict:
                 raise HTTPException(status_code=503, detail={"error": "PromptAnatomyLoRAUnavailable"})
             agent = PromptAgentAnatomyLoRA()
         elif req.speed_mode == "normal":
-            agent = PromptAgentT4()
+            agent = PromptAgentNormal()
         else:  # "pro" or "promax" → A10G
             agent = PromptAgentA10G()
         result = agent.enhance.remote({
