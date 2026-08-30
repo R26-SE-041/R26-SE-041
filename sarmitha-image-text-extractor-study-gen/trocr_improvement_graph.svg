@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">Fine-tuned TrOCR Improvement over Base TrOCR</title>
+  <desc id="desc">Bar chart showing 34.33 percent CER reduction, 20.65 percent WER reduction, and 54.08 percent speed improvement.</desc>
+
+  <rect width="1200" height="700" fill="#f4eadb"/>
+  <rect x="60" y="50" width="1080" height="600" rx="24" fill="#fffdf7" fill-opacity="0.72" stroke="#ffffff" stroke-width="2"/>
+
+  <text x="600" y="115" text-anchor="middle" font-family="Georgia, serif" font-size="38" font-weight="700" fill="#33261f">
+    Fine-tuned TrOCR Improvement over Base TrOCR
+  </text>
+  <text x="600" y="153" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#705d50">
+    Relative performance improvement on 227 unseen test images
+  </text>
+
+  <line x1="190" y1="535" x2="1080" y2="535" stroke="#927b6c" stroke-width="2"/>
+  <line x1="190" y1="205" x2="190" y2="535" stroke="#927b6c" stroke-width="2"/>
+
+  <g font-family="Arial, sans-serif" font-size="15" fill="#705d50">
+    <text x="172" y="541" text-anchor="end">0%</text>
+    <text x="172" y="431" text-anchor="end">20%</text>
+    <text x="172" y="321" text-anchor="end">40%</text>
+    <text x="172" y="211" text-anchor="end">60%</text>
+  </g>
+
+  <g stroke="#927b6c" stroke-opacity="0.25" stroke-width="1">
+    <line x1="190" y1="425" x2="1080" y2="425"/>
+    <line x1="190" y1="315" x2="1080" y2="315"/>
+    <line x1="190" y1="205" x2="1080" y2="205"/>
+  </g>
+
+  <g fill="#c95f32">
+    <rect x="285" y="346.2" width="180" height="188.8" rx="13"/>
+    <rect x="555" y="421.4" width="180" height="113.6" rx="13"/>
+    <rect x="825" y="237.6" width="180" height="297.4" rx="13"/>
+  </g>
+
+  <g font-family="Georgia, serif" font-size="28" font-weight="700" fill="#33261f" text-anchor="middle">
+    <text x="375" y="329">34.33%</text>
+    <text x="645" y="404">20.65%</text>
+    <text x="915" y="220">54.08%</text>
+  </g>
+
+  <g font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#33261f" text-anchor="middle">
+    <text x="375" y="575">CER Reduction</text>
+    <text x="645" y="575">WER Reduction</text>
+    <text x="915" y="575">Speed Improvement</text>
+  </g>
+
+  <text x="600" y="620" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#705d50">
+    Higher bars indicate greater improvement compared with the base TrOCR model.
+  </text>
+</svg>

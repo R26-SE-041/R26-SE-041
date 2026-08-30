@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="3150" viewBox="0 0 1600 3150" role="img" aria-labelledby="title desc">
+  <title id="title">Complete Workflow — Sinhala Document Enhancement, OCR and Translation</title>
+  <desc id="desc">Swimlane workflow and model parameters for the user, React Native frontend, FastAPI backend, Swin2SR enhancement, fine-tuned TrOCR extraction, and NLLB translation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M0 0 L11 5.5 L0 11 Z" fill="#705d50"/>
+    </marker>
+    <marker id="arrowPrimary" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M0 0 L11 5.5 L0 11 Z" fill="#c95f32"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#5b361d" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      .laneTitle { font: 700 19px Arial, sans-serif; fill: #33261f; }
+      .label { font: 700 12px Arial, sans-serif; letter-spacing: 1.1px; fill: #927b6c; }
+      .boxTitle { font: 700 19px Georgia, serif; fill: #33261f; }
+      .body { font: 15px Arial, sans-serif; fill: #705d50; }
+      .small { font: 13px Arial, sans-serif; fill: #705d50; }
+      .arrow { fill: none; stroke: #705d50; stroke-width: 3; marker-end: url(#arrow); }
+      .primaryArrow { fill: none; stroke: #c95f32; stroke-width: 4; marker-end: url(#arrowPrimary); }
+      .optionalArrow { fill: none; stroke: #c88935; stroke-width: 3; stroke-dasharray: 10 8; marker-end: url(#arrowPrimary); }
+      .process { fill: #fffdf7; fill-opacity: .86; stroke: #ffffff; stroke-width: 2; filter: url(#shadow); }
+      .service { fill: #fff4e2; fill-opacity: .92; stroke: #e8dac6; stroke-width: 2; filter: url(#shadow); }
+      .success { fill: #647a51; stroke: #ffffff; stroke-width: 2; filter: url(#shadow); }
+      .error { fill: #fffdf7; stroke: #b84c3d; stroke-width: 2; filter: url(#shadow); }
+      .decision { fill: #fff4e2; stroke: #c88935; stroke-width: 3; filter: url(#shadow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="3150" fill="#f4eadb"/>
+  <circle cx="1500" cy="80" r="280" fill="#d36937" fill-opacity="0.20"/>
+  <circle cx="80" cy="2410" r="250" fill="#af7d49" fill-opacity="0.16"/>
+
+  <text x="800" y="62" text-anchor="middle" font-family="Georgia, serif" font-size="39" font-weight="700" fill="#33261f">
+    Sinhala Document Enhancement, OCR &amp; Translation
+  </text>
+  <text x="800" y="101" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#705d50">
+    Complete component workflow — low-quality input to enhanced image, extracted text and translations
+  </text>
+
+  <!-- Swimlanes -->
+  <g>
+    <rect x="35" y="135" width="275" height="2250" rx="24" fill="#ffffff" fill-opacity="0.30" stroke="#ffffff"/>
+    <rect x="330" y="135" width="390" height="2250" rx="24" fill="#ffffff" fill-opacity="0.46" stroke="#ffffff"/>
+    <rect x="740" y="135" width="390" height="2250" rx="24" fill="#ffffff" fill-opacity="0.38" stroke="#ffffff"/>
+    <rect x="1150" y="135" width="415" height="2250" rx="24" fill="#fff4e2" fill-opacity="0.56" stroke="#ffffff"/>
+    <rect x="35" y="135" width="275" height="66" rx="24" fill="#e8dac6"/>
+    <rect x="330" y="135" width="390" height="66" rx="24" fill="#e8dac6"/>
+    <rect x="740" y="135" width="390" height="66" rx="24" fill="#e8dac6"/>
+    <rect x="1150" y="135" width="415" height="66" rx="24" fill="#e8dac6"/>
+    <text class="laneTitle" x="172" y="177" text-anchor="middle">USER</text>
+    <text class="laneTitle" x="525" y="177" text-anchor="middle">REACT NATIVE FRONTEND</text>
+    <text class="laneTitle" x="935" y="177" text-anchor="middle">FASTAPI BACKEND</text>
+    <text class="laneTitle" x="1357" y="177" text-anchor="middle">MODAL AI SERVICES</text>
+  </g>
+
+  <!-- Start -->
+  <ellipse cx="172" cy="260" rx="92" ry="38" fill="#c95f32" filter="url(#shadow)"/>
+  <text x="172" y="267" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">START</text>
+  <path class="primaryArrow" d="M172 298 V345 H525"/>
+
+  <!-- Select image -->
+  <rect class="process" x="385" y="345" width="280" height="112" rx="20"/>
+  <text class="label" x="525" y="375" text-anchor="middle">STEP 01</text>
+  <text class="boxTitle" x="525" y="407" text-anchor="middle">Select Handwritten Image</text>
+  <text class="small" x="525" y="435" text-anchor="middle">JPEG · PNG · WEBP · BMP</text>
+  <path class="arrow" d="M525 457 V505"/>
+
+  <!-- Client check decision -->
+  <polygon class="decision" points="525,505 655,585 525,665 395,585"/>
+  <text class="boxTitle" x="525" y="574" text-anchor="middle">Image selected?</text>
+  <text class="small" x="525" y="600" text-anchor="middle">Permission and file available</text>
+  <text class="small" x="370" y="575" text-anchor="end" fill="#b84c3d">NO</text>
+  <path class="arrow" d="M395 585 H350 V401 H385"/>
+  <text class="small" x="352" y="490" text-anchor="end">Choose again</text>
+  <text class="small" x="548" y="690" fill="#647a51">YES</text>
+  <path class="primaryArrow" d="M525 665 V720"/>
+
+  <!-- Preview and action -->
+  <rect class="process" x="385" y="720" width="280" height="125" rx="20"/>
+  <text class="label" x="525" y="752" text-anchor="middle">FRONTEND</text>
+  <text class="boxTitle" x="525" y="785" text-anchor="middle">Preview Selected Image</text>
+  <text class="small" x="525" y="815" text-anchor="middle">Show filename and enable</text>
+  <text class="small" x="525" y="835" text-anchor="middle">“Enhance &amp; Extract” button</text>
+  <path class="primaryArrow" d="M525 845 V905"/>
+
+  <rect class="process" x="385" y="905" width="280" height="130" rx="20"/>
+  <text class="label" x="525" y="937" text-anchor="middle">API REQUEST</text>
+  <text class="boxTitle" x="525" y="970" text-anchor="middle">Create FormData</text>
+  <text class="small" x="525" y="999" text-anchor="middle">POST image file to</text>
+  <text class="small" x="525" y="1020" text-anchor="middle">/api/process</text>
+  <path class="primaryArrow" d="M665 970 H795"/>
+
+  <!-- Backend receive and validate -->
+  <rect class="process" x="795" y="905" width="280" height="130" rx="20"/>
+  <text class="label" x="935" y="937" text-anchor="middle">BACKEND</text>
+  <text class="boxTitle" x="935" y="970" text-anchor="middle">Receive Upload</text>
+  <text class="small" x="935" y="999" text-anchor="middle">Read bytes and validate</text>
+  <text class="small" x="935" y="1020" text-anchor="middle">MIME type + maximum size</text>
+  <path class="arrow" d="M935 1035 V1085"/>
+
+  <polygon class="decision" points="935,1085 1070,1165 935,1245 800,1165"/>
+  <text class="boxTitle" x="935" y="1154" text-anchor="middle">Valid image?</text>
+  <text class="small" x="935" y="1180" text-anchor="middle">Supported type and size</text>
+
+  <!-- Validation error path -->
+  <text class="small" x="785" y="1154" text-anchor="end" fill="#b84c3d">NO</text>
+  <path class="arrow" d="M800 1165 H690 V1275 H665"/>
+  <rect class="error" x="385" y="1215" width="280" height="120" rx="20"/>
+  <text class="label" x="525" y="1247" text-anchor="middle" fill="#b84c3d">ERROR RESPONSE</text>
+  <text class="boxTitle" x="525" y="1279" text-anchor="middle">Display Upload Error</text>
+  <text class="small" x="525" y="1307" text-anchor="middle">HTTP 413 or HTTP 415</text>
+  <path class="arrow" d="M385 1275 H250 V401 H385"/>
+
+  <!-- Enhancement branch -->
+  <text class="small" x="958" y="1270" fill="#647a51">YES</text>
+  <path class="primaryArrow" d="M935 1245 V1320 H1205"/>
+  <rect class="service" x="1205" y="1270" width="305" height="165" rx="20"/>
+  <text class="label" x="1357" y="1302" text-anchor="middle">SWIN2SR SERVICE</text>
+  <text class="boxTitle" x="1357" y="1335" text-anchor="middle">Enhance Image (4×)</text>
+  <text class="small" x="1357" y="1364" text-anchor="middle">Resize if large · remove shadows</text>
+  <text class="small" x="1357" y="1386" text-anchor="middle">Denoise · gently sharpen · pad</text>
+  <text class="small" x="1357" y="1408" text-anchor="middle">Swin2SR inference → PNG Base64</text>
+  <path class="optionalArrow" d="M1205 1395 H1075 V1480"/>
+
+  <rect class="process" x="795" y="1435" width="280" height="120" rx="20"/>
+  <text class="label" x="935" y="1467" text-anchor="middle">PREVIEW RESULT</text>
+  <text class="boxTitle" x="935" y="1499" text-anchor="middle">Store Enhanced Image</text>
+  <text class="small" x="935" y="1528" text-anchor="middle">Used for comparison/display only</text>
+  <path class="primaryArrow" d="M935 1555 V1625 H1205"/>
+
+  <!-- OCR -->
+  <rect class="service" x="1205" y="1570" width="305" height="195" rx="20"/>
+  <text class="label" x="1357" y="1602" text-anchor="middle">FINE-TUNED TrOCR</text>
+  <text class="boxTitle" x="1357" y="1635" text-anchor="middle">Extract Sinhala Text</text>
+  <text class="small" x="1357" y="1664" text-anchor="middle">Use ORIGINAL image pixels</text>
+  <text class="small" x="1357" y="1686" text-anchor="middle">RGB → TrOCRProcessor → tensor</text>
+  <text class="small" x="1357" y="1708" text-anchor="middle">Beam search: 4 · max length: 128</text>
+  <text class="small" x="1357" y="1730" text-anchor="middle">Decode text + confidence score</text>
+  <path class="arrow" d="M1357 1765 V1805"/>
+
+  <polygon class="decision" points="1357,1805 1505,1885 1357,1965 1209,1885"/>
+  <text class="boxTitle" x="1357" y="1874" text-anchor="middle">Contains Sinhala?</text>
+  <text class="small" x="1357" y="1900" text-anchor="middle">Reject non-Sinhala hallucination</text>
+
+  <!-- No text path -->
+  <text class="small" x="1188" y="1873" text-anchor="end" fill="#b84c3d">NO</text>
+  <path class="arrow" d="M1209 1885 H1075 V2045"/>
+
+  <!-- Valid text and cleanup -->
+  <text class="small" x="1378" y="1992" fill="#647a51">YES</text>
+  <path class="primaryArrow" d="M1357 1965 V2020 H1075"/>
+  <rect class="process" x="795" y="1990" width="280" height="145" rx="20"/>
+  <text class="label" x="935" y="2022" text-anchor="middle">POST-PROCESSING</text>
+  <text class="boxTitle" x="935" y="2055" text-anchor="middle">Clean OCR Output</text>
+  <text class="small" x="935" y="2083" text-anchor="middle">Unicode NFC normalization</text>
+  <text class="small" x="935" y="2105" text-anchor="middle">Remove noise · remove duplicates</text>
+  <text class="small" x="935" y="2127" text-anchor="middle">Join accepted text results</text>
+
+  <!-- Translation -->
+  <path class="optionalArrow" d="M935 2135 V2185 H1205"/>
+  <rect class="service" x="1205" y="2140" width="305" height="125" rx="20"/>
+  <text class="label" x="1357" y="2172" text-anchor="middle">OPTIONAL TRANSLATION</text>
+  <text class="boxTitle" x="1357" y="2204" text-anchor="middle">Translate Extracted Text</text>
+  <text class="small" x="1357" y="2233" text-anchor="middle">Sinhala → Tamil and English</text>
+  <path class="optionalArrow" d="M1205 2220 H1075"/>
+
+  <!-- Response -->
+  <rect class="process" x="795" y="2185" width="280" height="155" rx="20"/>
+  <text class="label" x="935" y="2217" text-anchor="middle">JSON RESPONSE</text>
+  <text class="boxTitle" x="935" y="2249" text-anchor="middle">Return Processing Result</text>
+  <text class="small" x="935" y="2277" text-anchor="middle">Original + enhanced images</text>
+  <text class="small" x="935" y="2299" text-anchor="middle">Sinhala text + confidence</text>
+  <text class="small" x="935" y="2321" text-anchor="middle">Tamil + English translations</text>
+  <path class="primaryArrow" d="M795 2270 H665"/>
+
+  <!-- Frontend result -->
+  <rect class="success" x="385" y="2185" width="280" height="155" rx="20"/>
+  <text x="525" y="2217" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.1" fill="#fff7ea">FINAL OUTPUT</text>
+  <text x="525" y="2250" text-anchor="middle" font-family="Georgia, serif" font-size="21" font-weight="700" fill="#ffffff">Display Results</text>
+  <text x="525" y="2279" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#fff7ea">Original vs enhanced preview</text>
+  <text x="525" y="2301" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#fff7ea">Sinhala · Tamil · English tabs</text>
+  <text x="525" y="2323" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#fff7ea">Copy text or reset workflow</text>
+  <path class="primaryArrow" d="M385 2270 H265 V2345 H172"/>
+
+  <ellipse cx="172" cy="2345" rx="92" ry="38" fill="#647a51" filter="url(#shadow)"/>
+  <text x="172" y="2352" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">END</text>
+
+  <!-- Important implementation note -->
+  <rect x="70" y="2410" width="1460" height="60" rx="20" fill="#fffdf7" fill-opacity="0.86" stroke="#ffffff"/>
+  <text x="800" y="2448" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#33261f">
+    Important: Swin2SR generates the enhanced comparison image, while Fine-tuned TrOCR reads the original image to match its training input distribution.
+  </text>
+
+  <!-- Model and parameter reference -->
+  <text x="800" y="2545" text-anchor="middle" font-family="Georgia, serif" font-size="34" font-weight="700" fill="#33261f">
+    Models and Verified Parameters
+  </text>
+  <text x="800" y="2580" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#705d50">
+    Training parameters are shown for TrOCR; deployed inference parameters are shown for all three services.
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="55" y="2620" width="475" height="455" rx="24" fill="#fffdf7" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/>
+    <rect x="562" y="2620" width="475" height="455" rx="24" fill="#fffdf7" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/>
+    <rect x="1070" y="2620" width="475" height="455" rx="24" fill="#fffdf7" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/>
+  </g>
+
+  <!-- Swin2SR parameters -->
+  <text class="label" x="292" y="2660" text-anchor="middle">IMAGE ENHANCEMENT MODEL</text>
+  <text class="boxTitle" x="292" y="2695" text-anchor="middle">Fine-tuned Swin2SR</text>
+  <text class="small" x="292" y="2724" text-anchor="middle">sarmisarmitha/swin2sr-sinhala-</text>
+  <text class="small" x="292" y="2744" text-anchor="middle">image-enhancement</text>
+  <line x1="90" y1="2765" x2="495" y2="2765" stroke="#e8dac6"/>
+  <g class="body">
+    <text x="90" y="2800">• Output scale: 4× super-resolution</text>
+    <text x="90" y="2830">• Maximum input dimension: 800 px</text>
+    <text x="90" y="2860">• Illumination correction: 11×11 dilation</text>
+    <text x="90" y="2890">• Background smoothing: median blur 21</text>
+    <text x="90" y="2920">• Denoising strength: h = 5, hColor = 5</text>
+    <text x="90" y="2950">• Sharpening: 1.2 original − 0.2 Gaussian</text>
+    <text x="90" y="2980">• Padding multiple: 64 px</text>
+    <text x="90" y="3010">• Deployment: Modal T4 GPU · FP inference</text>
+    <text x="90" y="3040">• Result: enhanced PNG Base64 preview</text>
+  </g>
+
+  <!-- TrOCR parameters -->
+  <text class="label" x="800" y="2660" text-anchor="middle">SINHALA TEXT EXTRACTION MODEL</text>
+  <text class="boxTitle" x="800" y="2695" text-anchor="middle">Fine-tuned TrOCR</text>
+  <text class="small" x="800" y="2724" text-anchor="middle">sarmisarmitha/trocr-sinhala-handwritten-ocr</text>
+  <text class="small" x="800" y="2744" text-anchor="middle">Subfolder: 02_final_model</text>
+  <line x1="597" y1="2765" x2="1002" y2="2765" stroke="#e8dac6"/>
+  <g class="body">
+    <text x="597" y="2800">• Base checkpoint: hasindu-k/...-notes-v3</text>
+    <text x="597" y="2830">• Input size: RGB 384 × 384</text>
+    <text x="597" y="2860">• Epochs: 10 · learning rate: 1×10⁻⁵</text>
+    <text x="597" y="2890">• Batch: 4 · accumulation: 4 · effective: 16</text>
+    <text x="597" y="2920">• Weight decay: 0.03 · warm-up: 50 steps</text>
+    <text x="597" y="2950">• Scheduler: cosine · gradient clipping: 1.0</text>
+    <text x="597" y="2980">• Validation split: 15% · early-stop patience: 3</text>
+    <text x="597" y="3010">• Decode: 4 beams · max length: 128</text>
+    <text x="597" y="3040">• Sampling: off · FP16 when GPU available</text>
+  </g>
+
+  <!-- NLLB parameters -->
+  <text class="label" x="1307" y="2660" text-anchor="middle">TRANSLATION MODEL</text>
+  <text class="boxTitle" x="1307" y="2695" text-anchor="middle">NLLB-200 Distilled 600M</text>
+  <text class="small" x="1307" y="2724" text-anchor="middle">facebook/nllb-200-distilled-600M</text>
+  <text class="small" x="1307" y="2744" text-anchor="middle">Multilingual sequence-to-sequence translation</text>
+  <line x1="1105" y1="2765" x2="1510" y2="2765" stroke="#e8dac6"/>
+  <g class="body">
+    <text x="1105" y="2800">• Source language token: sin_Sinh</text>
+    <text x="1105" y="2830">• Tamil target token: tam_Taml</text>
+    <text x="1105" y="2860">• English target token: eng_Latn</text>
+    <text x="1105" y="2890">• Model size: 600M parameters</text>
+    <text x="1105" y="2920">• Precision: FP16</text>
+    <text x="1105" y="2950">• Beam search: 4</text>
+    <text x="1105" y="2980">• Maximum output length: 1024 tokens</text>
+    <text x="1105" y="3010">• Early stopping: enabled</text>
+    <text x="1105" y="3040">• Deployment: Modal T4 GPU</text>
+  </g>
+
+  <text x="800" y="3120" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#705d50">
+    Complete output: original image · 4× enhanced image · extracted Sinhala text · Tamil translation · English translation
+  </text>
+</svg>

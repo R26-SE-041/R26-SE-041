@@ -1,7 +1,7 @@
 """
 Super-Resolution Enhancement — Modal Serverless Function
 
-Model: caidas/swin2SR-classical-sr-x4-64 (Swin2SR)
+Model: sarmisarmitha/swin2sr-sinhala-image-enhancement (fine-tuned Swin2SR)
   - 12M params, Apache-2.0, open-source, under 10B
   - Verified public HuggingFace model (all files confirmed via API)
   - Used in 9+ production HuggingFace Spaces
@@ -17,7 +17,7 @@ Deploy:
 import io
 import modal
 
-HF_MODEL = "caidas/swin2SR-classical-sr-x4-64"
+HF_MODEL = "sarmisarmitha/swin2sr-sinhala-image-enhancement"
 HF_CACHE = "/hf_cache"
 
 image = (

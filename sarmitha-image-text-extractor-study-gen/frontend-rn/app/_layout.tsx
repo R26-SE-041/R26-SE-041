@@ -1,25 +1,20 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
+import { useAppTheme } from "@/theme";
 
 export default function RootLayout() {
+  const { colors, isDark } = useAppTheme();
   return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: "#09090f" },
+          contentStyle: { backgroundColor: colors.background },
           animation: "fade",
         }}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#09090f",
-  },
-});

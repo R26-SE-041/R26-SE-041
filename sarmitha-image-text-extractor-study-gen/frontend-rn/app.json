@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "Sarmitha OCR",
+    "name": "SwinSR Sinhala OCR",
     "slug": "sarmitha-ocr",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "scheme": "sarmitha-ocr",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#09090f",
+        "backgroundColor": "#f4f7fb",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

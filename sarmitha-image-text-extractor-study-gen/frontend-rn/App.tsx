@@ -1,4 +1,3 @@
-// This project uses expo-router. Entry is handled via expo-router/entry
-// as configured in package.json "main" field.
-// This file exists only for compatibility with legacy registerRootComponent setups.
-export { default } from "expo-router/entry-classic";
+// Expo Router uses app/index.tsx through the package entry. Exporting the same
+// screen here keeps legacy React Native tooling and type checking compatible.
+export { default } from "./app/index";
