@@ -4,24 +4,22 @@ import { useCallback, useRef, useState } from 'react'
 import { uploadDocument } from '@/lib/api'
 import type { DocumentItem } from '@/types'
 
-// ── Supported formats ─────────────────────────────────────────────────────────
 const ACCEPTED_EXTENSIONS = ['.pdf', '.pptx', '.docx', '.xlsx', '.txt', '.md']
 const ACCEPTED_MIME = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain',
-  'text/markdown',
+  'text/plain', 'text/markdown',
 ].join(',')
 
 const FORMAT_BADGES = [
-  { ext: 'PDF',  color: 'from-red-500/20 to-red-600/10 border-red-500/30 text-red-400' },
-  { ext: 'PPTX', color: 'from-orange-500/20 to-orange-600/10 border-orange-500/30 text-orange-400' },
-  { ext: 'DOCX', color: 'from-blue-500/20 to-blue-600/10 border-blue-500/30 text-blue-400' },
-  { ext: 'XLSX', color: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30 text-emerald-400' },
-  { ext: 'TXT',  color: 'from-white/10 to-white/5 border-white/15 text-white/50' },
-  { ext: 'MD',   color: 'from-purple-500/20 to-purple-600/10 border-purple-500/30 text-purple-400' },
+  { ext: 'PDF',  color: 'var(--c-red)',   bg: 'var(--c-red-soft)',   bdr: 'var(--c-red-border)' },
+  { ext: 'PPTX', color: '#C2410C',        bg: '#FFF7ED',             bdr: 'rgba(234,88,12,0.2)' },
+  { ext: 'DOCX', color: 'var(--c-blue)',  bg: 'var(--c-blue-soft)',  bdr: 'var(--c-blue-border)' },
+  { ext: 'XLSX', color: 'var(--c-green)', bg: 'var(--c-green-soft)', bdr: 'var(--c-green-border)' },
+  { ext: 'TXT',  color: 'var(--c-ink-muted)', bg: 'var(--c-inset)', bdr: 'var(--c-border)' },
+  { ext: 'MD',   color: '#7C3AED',        bg: '#FAF5FF',             bdr: 'rgba(124,58,237,0.2)' },
 ]
 
 interface UploadZoneProps {
@@ -42,146 +40,98 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
       setError(`'${ext}' is not supported. Use: ${ACCEPTED_EXTENSIONS.join(', ')}`)
       return
     }
-    const maxBytes = 50 * 1024 * 1024
-    if (file.size > maxBytes) {
-      setError('File exceeds the 50 MB limit')
-      return
-    }
+    if (file.size > 50 * 1024 * 1024) { setError('File exceeds the 50 MB limit'); return }
 
-    setError(null)
-    setFileName(file.name)
-    setUploading(true)
-    setProgress(10)
-
-    // Fake progress stages while waiting for server
+    setError(null); setFileName(file.name); setUploading(true); setProgress(10)
     const tick = (v: number) => setTimeout(() => setProgress(v), 600)
     tick(30); tick(55); tick(75)
 
     try {
       const doc = await uploadDocument(file)
       setProgress(100)
-      setTimeout(() => {
-        onUploaded(doc)
-        setUploading(false)
-        setProgress(0)
-        setFileName(null)
-      }, 500)
+      setTimeout(() => { onUploaded(doc); setUploading(false); setProgress(0); setFileName(null) }, 500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
-      setUploading(false)
-      setProgress(0)
+      setUploading(false); setProgress(0)
     }
   }, [onUploaded])
 
   const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
+    e.preventDefault(); setDragging(false)
     const file = e.dataTransfer.files[0]
     if (file) handleFile(file)
   }, [handleFile])
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── Drop zone ─────────────────────────────────────────────── */}
-      <div
-        id="upload-zone"
-        role="button"
-        tabIndex={0}
+      {/* Drop zone */}
+      <div id="upload-zone" role="button" tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         onClick={() => !uploading && inputRef.current?.click()}
         style={{
-          background: dragging
-            ? 'rgba(99,102,241,0.08)'
-            : 'rgba(255,255,255,0.025)',
-          borderColor: dragging
-            ? 'rgba(99,102,241,0.6)'
-            : uploading
-            ? 'rgba(99,102,241,0.35)'
-            : 'rgba(255,255,255,0.1)',
+          background: dragging ? 'var(--c-blue-soft)' : 'var(--c-inset)',
+          borderColor: dragging ? 'var(--c-blue)' : uploading ? 'var(--c-blue-border)' : 'var(--c-border-md)',
           transform: dragging ? 'scale(1.012)' : 'scale(1)',
           transition: 'all 0.2s ease',
           border: '2px dashed',
-          borderRadius: '20px',
-          padding: '2rem',
+          borderRadius: '16px',
+          padding: '2rem 1.5rem',
           cursor: uploading ? 'default' : 'pointer',
           textAlign: 'center',
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPTED_MIME}
-          className="hidden"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-        />
+        }}>
+        <input ref={inputRef} type="file" accept={ACCEPTED_MIME} className="hidden"
+          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
 
         {/* Icon */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 16,
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(168,85,247,0.15))',
-            border: '1px solid rgba(99,102,241,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24,
-            boxShadow: uploading ? '0 0 30px rgba(99,102,241,0.25)' : 'none',
-            transition: 'box-shadow 0.3s ease',
-          }}>
-            {uploading ? '⚙️' : dragging ? '📥' : '📂'}
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: dragging ? 'var(--c-blue-soft)' : 'var(--c-card)', border: `1px solid ${dragging ? 'var(--c-blue-border)' : 'var(--c-border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+            {uploading ? (
+              <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--c-blue-border)', borderTopColor: 'var(--c-blue)', animation: 'spin 0.8s linear infinite' }} />
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={dragging ? 'var(--c-blue)' : 'var(--c-ink-faint)'} strokeWidth={1.8}
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
           </div>
         </div>
 
-        {/* Text */}
-        <p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
-          {uploading
-            ? `Uploading ${fileName}…`
-            : dragging
-            ? 'Drop it here!'
-            : 'Drop your lecture file here'}
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--c-ink)', marginBottom: 4 }}>
+          {uploading ? `Uploading ${fileName}…` : dragging ? 'Drop it here!' : 'Drop your lecture file here'}
         </p>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+        <p style={{ fontSize: 12, color: 'var(--c-ink-faint)' }}>
           or click to browse · PDF, PPTX, DOCX, XLSX, TXT, MD · max 50 MB
         </p>
 
-        {/* Progress bar */}
         {uploading && (
-          <div style={{ marginTop: 16, height: 4, borderRadius: 9999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              borderRadius: 9999,
-              background: 'linear-gradient(90deg, #6366f1, #a855f7)',
-              width: `${progress}%`,
-              transition: 'width 0.5s ease',
-            }} />
+          <div style={{ marginTop: 14, height: 3, borderRadius: 9999, background: 'var(--c-border)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 9999, background: 'var(--c-blue)', width: `${progress}%`, transition: 'width 0.5s ease' }} />
           </div>
         )}
       </div>
 
-      {/* ── Format badges ──────────────────────────────────────────── */}
+      {/* Format badges */}
       {!uploading && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {FORMAT_BADGES.map(({ ext, color }) => (
-            <span
-              key={ext}
-              className={`inline-flex items-center bg-gradient-to-br ${color} border rounded-lg px-2.5 py-1 text-[10px] font-bold tracking-wider`}
-            >
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {FORMAT_BADGES.map(({ ext, bg, color, bdr }) => (
+            <span key={ext} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', background: bg, color, border: `1px solid ${bdr}`, borderRadius: 6, padding: '3px 8px' }}>
               {ext}
             </span>
           ))}
         </div>
       )}
 
-      {/* ── Error ─────────────────────────────────────────────────── */}
+      {/* Error */}
       {error && (
-        <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-          borderRadius: 12, padding: '10px 14px',
-        }}>
-          <span style={{ color: '#f87171', fontSize: 14, flexShrink: 0 }}>⚠</span>
-          <p style={{ fontSize: 13, color: '#f87171', lineHeight: 1.5 }}>{error}</p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--c-red-soft)', border: '1px solid var(--c-red-border)', borderRadius: 10, padding: '10px 14px' }}>
+          <span style={{ color: 'var(--c-red)', fontSize: 14, flexShrink: 0 }}>⚠</span>
+          <p style={{ fontSize: 13, color: 'var(--c-red)', lineHeight: 1.5 }}>{error}</p>
         </div>
       )}
     </div>

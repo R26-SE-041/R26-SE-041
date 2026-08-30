@@ -10,34 +10,28 @@ interface VoiceRecorderProps {
   language: Language
   onTranscript: (result: TranscribeResponse) => void
   onError: (msg: string) => void
+  /** Fired with the raw recording right before a successful transcription, so callers can archive it. */
+  onAudioCaptured?: (blob: Blob) => void
   disabled?: boolean
 }
 
-/* ── Live Frequency Waveform ── */
+/* ── Waveform bars ── */
 function LiveWaveform({ bins, active }: { bins: number[]; active: boolean }) {
   return (
-    <div className="flex items-end justify-center gap-[3px]" style={{ height: 48 }} aria-hidden>
+    <div className="flex items-end justify-center gap-[3px]" style={{ height: 36 }} aria-hidden>
       {bins.map((amplitude, i) => {
-        // Idle: gentle breathing animation using a sine wave per bar
-        // Active: actual microphone amplitude per frequency bin
         const pct = active
-          ? Math.max(4, amplitude * 100)
-          : 8 + Math.sin(i * 0.6) * 4  // subtle idle shimmer
+          ? Math.max(5, amplitude * 100)
+          : 10 + Math.sin(i * 0.6 + Date.now() * 0.001) * 4
         return (
           <div
             key={i}
-            className={[
-              'rounded-full transition-all',
-              active
-                ? 'bg-gradient-to-t from-violet-500 via-purple-400 to-indigo-300'
-                : 'bg-white/20',
-            ].join(' ')}
+            className="rounded-full transition-all"
             style={{
-              width: 4,
+              width: 3,
               height: `${pct}%`,
-              // Stagger animation delay so idle state gently ripples
-              transitionDuration: active ? '60ms' : '600ms',
-              animationDelay: `${i * 0.04}s`,
+              background: active ? '#EA4335' : '#D1D1D6',
+              transitionDuration: active ? '60ms' : '800ms',
             }}
           />
         )
@@ -46,10 +40,10 @@ function LiveWaveform({ bins, active }: { bins: number[]; active: boolean }) {
   )
 }
 
-/* ── Mic SVG ── */
-function MicIcon() {
+/* ── Icons ── */
+function MicIcon({ size = 26 }: { size?: number }) {
   return (
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -59,39 +53,36 @@ function MicIcon() {
   )
 }
 
-/* ── Stop square ── */
 function StopIcon() {
-  return <div className="w-6 h-6 rounded-md bg-white shadow-sm" />
+  return <div className="w-5 h-5 rounded bg-white" style={{ borderRadius: 4 }} />
 }
 
-/* ── Spinner ── */
 function Spinner() {
-  return <div className="w-7 h-7 rounded-full border-[2.5px] border-white/25 border-t-white animate-spin" />
+  return (
+    <div className="w-6 h-6 rounded-full border-2 border-sand-300 border-t-blue-500 animate-spin" />
+  )
 }
 
-/* ── Play icon ── */
 function PlayIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="5 3 19 12 5 21 5 3" />
     </svg>
   )
 }
 
-/* ── Pause icon ── */
 function PauseIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="4" width="4" height="16" rx="1" />
       <rect x="14" y="4" width="4" height="16" rx="1" />
     </svg>
   )
 }
 
-/* ── Send icon ── */
 function SendIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <line x1="22" y1="2" x2="11" y2="13" />
       <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -99,13 +90,23 @@ function SendIcon() {
   )
 }
 
-/* ── Re-record icon ── */
 function RetryIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <polyline points="1 4 1 10 7 10" />
       <path d="M3.51 15a9 9 0 1 0 .49-3.87" />
+    </svg>
+  )
+}
+
+function UploadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
   )
 }
@@ -116,14 +117,12 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
-  const urlRef = useRef<string>('')
 
   useEffect(() => {
     const url = URL.createObjectURL(blob)
-    urlRef.current = url
     if (audioRef.current) {
       audioRef.current.src = url
-      audioRef.current.load()   // Fix 2: must call load() after setting src
+      audioRef.current.load()
     }
     return () => URL.revokeObjectURL(url)
   }, [blob])
@@ -131,17 +130,13 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
   const togglePlay = () => {
     const el = audioRef.current
     if (!el) return
-    if (playing) {
-      el.pause()
-    } else {
-      el.play()
-    }
+    if (playing) el.pause()
+    else el.play()
   }
 
   const handleTimeUpdate = () => {
     const el = audioRef.current
     if (!el) return
-    // Fix 3: webm/opus often reports duration as Infinity — fall back to prop
     const dur = isFinite(el.duration) ? el.duration : durationMs / 1000
     setCurrentTime(el.currentTime)
     setProgress(dur > 0 ? (el.currentTime / dur) * 100 : 0)
@@ -153,8 +148,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
     const dur = isFinite(el.duration) ? el.duration : durationMs / 1000
     if (!dur) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const ratio = Math.max(0, Math.min(1, x / rect.width))
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     el.currentTime = ratio * dur
     setProgress(ratio * 100)
   }
@@ -162,11 +156,10 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
   const fmt = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
-  // Fix 3: webm duration can be Infinity — use prop fallback
   const totalSec = durationMs / 1000
 
   return (
-    <div className="w-full flex flex-col gap-2.5 bg-emerald-500/8 border border-emerald-500/25 rounded-2xl px-4 py-3.5">
+    <div className="w-full nb-inset p-4 flex flex-col gap-3">
       <audio
         ref={audioRef}
         preload="metadata"
@@ -177,21 +170,21 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
       />
 
       <div className="flex items-center gap-3">
-        {/* Play / Pause button */}
         <button
           id="audio-preview-play-btn"
           type="button"
           onClick={togglePlay}
-          className="w-10 h-10 rounded-full bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-500/30 flex items-center justify-center text-emerald-300 transition-all hover:scale-105 active:scale-95 shrink-0"
-          aria-label={playing ? 'Pause preview' : 'Play preview'}
+          className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
+          style={{ background: '#1A73E8', color: '#fff' }}
+          aria-label={playing ? 'Pause' : 'Play'}
         >
           {playing ? <PauseIcon /> : <PlayIcon />}
         </button>
 
-        {/* Progress bar + time */}
         <div className="flex-1 flex flex-col gap-1.5">
           <div
-            className="w-full h-1.5 bg-white/10 rounded-full cursor-pointer relative overflow-hidden"
+            className="w-full h-1.5 rounded-full cursor-pointer overflow-hidden"
+            style={{ background: '#DBD8CC' }}
             onClick={handleSeek}
             role="slider"
             aria-label="Audio progress"
@@ -200,28 +193,28 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
             aria-valuenow={Math.round(progress)}
           >
             <div
-              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-300 rounded-full transition-all duration-100"
-              style={{ width: `${progress}%` }}
+              className="h-full rounded-full transition-all duration-100"
+              style={{ width: `${progress}%`, background: '#1A73E8' }}
             />
           </div>
-          <div className="flex justify-between text-[10px] font-mono text-white/30">
+          <div className="flex justify-between text-[10px] font-mono text-ink-faint">
             <span>{fmt(currentTime)}</span>
             <span>{fmt(totalSec)}</span>
           </div>
         </div>
       </div>
 
-      <p className="text-[11px] text-emerald-400/70 font-medium flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        Recording ready — listen before submitting
-      </p>
+      <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: '#34A853' }}>
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#34A853' }} />
+        Recording ready — review before submitting
+      </div>
     </div>
   )
 }
 
 /* ── Main ── */
-export function VoiceRecorder({ language, onTranscript, onError, disabled = false }: VoiceRecorderProps) {
-  const { recordingState, audioBlob, audioLevel, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
+export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false }: VoiceRecorderProps) {
+  const { recordingState, audioBlob, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [elapsed, setElapsed] = useState(0)
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null)
@@ -236,7 +229,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
     return () => clearInterval(t)
   }, [recordingState])
 
-  /* When recording finishes → show preview instead of auto-sending */
+  /* When recording finishes → show preview */
   useEffect(() => {
     if (recordingState === 'done' && audioBlob) {
       setPreviewBlob(audioBlob)
@@ -245,12 +238,12 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
     }
   }, [recordingState, audioBlob, durationMs])
 
-  /* Submit — user approved the recording */
   const handleSubmit = useCallback(async () => {
     if (!previewBlob) return
     setIsTranscribing(true)
     try {
       const result = await transcribeAudio(previewBlob, language, uploadedFileName ?? 'recording.webm')
+      onAudioCaptured?.(previewBlob)
       onTranscript(result)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Transcription failed')
@@ -261,9 +254,8 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
       setUploadedFileName(null)
       clearRecording()
     }
-  }, [previewBlob, language, uploadedFileName, onTranscript, onError, clearRecording])
+  }, [previewBlob, language, uploadedFileName, onTranscript, onError, onAudioCaptured, clearRecording])
 
-  /* Re-record — discard preview */
   const handleReRecord = useCallback(() => {
     setPreviewBlob(null)
     setPreviewDuration(0)
@@ -271,12 +263,10 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
     clearRecording()
   }, [clearRecording])
 
-  /* Local audio upload uses the same STT endpoint as microphone recordings. */
   const handleAudioUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-
     clearRecording()
     setPreviewBlob(file)
     setPreviewDuration(0)
@@ -290,7 +280,6 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
 
   const isRecording  = recordingState === 'recording'
   const isProcessing = recordingState === 'processing'
-  // Show preview state when blob is ready
   const isPreview    = !!(previewBlob && !isTranscribing)
   const btnDisabled  = disabled || isProcessing || isTranscribing || isPreview
 
@@ -298,7 +287,7 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full py-4">
+    <div className="flex flex-col items-center gap-5 w-full">
       <input
         ref={fileInputRef}
         type="file"
@@ -309,22 +298,19 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
         aria-hidden="true"
       />
 
-      {/* ── Mic button (hidden during preview) ── */}
+      {/* ── Mic area (hidden during preview) ── */}
       {!isPreview && (
-        <>
-          {/* ── Mic button ── */}
-          <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
-            {/* Ping rings — recording only */}
+        <div className="flex flex-col items-center gap-4 w-full">
+
+          {/* Mic button */}
+          <div className="relative flex items-center justify-center" style={{ width: 120, height: 120 }}>
+            {/* Recording pulse ring */}
             {isRecording && (
               <>
-                <span className="absolute rounded-full border border-red-500/35 animate-ping" style={{ inset: '20px' }} />
-                <span className="absolute rounded-full border border-red-500/20 animate-ping [animation-delay:0.5s]" style={{ inset: '8px' }} />
+                <span className="absolute inset-0 rounded-full border-2 border-red-400 animate-record-ring opacity-60" />
+                <span className="absolute rounded-full border border-red-300 animate-record-ring opacity-30"
+                  style={{ inset: '-12px', animationDelay: '0.5s' }} />
               </>
-            )}
-
-            {/* Idle ambient glow */}
-            {!isRecording && !isProcessing && !isTranscribing && (
-              <span className="absolute rounded-full bg-brand-500/12 animate-pulse-slow" style={{ inset: '20px' }} />
             )}
 
             <button
@@ -334,105 +320,130 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
               onClick={toggle}
               disabled={btnDisabled}
               className={clsx(
-                'relative z-10 w-24 h-24 rounded-full flex items-center justify-center transition-all duration-250',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-4 focus-visible:ring-offset-surface-900',
-                'disabled:opacity-50 disabled:pointer-events-none',
+                'relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-4',
+                'focus-visible:ring-offset-sand-100 disabled:opacity-40 disabled:pointer-events-none',
                 isRecording
-                  ? 'bg-gradient-to-br from-red-500 to-rose-600 scale-105 shadow-red focus-visible:ring-red-500'
-                  : 'bg-brand-gradient scale-100 hover:scale-[1.04] active:scale-[0.97] shadow-brand focus-visible:ring-brand-500'
+                  ? 'scale-110'
+                  : 'hover:scale-105 active:scale-95',
               )}
+              style={{
+                background: isRecording ? '#EA4335' : '#FFFFFF',
+                color: isRecording ? '#FFFFFF' : '#1C1C1E',
+                boxShadow: isRecording
+                  ? '0 0 0 0 rgba(234,67,53,0.3), 0 6px 24px rgba(234,67,53,0.2), 0 2px 8px rgba(0,0,0,0.08)'
+                  : '0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)',
+              }}
             >
-              {(isProcessing || isTranscribing) ? <Spinner /> : isRecording ? <StopIcon /> : <MicIcon />}
+              {(isProcessing || isTranscribing)
+                ? <Spinner />
+                : isRecording
+                  ? <StopIcon />
+                  : <MicIcon />
+              }
             </button>
           </div>
 
+          {/* Status text */}
+          <div className="flex flex-col items-center gap-1.5">
+            {isRecording ? (
+              <div className="flex items-center gap-2">
+                <span className="nb-dot nb-dot-red" />
+                <span className="text-xs font-semibold tracking-wide" style={{ color: '#EA4335' }}>
+                  Recording — speak now
+                </span>
+              </div>
+            ) : (isProcessing || isTranscribing) ? (
+              <p className="text-xs font-medium text-ink-muted animate-pulse">
+                {isTranscribing ? 'Transcribing…' : 'Processing…'}
+              </p>
+            ) : (
+              <p className="text-xs text-ink-faint">Tap to speak</p>
+            )}
+
+            {isRecording && (
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-mono font-semibold"
+                style={{ background: 'rgba(234,67,53,0.08)', color: '#EA4335', border: '1px solid rgba(234,67,53,0.2)' }}>
+                {fmt(elapsed)}
+              </span>
+            )}
+          </div>
+
+          {/* Waveform */}
+          <div className={clsx(
+            'w-full rounded-xl px-4 py-3 transition-all duration-300',
+            isRecording ? 'bg-red-50 border border-red-100' : 'nb-inset'
+          )}>
+            <LiveWaveform bins={frequencyBins} active={isRecording} />
+          </div>
+
+          {/* Upload audio file */}
           {!isRecording && !isProcessing && !isTranscribing && (
             <button
               id="voice-upload-audio-btn"
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled}
-              className="text-xs font-medium text-white/45 hover:text-brand-300 transition-colors disabled:opacity-50"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 20px',
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.5 : 1,
+                border: '1.5px dashed #1A73E8',
+                background: 'rgba(26,115,232,0.06)',
+                color: '#1A73E8',
+                transition: 'all 0.15s ease',
+                width: '100%',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(26,115,232,0.12)'
+                ;(e.currentTarget as HTMLButtonElement).style.borderStyle = 'solid'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(26,115,232,0.06)'
+                ;(e.currentTarget as HTMLButtonElement).style.borderStyle = 'dashed'
+              }}
             >
+              <UploadIcon />
               Upload an audio file
             </button>
           )}
-
-          {/* ── Live Waveform + Status ── */}
-          <div className="flex flex-col items-center gap-3 w-full">
-
-            {/* Waveform — always visible, reacts to voice when recording */}
-            <div className={clsx(
-              'w-full rounded-2xl px-4 py-3 transition-all duration-300',
-              isRecording
-                ? 'bg-violet-500/10 border border-violet-500/25'
-                : 'bg-white/[0.02] border border-white/[0.05]'
-            )}>
-              <LiveWaveform bins={frequencyBins} active={isRecording} />
-            </div>
-
-            {/* Status text */}
-            {isRecording ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                <span className="text-[12px] font-semibold text-red-400 tracking-wide">Recording — speak now</span>
-              </div>
-            ) : (isProcessing || isTranscribing) ? (
-              <p className="text-[13px] font-medium text-brand-400 animate-pulse">
-                {isTranscribing
-                  ? 'Transcribing your question…'
-                  : 'Processing…'}
-              </p>
-            ) : (
-              <p className="text-[12px] font-medium text-white/35">
-                Tap to speak
-              </p>
-            )}
-
-            {/* Timer */}
-            {isRecording && (
-              <span className="inline-flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 rounded-full px-3 py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                <span className="text-xs font-mono font-semibold text-red-400 tracking-widest">{fmt(elapsed)}</span>
-              </span>
-            )}
-          </div>
-        </>
+        </div>
       )}
 
       {/* ── Preview Panel ── */}
       {isPreview && previewBlob && (
         <div className="w-full flex flex-col gap-4 animate-fade-up">
-          {/* Header */}
           <div className="flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-400/80">
-              {uploadedFileName ? 'Audio File Ready' : 'Recording Ready'}
+            <span className="nb-dot" />
+            <span className="text-xs font-semibold nb-label" style={{ color: '#34A853' }}>
+              {uploadedFileName ? 'Audio File Ready' : 'Recording Complete'}
             </span>
           </div>
 
-          {/* Audio player */}
           <AudioPreview blob={previewBlob} durationMs={previewDuration} />
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 w-full">
-            {/* Submit */}
+          <div className="flex items-center gap-2 w-full">
             <button
               id="voice-submit-btn"
               type="button"
               onClick={handleSubmit}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-500 hover:to-accent-500 text-white text-sm font-semibold px-5 py-3 rounded-xl transition-all shadow-brand hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 nb-btn-primary justify-center py-3 rounded-xl"
             >
               <SendIcon />
               Ask This Question
             </button>
-
-            {/* Re-record */}
             <button
               id="voice-rerecord-btn"
               type="button"
               onClick={handleReRecord}
-              className="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/50 hover:text-white/80 text-sm font-medium px-4 py-3 rounded-xl transition-all"
+              className="nb-btn-ghost py-3 px-4 rounded-xl"
               title="Discard and re-record"
             >
               <RetryIcon />
@@ -442,16 +453,13 @@ export function VoiceRecorder({ language, onTranscript, onError, disabled = fals
         </div>
       )}
 
-      {/* ── Transcribing spinner (full-width) ── */}
+      {/* ── Transcribing ── */}
       {isTranscribing && (
-        <div className="w-full flex items-center justify-center gap-3 py-4 animate-fade-up">
-          <div className="w-5 h-5 rounded-full border-2 border-brand-500/30 border-t-brand-400 animate-spin shrink-0" />
-          <span className="text-sm text-brand-400 animate-pulse font-medium">
-            Transcribing your question…
-          </span>
+        <div className="w-full flex items-center justify-center gap-3 py-3 animate-fade-up">
+          <div className="w-4 h-4 rounded-full border-2 border-sand-300 border-t-blue-500 animate-spin flex-shrink-0" />
+          <span className="text-sm font-medium text-ink-muted">Transcribing your question…</span>
         </div>
       )}
-
     </div>
   )
 }

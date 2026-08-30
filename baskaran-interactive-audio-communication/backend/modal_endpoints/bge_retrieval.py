@@ -70,6 +70,25 @@ EMBEDDING_DIMENSION = 1024
 MODELS_DIR = "/bge_models"
 
 
+@app.function(
+    volumes={MODELS_DIR: bge_volume},
+    cpu=2.0,
+    memory=4096,
+    timeout=1800,
+)
+def cache_reranker_model():
+    """Populate the shared reranker cache on CPU; never spend GPU time downloading."""
+    from huggingface_hub import snapshot_download
+
+    cached_path = snapshot_download(
+        repo_id=RERANKER_MODEL,
+        cache_dir=MODELS_DIR,
+    )
+    bge_volume.commit()
+    print(f"[BGERerankerCache] READY model={RERANKER_MODEL}; path={cached_path}")
+    return {"model": RERANKER_MODEL, "cached": True}
+
+
 # ── Request / Response schemas ───────────────────────────────────────────────
 
 class EmbedRequest(BaseModel):
@@ -168,7 +187,10 @@ class BGEEmbedder:
 @app.cls(
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
-    scaledown_window=1200,
+    min_containers=0,
+    max_containers=1,
+    buffer_containers=0,
+    scaledown_window=60,
     memory=8192,
 )
 class BGEReranker:
@@ -188,7 +210,8 @@ class BGEReranker:
         self.model = CrossEncoder(
             RERANKER_MODEL,
             max_length=512,
-            cache_folder=MODELS_DIR,
+            cache_dir=MODELS_DIR,
+            local_files_only=True,
             # CrossEncoder automatically uses the GPU when torch.cuda is available.
         )
         bge_volume.commit()

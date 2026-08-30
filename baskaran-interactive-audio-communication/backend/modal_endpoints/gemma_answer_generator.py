@@ -1,0 +1,247 @@
+"""Dedicated base/V2 answer endpoints for the hybrid router.
+
+Deploy only after local tests pass:
+    modal deploy backend/modal_endpoints/gemma_answer_generator.py
+
+Set MODAL_BASE_GEMMA_URL to the BaseGemmaAnswer ``/generate`` URL and
+MODAL_FINETUNED_GEMMA_V2_URL to the FineTunedGemmaV2Answer ``/generate`` URL.
+The two classes deliberately load different model stacks; the base class never
+imports PEFT or mounts the adapter.
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+import modal
+from pydantic import BaseModel, Field
+
+_BASE_MODEL_CANONICAL_ID = "google/gemma-4-12B-it"
+_BASE_MODEL_PATH = os.environ.get(
+    "VOICELEARN_GEMMA_BASE_PATH",
+    "/models/gemma/base",
+).strip()
+_ADAPTER_PATH = "/models/gemma/adapters/v2"
+_APP_NAME = "voicelearn-hybrid-gemma"
+
+image = modal.Image.debian_slim(python_version="3.11").pip_install(
+    "transformers>=5.0.0", "torch>=2.4.0", "accelerate>=0.28.0",
+    "torchvision>=0.19.0", "pillow>=10.0.0", "peft==0.20.0",
+    "fastapi[standard]>=0.115.0", "pydantic>=2.0.0",
+)
+app = modal.App(_APP_NAME, image=image)
+model_volume = modal.Volume.from_name("voicelearn-models", create_if_missing=True)
+
+
+class AnswerRequest(BaseModel):
+    query: str
+    context: list[str] = Field(default_factory=list)
+    language: str = "english"
+    tutor_instructions: str = ""
+    memento: dict[str, Any] | None = None
+    route: str
+
+
+def _messages(payload: AnswerRequest, *, document_only: bool) -> list[dict[str, str]]:
+    language_note = {
+        "tamil": (
+            "ABSOLUTE RULE — LANGUAGE: Your entire response MUST be written in Tamil script (தமிழ்) only. "
+            "You are STRICTLY FORBIDDEN from using any Latin/English letters in your answer. "
+            "Every word — including muscle names, bone names, nerve names, and action terms — "
+            "must be written in Tamil Unicode script. "
+            "Use these transliterations and translations:\n"
+            "MUSCLES: Pectoralis major=பெக்டோரலிஸ் மேஜர், Deltoid=டெல்டாய்டு, "
+            "Biceps brachii=பைசெப்ஸ் பிராக்கை, Triceps brachii=ட்ரைசெப்ஸ் பிராக்கை, "
+            "Quadriceps femoris=குவாட்ரிசெப்ஸ் ஃபெமோரிஸ், "
+            "Rectus femoris=ரெக்டஸ் ஃபெமோரிஸ், Vastus lateralis=வாஸ்டஸ் லேட்டரலிஸ், "
+            "Vastus medialis=வாஸ்டஸ் மீடியலிஸ், Vastus intermedius=வாஸ்டஸ் இன்டர்மீடியஸ்.\n"
+            "BONES: humerus=ஹியூமரஸ், clavicle=கண்ணெலும்பு, scapula=தோள்பட்டை எலும்பு, "
+            "sternum=மார்பெலும்பு, radius=ரேடியஸ், ulna=அல்னா, femur=தொடை எலும்பு, "
+            "tibia=திபியா, fibula=ஃபிபுலா, pelvis=இடுப்பு எலும்பு, ribs=விலா எலும்புகள்.\n"
+            "NERVES: medial pectoral nerve=மீடியல் பெக்டோரல் நரம்பு, "
+            "lateral pectoral nerve=லேட்டரல் பெக்டோரல் நரம்பு, "
+            "axillary nerve=அக்ஸிலரி நரம்பு, musculocutaneous nerve=மஸ்குலோகுட்டேனியஸ் நரம்பு, "
+            "radial nerve=ரேடியல் நரம்பு, femoral nerve=ஃபெமோரல் நரம்பு, "
+            "brachial plexus=பிராக்கியல் ப்ளெக்ஸஸ்.\n"
+            "ACTIONS: flexion=வளைவு, extension=நீட்டல், adduction=உட்கவர்வு, abduction=விலகல், "
+            "medial rotation=உட்சுழற்சி, lateral rotation=புறச்சுழற்சி, "
+            "elevation=உயர்வு, depression=தாழ்வு, nerve supply=நரம்பு வழங்கல், "
+            "origin=தோற்றம், insertion=செருகல், attachment=இணைப்பு, "
+            "action=செயல், function=செயல்பாடு, head=தலை, part=பகுதி.\n"
+            "ZERO English letters are permitted. This is absolute."
+        ),
+        "sinhala": (
+            "ABSOLUTE RULE — LANGUAGE: Your entire response MUST be written in Sinhala script (සිංහල) only. "
+            "You are STRICTLY FORBIDDEN from using any Latin/English letters in your answer. "
+            "Every word — including muscle names, bone names, nerve names, and action terms — "
+            "must be written in Sinhala Unicode script. "
+            "Use these transliterations and translations:\n"
+            "MUSCLES: Pectoralis major=පෙක්ටොරාලිස් මේජර්, Deltoid=ඩෙල්ටොයිඩ්, "
+            "Biceps brachii=බයිසෙප්ස් බ්‍රේකී, Triceps brachii=ට්‍රයිසෙප්ස් බ්‍රේකී, "
+            "Quadriceps femoris=ක්වාඩ්‍රිසෙප්ස් ෆෙමොරිස්, "
+            "Rectus femoris=රෙක්ටස් ෆෙමොරිස්, Vastus lateralis=වාස්ටස් ලේටරාලිස්, "
+            "Vastus medialis=වාස්ටස් මීඩියාලිස්, Vastus intermedius=වාස්ටස් ඉන්ටර්මීඩියස්.\n"
+            "BONES: humerus=හියුමරස්, clavicle=කලාවිකල අස්ථිය, scapula=ස්කැපියුලා, "
+            "sternum=ස්ටර්නම්, radius=රේඩියස්, ulna=අල්නා, femur=කලවා අස්ථිය, "
+            "tibia=ටිබියා, fibula=ෆිබියුලා, pelvis=ශ්‍රෝණිය, ribs=ඉළ ඇට.\n"
+            "NERVES: medial pectoral nerve=මධ්‍ය පෙක්ටොරල් ස්නායුව, "
+            "lateral pectoral nerve=පාර්ශ්ව පෙක්ටොරල් ස්නායුව, "
+            "axillary nerve=ඇක්සිලරි ස්නායුව, musculocutaneous nerve=මස්කියුලොකියුටේනියස් ස්නායුව, "
+            "radial nerve=රේඩියල් ස්නායුව, femoral nerve=ෆෙමොරල් ස්නායුව, "
+            "brachial plexus=බ්‍රේකියල් ප්ලෙක්සස්.\n"
+            "ACTIONS: flexion=නැමීම, extension=දිගු කිරීම, adduction=ඇදීම, abduction=ඉවත් කිරීම, "
+            "medial rotation=අභ්‍යන්තර භ්‍රමණය, lateral rotation=පාර්ශ්ව භ්‍රමණය, "
+            "elevation=ඉහළ යාම, depression=පහළ යාම, nerve supply=ස්නායු සැපයුම, "
+            "origin=ආරම්භය, insertion=ඇතුළු වීම, attachment=සම්බන්ධතාව, "
+            "action=ක්‍රියාව, function=කාර්යය, head=හිස, part=කොටස.\n"
+            "ZERO English letters are permitted. This is absolute."
+        ),
+    }.get(payload.language.lower(), "Answer clearly and completely in English.")
+    policy = payload.tutor_instructions.strip()
+    memory = payload.memento or {}
+    memory_text = "\n".join(
+        f"- {key}: {memory[key]}" for key in (
+            "topic", "previous_question", "previous_answer_summary"
+        ) if memory.get(key)
+    )
+    if document_only:
+        context = "\n\n---\n\n".join(payload.context)
+        system = (
+            "You are an academic tutor. Use ONLY the supplied retrieved document "
+            "context as factual evidence. If it lacks the answer, say so. " + language_note
+        )
+        user = f"Retrieved document context:\n{context}\n\nQuestion: {payload.query}"
+    else:
+        system = "You are a helpful academic tutor. " + language_note
+        user = f"Question: {payload.query}"
+    if policy:
+        system += "\n\nTutor guidance:\n" + policy
+    if memory_text:
+        user = "Temporary follow-up context:\n" + memory_text + "\n\n" + user
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+class _GemmaAnswerBase:
+    def _generate(self, payload: AnswerRequest, *, document_only: bool) -> dict[str, str]:
+        import torch
+
+        messages = _messages(payload, document_only=document_only)
+        inputs = self.processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True,
+            return_dict=True, return_tensors="pt", enable_thinking=False,
+        ).to(self.model.device)
+        input_length = inputs["input_ids"].shape[-1]
+        with torch.inference_mode():
+            output = self.model.generate(
+                **inputs, max_new_tokens=900, do_sample=False,
+                pad_token_id=self.processor.tokenizer.eos_token_id,
+            )
+        return {
+            "answer": self.processor.decode(output[0][input_length:], skip_special_tokens=True).strip(),
+            "route": payload.route,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
+            "adapter_active": bool(getattr(self.model, "peft_config", None)),
+        }
+
+
+@app.cls(gpu="A100-80GB", volumes={"/models": model_volume}, min_containers=0,
+         max_containers=1, buffer_containers=0, scaledown_window=60, memory=16384)
+class BaseGemmaAnswer(_GemmaAnswerBase):
+    """Base Gemma only; used for both document RAG and general questions."""
+
+    @modal.enter()
+    def load_model(self):
+        import torch
+        from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+        self.processor = AutoProcessor.from_pretrained(_BASE_MODEL_PATH, cache_dir="/models", local_files_only=True)
+        self.model = AutoModelForMultimodalLM.from_pretrained(
+            _BASE_MODEL_PATH, dtype=torch.bfloat16, device_map="auto",
+            attn_implementation="sdpa", cache_dir="/models", local_files_only=True,
+        ).eval()
+        if getattr(self.model, "peft_config", None):
+            raise RuntimeError("Base Gemma isolation failed: PEFT configuration is present")
+        print(
+            "[BaseGemmaAnswer] READY "
+            f"base={_BASE_MODEL_PATH}; model_class={type(self.model).__name__}; "
+            "adapter_active=false; peft_wrapper=false; local_files_only=true"
+        )
+
+    @modal.fastapi_endpoint(method="GET")
+    def health(self):
+        return {
+            "ready": True,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
+            "model_path": _BASE_MODEL_PATH,
+            "adapter_active": False,
+            "peft_wrapper": False,
+        }
+
+    @modal.fastapi_endpoint(method="POST")
+    def generate(self, payload: AnswerRequest):
+        if payload.route not in {"document_rag_base", "general_base"}:
+            raise ValueError("Base endpoint received an invalid route")
+        document_only = payload.route == "document_rag_base"
+        if document_only and not payload.context:
+            raise ValueError("Document route requires retrieved context")
+        print(f"[BaseGemmaAnswer] route={payload.route}; context_chunks={len(payload.context)}")
+        return self._generate(payload, document_only=document_only)
+
+
+@app.cls(gpu="A100-80GB", volumes={"/models": model_volume}, min_containers=0,
+         max_containers=1, buffer_containers=0, scaledown_window=600, memory=16384)
+class FineTunedGemmaV2Answer(_GemmaAnswerBase):
+    """Gemma plus the verified VoiceLearn V2 LoRA; never accepts RAG context."""
+
+    @modal.enter()
+    def load_model(self):
+        import json
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+        adapter_config_path = os.path.join(_ADAPTER_PATH, "adapter_config.json")
+        if not os.path.isfile(adapter_config_path):
+            raise FileNotFoundError("VoiceLearn V2 adapter config is missing")
+        with open(adapter_config_path, "r", encoding="utf-8") as handle:
+            adapter_config = json.load(handle)
+        # PEFT records the canonical Hugging Face model ID at training time,
+        # while production loads the exact same weights from a local Modal
+        # Volume path. Comparing that metadata with the local filesystem path
+        # made every V2 container crash during startup and left requests queued.
+        if adapter_config.get("base_model_name_or_path") != _BASE_MODEL_CANONICAL_ID:
+            raise RuntimeError("VoiceLearn V2 adapter declares the wrong base model")
+        if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+            raise RuntimeError("VoiceLearn V2 adapter is not PEFT LoRA")
+        self.processor = AutoProcessor.from_pretrained(_ADAPTER_PATH, cache_dir="/models", local_files_only=True)
+        base = AutoModelForMultimodalLM.from_pretrained(
+            _BASE_MODEL_PATH, dtype=torch.bfloat16, device_map="auto",
+            attn_implementation="sdpa", cache_dir="/models", local_files_only=True,
+        )
+        self.model = PeftModel.from_pretrained(base, _ADAPTER_PATH, local_files_only=True).eval()
+        if not getattr(self.model, "peft_config", None):
+            raise RuntimeError("VoiceLearn V2 PEFT adapter did not activate")
+        print(
+            "[FineTunedGemmaV2Answer] READY "
+            f"base={_BASE_MODEL_PATH}; adapter={_ADAPTER_PATH}; PEFT=LORA; "
+            f"adapters={list(self.model.peft_config)}; local_files_only=true"
+        )
+
+    @modal.fastapi_endpoint(method="GET")
+    def health(self):
+        return {
+            "ready": True,
+            "model_id": _BASE_MODEL_CANONICAL_ID,
+            "model_path": _BASE_MODEL_PATH,
+            "adapter_path": _ADAPTER_PATH,
+            "adapter_active": bool(getattr(self.model, "peft_config", None)),
+            "peft_type": "LORA",
+        }
+
+    @modal.fastapi_endpoint(method="POST")
+    def generate(self, payload: AnswerRequest):
+        if payload.route != "muscle_finetuned_v2" or payload.context:
+            raise ValueError("V2 endpoint only accepts non-RAG five-muscle questions")
+        print(f"[FineTunedGemmaV2Answer] route={payload.route}; context_chunks=0")
+        return self._generate(payload, document_only=False)

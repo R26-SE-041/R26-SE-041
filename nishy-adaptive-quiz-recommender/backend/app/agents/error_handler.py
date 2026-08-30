@@ -14,6 +14,8 @@ FATAL_ERRORS = [
     "Fewer than 2 topics detected",
     "No chunks available",
     "Cannot connect to Modal endpoint",
+    "Question generation service unavailable",
+    "Insufficient source context to generate a valid question.",
 ]
 
 
@@ -37,8 +39,10 @@ def error_handler_node(state: AssessmentState) -> dict:
         logger.error(f"[ErrorHandler] Fatal error detected, skipping retry: {error}")
         retry_count = 3  # Force analytics path
 
+    next_retry_count = retry_count + 1
     return {
-        "error":       None,   # Clear error flag
-        "retry_count": retry_count + 1,
+        # Preserve an exhausted error so it cannot be mistaken for completion.
+        "error":       error if is_fatal or next_retry_count >= 3 else None,
+        "retry_count": next_retry_count,
         "agent_logs":  logs
     }

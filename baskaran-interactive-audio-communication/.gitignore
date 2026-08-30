@@ -40,3 +40,4 @@ Thumbs.db
 # ChromaDB local data
 chroma_data/
 local_documents/
+local_history/

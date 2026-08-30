@@ -2,12 +2,10 @@
 Knowledge Agent — Extracts topics, subtopics, Bloom's taxonomy tags,
 and builds a concept relationship graph from document chunks.
 """
-import json
 import logging
-import networkx as nx
+from pathlib import Path
 from dotenv import load_dotenv
 
-from app.services.llm_service import LlmService
 from app.graph.state import AssessmentState
 
 load_dotenv()
@@ -65,6 +63,18 @@ def knowledge_agent(state: AssessmentState) -> dict:
     logs = list(state.get("agent_logs", []))
 
     if not document_ids:
+        requested_topic = str(state.get("requested_topic") or "").strip()
+        if requested_topic:
+            logs.append(f"[KnowledgeAgent] Using requested Biology topic: {requested_topic}")
+            return {
+                "topics": [requested_topic],
+                "topic_hierarchy": {requested_topic: []},
+                "concept_graph_json": "{}",
+                "bloom_tag_map": {},
+                "knowledge_status": "done",
+                "error": None,
+                "agent_logs": logs,
+            }
         return {
             "knowledge_status": "error",
             "error": "No documents available for knowledge extraction.",
@@ -84,9 +94,27 @@ def knowledge_agent(state: AssessmentState) -> dict:
         except:
             pass
 
-    final_topics = list(all_topics)
+    placeholders = {"general", "general knowledge", "biology", "biology 1"}
+    final_topics = [
+        topic for topic in all_topics
+        if str(topic).strip().casefold() not in placeholders
+    ]
+
+    # Filename is source metadata, not a factual knowledge fallback. Avoid an
+    # extra setup-time LLM call: question retrieval is additionally seeded with
+    # actual PDF chunk text and all factual output is validated later.
     if not final_topics:
-        final_topics = ["General Knowledge"]
+        final_topics = [
+            Path(str(doc.get("filename", "uploaded-pdf"))).stem
+            for doc in docs
+            if str(doc.get("filename", "")).strip()
+        ]
+    if not final_topics:
+        return {
+            "knowledge_status": "error",
+            "error": "No source-derived topics available.",
+            "agent_logs": logs,
+        }
 
     logs.append(f"[KnowledgeAgent] Aggregated {len(final_topics)} topics from documents")
     logger.info(f"[KnowledgeAgent] Done | {len(final_topics)} topics aggregated")

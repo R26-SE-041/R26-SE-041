@@ -17,22 +17,13 @@ adaptive-assessment-platform/
 
 ## Quick Start
 
-### 1. Deploy Qwen2.5-7B to Modal.com
+### 1. Configure the deployed Nishy Qwen2.5-7B endpoint
 
 ```bash
 cd adaptive-assessment-platform
 
-# Install Modal CLI
-pip install modal
-
-# Login to Modal (creates account if needed)
-modal token new
-
-# Deploy the Qwen endpoint (takes ~5 min on first deploy)
-modal deploy modal_inference/qwen_endpoint.py
-
-# Copy the endpoint URL from the output, e.g.:
-# https://YOUR_WORKSPACE--qwen-adaptive-quiz-web-endpoint.modal.run
+# The application uses the already-deployed Nishy fine-tuned endpoint:
+# https://nisharahtheva--nishy-qwen-api-generate.modal.run
 ```
 
 ### 2. Configure Backend
@@ -42,7 +33,7 @@ cd adaptive-assessment-platform
 cp .env.example .env
 
 # Edit .env:
-# MODAL_ENDPOINT_URL=https://YOUR_WORKSPACE--qwen-adaptive-quiz-web-endpoint.modal.run
+# MODAL_ENDPOINT_URL=https://nisharahtheva--nishy-qwen-api-generate.modal.run
 ```
 
 ### 3. Install Backend Dependencies
@@ -104,7 +95,7 @@ npm run dev
 | Frontend | Next.js 15, TypeScript, Tailwind CSS |
 | Backend | FastAPI, Python 3.11 |
 | Agents | LangGraph 0.2.55 |
-| LLM | Qwen2.5-7B-Instruct (Modal.com + vLLM) |
+| LLM | Nishy Qwen2.5-7B fine-tuned model (Modal.com) |
 | Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
 | Vector DB | ChromaDB |
 | Session DB | SQLite |
