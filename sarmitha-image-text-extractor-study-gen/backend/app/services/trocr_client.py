@@ -7,6 +7,7 @@ import base64
 import httpx
 
 from app.core.config import settings
+from app.core.http import modal_client
 
 TIMEOUT = 300.0  # TrOCR large model inference
 
@@ -29,7 +30,7 @@ async def extract_text(image_bytes: bytes) -> str:
 
     payload = {"image_b64": base64.b64encode(image_bytes).decode("utf-8")}
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with modal_client(TIMEOUT) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
 
@@ -42,7 +43,7 @@ async def extract_lines(image_bytes: bytes) -> list:
 
     payload = {"image_b64": base64.b64encode(image_bytes).decode("utf-8")}
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with modal_client(TIMEOUT) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
 

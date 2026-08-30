@@ -5,6 +5,7 @@ Translate client — calls the Modal.com TranslateGemma web endpoint.
 import httpx
 
 from app.core.config import settings
+from app.core.http import modal_client
 
 TIMEOUT = 60.0  # Allow up to 60s for translation
 
@@ -28,7 +29,7 @@ async def translate_text(text: str, target_language: str) -> str:
         "target_language": target_language
     }
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with modal_client(TIMEOUT) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
 

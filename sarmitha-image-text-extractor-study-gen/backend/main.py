@@ -8,7 +8,7 @@ from app.core.config import settings
 app = FastAPI(
     title="Image Enhancement & OCR API",
     description=(
-        "Enhances low-quality images with SRCNN (Modal.com serverless) "
+        "Enhances low-quality images with Swin2SR (Modal.com serverless) "
         "then extracts text via TrOCR (Modal.com serverless)."
     ),
     version="1.0.0",
