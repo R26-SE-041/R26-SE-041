@@ -226,6 +226,52 @@ class DbService:
         """, q)
         self.conn.commit()
 
+    def get_previous_questions(
+        self,
+        student_id: str,
+        *,
+        exclude_session_id: str = "",
+        q_type: Optional[str] = None,
+        limit: int = 120,
+    ) -> List[dict]:
+        """Return a learner's recent questions for cross-session deduplication.
+
+        Question generation used to compare candidates only with the current
+        in-memory quiz. Starting another quiz could consequently produce the
+        same fact and wording again even though it was already persisted.
+        """
+        clauses = ["s.student_id = ?", "q.session_id <> ?"]
+        params: list = [student_id, exclude_session_id]
+        if q_type:
+            clauses.append("q.q_type = ?")
+            params.append(q_type)
+        params.append(max(1, min(int(limit), 500)))
+        rows = self.conn.execute(
+            f"""
+            SELECT q.question_text, q.options_json, q.correct_answer,
+                   q.model_answer, q.topic, q.q_type
+            FROM questions q
+            JOIN sessions s ON s.session_id = q.session_id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY q.created_at DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        questions = []
+        for row in rows:
+            item = dict(row)
+            try:
+                options = json.loads(item.pop("options_json") or "null")
+            except (TypeError, json.JSONDecodeError):
+                options = None
+            questions.append({
+                "question": item.pop("question_text", ""),
+                "options": options,
+                **item,
+            })
+        return questions
+
     # ── Answers ────────────────────────────────────
     def save_answer(self, a: dict) -> None:
         self.conn.execute("""

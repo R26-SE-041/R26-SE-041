@@ -54,6 +54,17 @@ def route_after_evaluation(state: AssessmentState) -> str:
         return "error_handler"
     # Check if current question can be retried (up to 4 attempts: 3 hints + reveal)
     last_answer = state["answers"][-1] if state.get("answers") else None
+    answered_question = next(
+        (
+            question for question in state.get("questions", [])
+            if last_answer and question.get("q_id") == last_answer.get("q_id")
+        ),
+        {},
+    )
+    if state.get("_skip_requested"):
+        if state.get("current_q_index", 0) < state.get("num_questions", 0):
+            return "adaptive"
+        return "recommendation"
     if last_answer and not last_answer["is_correct"] and last_answer["attempts"] < 4:
         return "quiz_generate"  # Same question, retry with progressive hint
     

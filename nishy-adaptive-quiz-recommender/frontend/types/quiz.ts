@@ -92,6 +92,11 @@ export interface SubmitAnswerResponse {
   explanation?: string | null;
 }
 
+export interface AdvanceQuestionResponse {
+  quiz_complete: boolean;
+  result: SubmitAnswerResponse;
+}
+
 // ── Analytics ────────────────────────────────────────────────────
 
 export interface ResourceLink {
@@ -113,6 +118,7 @@ export interface WeakTopicRecommendation {
 export interface QuestionMarkDetail {
   q_num: number;
   topic: string;
+  q_type?: ExamType;
   bloom: string;
   difficulty: number;
   is_correct: boolean;

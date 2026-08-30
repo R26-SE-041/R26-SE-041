@@ -263,6 +263,8 @@ function WeakTopicCard({
 function QMarkRow({ qm }: { qm: QuestionMarkDetail }) {
   const diffColor = qm.difficulty < 0.33 ? "#34d399" : qm.difficulty < 0.66 ? "#fbbf24" : "#f87171";
   const diffLabel = qm.difficulty < 0.33 ? "Easy" : qm.difficulty < 0.66 ? "Medium" : "Hard";
+  const hasPartialCredit = !qm.is_correct && qm.marks > 0 && (qm.q_type === "structured" || qm.q_type === "essay");
+  const resultColor = qm.is_correct ? "#34d399" : hasPartialCredit ? "#f59e0b" : "#f87171";
   return (
     <tr className="border-t border-orange-900/10 hover:bg-orange-900/[0.03] transition-colors">
       <td className="py-3 px-4 text-stone-500 text-sm font-mono">Q{qm.q_num}</td>
@@ -278,12 +280,12 @@ function QMarkRow({ qm }: { qm: QuestionMarkDetail }) {
       <td className="py-3 px-4 text-sm text-center">
         <span
           className="inline-flex items-center gap-1"
-          style={{ color: qm.is_correct ? "#34d399" : "#f87171" }}
+          style={{ color: resultColor }}
         >
           {qm.is_correct
             ? <CheckIcon className="w-3.5 h-3.5" />
             : <XIcon className="w-3.5 h-3.5" />}
-          {attemptsLabel(qm.attempts, qm.is_correct)}
+          {hasPartialCredit ? `Partial credit (${qm.marks}/100)` : attemptsLabel(qm.attempts, qm.is_correct)}
         </span>
       </td>
       <td className="py-3 px-4 text-center">
@@ -647,7 +649,9 @@ export default function ResultsPage() {
           {report.recommendations_pending && (
             <div className="glass-card p-4 mb-6 text-sm text-stone-500 flex items-center gap-3" role="status">
               <span className="h-4 w-4 rounded-full border-2 border-orange-600/25 border-t-orange-600 animate-spin" />
-              Your marks are ready. Deep study notes and exact resource links are being prepared.
+              {studyRecs.length > 0
+                ? "Your results and initial study notes are ready. Exact resource links are being verified in the background."
+                : "Your results are ready. Initial study notes are being prepared."}
             </div>
           )}
           {/* ── Score + Stats Row ── */}

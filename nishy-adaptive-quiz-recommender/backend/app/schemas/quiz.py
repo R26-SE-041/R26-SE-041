@@ -22,6 +22,9 @@ class SubmitAnswerRequest(BaseModel):
     answer: str
     time_taken_sec: int = 0
 
+class AdvanceQuestionRequest(BaseModel):
+    q_id: str
+
 class SubmitAnswerResponse(BaseModel):
     is_correct: bool
     score: float
@@ -34,3 +37,7 @@ class SubmitAnswerResponse(BaseModel):
     correct_answer: Optional[str] = None
     correct_answer_text: Optional[str] = None
     explanation: Optional[str] = None
+
+class AdvanceQuestionResponse(BaseModel):
+    quiz_complete: bool
+    result: SubmitAnswerResponse

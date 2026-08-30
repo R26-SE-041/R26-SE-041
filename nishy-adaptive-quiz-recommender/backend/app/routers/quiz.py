@@ -3,11 +3,21 @@ Quiz Router — Get questions and submit answers.
 """
 import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from app.schemas.quiz import QuestionResponse, SubmitAnswerRequest, SubmitAnswerResponse
+from app.schemas.quiz import (
+    AdvanceQuestionRequest,
+    AdvanceQuestionResponse,
+    QuestionResponse,
+    SubmitAnswerRequest,
+    SubmitAnswerResponse,
+)
 from app.services.db_service import DbService
 from app.graph.graph import get_graph
 from app.agents.analytics_agent import analytics_agent
+from app.agents.adaptive_agent import adaptive_agent
+from app.agents.quiz_agent import quiz_agent
 from app.agents.recommendation_agent import recommendation_agent
+from app.services.question_prefetch import prefetch_next_question
+from app.services.session_work import submit_session_work
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,6 +41,16 @@ def _continue_session_after_response(session_id: str, quiz_complete: bool) -> No
             graph.update_state(config, provisional)
 
             enriched_state = {**state, **provisional}
+            # Publish source-extractive notes before slower model expansion
+            # and live resource discovery finish.
+            quick_recommendations = recommendation_agent(enriched_state, fast=True)
+            quick_state = {**enriched_state, **quick_recommendations}
+            quick_analytics = analytics_agent(quick_state)
+            quick_report = dict(quick_analytics.get("analytics_report", {}))
+            quick_report["recommendations_pending"] = True
+            quick_analytics["analytics_report"] = quick_report
+            graph.update_state(config, {**quick_recommendations, **quick_analytics})
+
             recommendations = recommendation_agent(enriched_state)
             enriched_state.update(recommendations)
             completed = analytics_agent(enriched_state)
@@ -41,8 +61,23 @@ def _continue_session_after_response(session_id: str, quiz_complete: bool) -> No
         else:
             # Resume from the post-evaluation interrupt: adaptive -> generate.
             graph.invoke(None, config=config)
+            # Replenish look-ahead so the following Next click is also instant.
+            prefetch_next_question(session_id)
     except Exception:
         logger.exception("Background continuation failed | session=%s", session_id)
+
+
+def _continue_direct_skip(session_id: str) -> None:
+    """Adapt and refill after Next was used before any answer submission."""
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    snapshot = graph.get_state(config)
+    state = dict(snapshot.values if snapshot else {})
+    adaptive_update = adaptive_agent(state)
+    graph.update_state(config, adaptive_update)
+    adapted_state = {**state, **adaptive_update}
+    generated = quiz_agent(adapted_state)
+    graph.update_state(config, generated)
 
 
 @router.get("/{session_id}/question", response_model=QuestionResponse)
@@ -169,12 +204,16 @@ def submit_answer(session_id: str, req: SubmitAnswerRequest, background_tasks: B
             ),
         )
 
+    answered_question = next(
+        (question for question in questions if question.get("q_id") == last_answer.get("q_id")),
+        {},
+    )
     terminal_attempt = last_answer["is_correct"] or last_answer["attempts"] >= 4
     if terminal_attempt:
-        background_tasks.add_task(
-            _continue_session_after_response,
-            session_id,
-            quiz_complete,
+        # Start immediately rather than waiting for FastAPI's response-stage
+        # background queue. Per-session locking also prevents prefetch races.
+        submit_session_work(
+            session_id, _continue_session_after_response, session_id, quiz_complete
         )
 
     # Adaptive pipeline stores the validated hint explicitly in attempt state.
@@ -200,3 +239,105 @@ def submit_answer(session_id: str, req: SubmitAnswerRequest, background_tasks: B
         correct_answer_text=last_answer.get("correct_answer_text"),
         explanation=last_answer.get("explanation"),
     )
+
+
+@router.post("/{session_id}/advance", response_model=AdvanceQuestionResponse)
+def advance_open_ended_question(session_id: str, req: AdvanceQuestionRequest):
+    """Finalize or skip a structured/essay item, then continue adaptively."""
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    snapshot = graph.get_state(config)
+    state = dict(snapshot.values if snapshot else {})
+    questions = list(state.get("questions", []))
+    q_idx = int(state.get("current_q_index", 0))
+    if q_idx >= len(questions):
+        raise HTTPException(status_code=409, detail="No active question is available")
+    question = questions[q_idx]
+    if req.q_id != question.get("q_id"):
+        raise HTTPException(status_code=409, detail="This action belongs to an outdated question")
+    if question.get("q_type") not in ("structured", "essay"):
+        raise HTTPException(status_code=422, detail="Advance is only available for structured and essay questions")
+
+    answers = list(state.get("answers", []))
+    matching_indexes = [
+        index for index, answer in enumerate(answers)
+        if answer.get("q_id") == question.get("q_id")
+    ]
+    had_attempt = bool(matching_indexes)
+    if matching_indexes:
+        last_index = matching_indexes[-1]
+        finalized = dict(answers[last_index])
+        if finalized.get("is_terminal"):
+            raise HTTPException(status_code=409, detail="This question has already been finalized")
+    else:
+        finalized = {
+            "q_id": question["q_id"],
+            "student_answer": "",
+            "is_correct": False,
+            "score": 0.0,
+            "attempts": 1,
+            "hints_used": 0,
+            "time_taken_sec": 0,
+            "feedback": "Question skipped.",
+            "misconception": None,
+            "hint": None,
+            "hint_level": None,
+        }
+        answers.append(finalized)
+        last_index = len(answers) - 1
+
+    model_answer = question.get("model_answer") or "No model answer is available."
+    finalized["is_terminal"] = True
+    finalized["correct_answer"] = model_answer
+    finalized["correct_answer_text"] = model_answer
+    finalized["explanation"] = model_answer
+    finalized["feedback"] = (
+        f"{str(finalized.get('feedback', '')).strip()}\n\n"
+        f"**Detailed Explanation:**\n{model_answer}"
+    ).strip()
+    answers[last_index] = finalized
+
+    topic_scores = dict(state.get("topic_scores", {}))
+    bloom_scores = dict(state.get("bloom_scores", {}))
+    topic = question.get("topic", "General")
+    bloom = question.get("bloom_level", "remember")
+    topic_scores.setdefault(topic, {"correct": 0, "total": 0})
+    bloom_scores.setdefault(bloom, {"correct": 0, "total": 0})
+    topic_scores[topic]["total"] += 1
+    bloom_scores[bloom]["total"] += 1
+    if finalized.get("is_correct"):
+        topic_scores[topic]["correct"] += 1
+        bloom_scores[bloom]["correct"] += 1
+
+    new_idx = q_idx + 1
+    requested = int(state.get("num_questions", 0))
+    quiz_complete = requested > 0 and new_idx >= requested
+    graph.update_state(config, {
+        "answers": answers,
+        "topic_scores": topic_scores,
+        "bloom_scores": bloom_scores,
+        "current_q_index": new_idx,
+        "_skip_requested": True,
+        "_pending_answer": "",
+    })
+    if quiz_complete or had_attempt:
+        submit_session_work(
+            session_id, _continue_session_after_response, session_id, quiz_complete
+        )
+    else:
+        submit_session_work(session_id, _continue_direct_skip, session_id)
+
+    response_result = SubmitAnswerResponse(
+        is_correct=bool(finalized.get("is_correct")),
+        score=float(finalized.get("score", 0.0)),
+        feedback=str(finalized.get("feedback", "")),
+        hint=finalized.get("hint"),
+        hints_used=int(finalized.get("hints_used", 0)),
+        attempts=int(finalized.get("attempts", 1)),
+        next_question_available=new_idx < len(questions),
+        quiz_complete=quiz_complete,
+        correct_answer=str(model_answer),
+        correct_answer_text=str(model_answer),
+        explanation=str(model_answer),
+    )
+    return AdvanceQuestionResponse(quiz_complete=quiz_complete, result=response_result)

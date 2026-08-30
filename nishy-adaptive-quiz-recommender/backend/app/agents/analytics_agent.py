@@ -28,7 +28,7 @@ def analytics_agent(state: AssessmentState) -> dict:
 
     terminal_answers = [
         answer for answer in answers
-        if answer.get("is_correct") or answer.get("attempts", 0) >= 4
+        if answer.get("is_terminal") or answer.get("is_correct") or answer.get("attempts", 0) >= 4
     ]
     if not terminal_answers:
         terminal_answers = answers[-1:]
@@ -46,12 +46,18 @@ def analytics_agent(state: AssessmentState) -> dict:
         # Find matching question for topic/bloom/difficulty
         q_id = a.get("q_id", "")
         q_obj = next((q for q in questions if q.get("q_id") == q_id), {})
+        if q_obj.get("q_type") in ("structured", "essay"):
+            attempt_weight = ATTEMPT_MARKS.get(attempt, 25) / 100
+            rubric_score = max(0.0, min(float(a.get("score", 0.0)), 1.0))
+            pts = round(rubric_score * 100 * attempt_weight)
+            weighted_scores[-1] = pts
         topic = q_obj.get("topic", "General")
         attempts_for_question = [answer for answer in answers if answer.get("q_id") == q_id]
 
         question_marks_detail.append({
             "q_num":          i + 1,
             "topic":          topic,
+            "q_type":         q_obj.get("q_type", "mcq"),
             "bloom":          q_obj.get("bloom_level", "remember"),
             "difficulty":     round(q_obj.get("difficulty", 0.5), 2),
             "is_correct":     is_correct,
@@ -83,7 +89,7 @@ def analytics_agent(state: AssessmentState) -> dict:
     terminal_q_ids = []
     for answer in answers:
         q_id = answer.get("q_id", "")
-        if (answer.get("is_correct") or answer.get("attempts", 0) >= 4) and q_id not in terminal_q_ids:
+        if (answer.get("is_terminal") or answer.get("is_correct") or answer.get("attempts", 0) >= 4) and q_id not in terminal_q_ids:
             terminal_q_ids.append(q_id)
     diff_progression = [
         round(next((q.get("difficulty", 0.5) for q in questions if q.get("q_id") == q_id), 0.5), 2)

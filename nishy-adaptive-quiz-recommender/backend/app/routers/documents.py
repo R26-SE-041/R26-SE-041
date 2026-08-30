@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from typing import List
 import os
+import re
 import uuid
 import json
 from pathlib import Path
@@ -13,6 +14,64 @@ from app.services.llm_service import LlmService
 from app.agents.ingestion_agent import SUPPORTED_FORMATS
 
 router = APIRouter()
+
+_GENERIC_TOPIC_LABELS = {"", "content", "introduction", "biology", "general", "general knowledge"}
+
+
+def _fallback_topics_from_content(chunks: list, filename: str) -> List[str]:
+    """Derive real, content-based topics without an LLM call.
+
+    Only used when the LLM topic-extraction prompt below fails (e.g. a cold
+    Modal endpoint). It previously fell back straight to the raw filename,
+    which then propagated as a fake "topic" — and later a fake question
+    subject — all the way through quiz generation (a student would see a
+    question about their PDF's filename instead of its actual content).
+    """
+    seen_headings = set()
+    headings: List[str] = []
+    for chunk in chunks:
+        heading = re.sub(r"\s+", " ", str(chunk.get("heading", ""))).strip()
+        key = heading.casefold()
+        if (
+            not heading
+            or key in _GENERIC_TOPIC_LABELS
+            or key in seen_headings
+            or len(heading.split()) > 8
+            or re.search(r"(?:^|\b)(?:AL|GCE)[/\s-]*\d|[/\\]|\bpage\s*\d", heading, re.IGNORECASE)
+        ):
+            continue
+        seen_headings.add(key)
+        headings.append(heading)
+        if len(headings) >= 10:
+            break
+    if headings:
+        return headings
+
+    # Headings weren't usable (e.g. a document with no distinguishable
+    # section titles) — pull short, content-bearing phrases directly from
+    # the extracted text instead. Still real content, never the filename.
+    seen_sentences = set()
+    sentence_topics: List[str] = []
+    for chunk in chunks:
+        text = re.sub(r"\s+", " ", str(chunk.get("text", ""))).strip()
+        for sentence in re.split(r"(?<=[.!?;:])\s+", text):
+            words = sentence.split()
+            if not (4 <= len(words) <= 10):
+                continue
+            key = sentence.casefold()
+            if key in seen_sentences:
+                continue
+            seen_sentences.add(key)
+            sentence_topics.append(sentence.strip(" .:;-"))
+            if len(sentence_topics) >= 5:
+                break
+        if len(sentence_topics) >= 5:
+            break
+    if sentence_topics:
+        return sentence_topics
+
+    # Last resort — no content signal was extractable at all.
+    return [Path(filename).stem]
 
 class DocumentResponse(BaseModel):
     document_id: str
@@ -100,12 +159,12 @@ async def upload_document(file: UploadFile = File(...)):
     
     try:
         data = llm.call_json(prompt)
-        topics = data.get("topics", [])
+        topics = [str(t).strip() for t in data.get("topics", []) if str(t).strip()]
     except Exception:
-        # A filename-derived label is source metadata. Question generation will
-        # still re-extract topics and validate every fact against PDF chunks.
-        topics = [Path(file.filename).stem]
-        
+        topics = []
+    if not topics:
+        topics = _fallback_topics_from_content(chunks, file.filename)
+
     doc_record = {
         "document_id": document_id,
         "filename": file.filename,

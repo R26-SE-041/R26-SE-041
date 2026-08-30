@@ -3,10 +3,21 @@ import unittest
 from langgraph.graph import END
 
 from app.agents.error_handler import error_handler_node
-from app.graph.graph import route_after_error
+from app.graph.graph import route_after_error, route_after_evaluation
 
 
 class GenerationErrorRoutingTests(unittest.TestCase):
+    def test_explicit_next_routes_incorrect_essay_forward(self):
+        state = {
+            "answers": [{"q_id": "essay-1", "is_correct": False, "attempts": 1}],
+            "questions": [{"q_id": "essay-1", "q_type": "essay"}],
+            "current_q_index": 1,
+            "num_questions": 3,
+            "_skip_requested": True,
+        }
+
+        self.assertEqual(route_after_evaluation(state), "adaptive")
+
     def test_retries_a_mid_quiz_generation_error(self):
         state = {"retry_count": 2, "current_q_index": 3, "num_questions": 5}
 

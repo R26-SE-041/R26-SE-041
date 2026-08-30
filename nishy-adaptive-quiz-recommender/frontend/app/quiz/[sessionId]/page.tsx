@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { getSessionStatus, getCurrentQuestion, submitAnswer } from "@/lib/api";
+import { advanceQuestion, getSessionStatus, getCurrentQuestion, submitAnswer } from "@/lib/api";
 import type {
   SessionStatusResponse,
   Question,
@@ -173,12 +173,15 @@ function FeedbackCard({
   onTryAgain,
   shuffledKeys,
   isRetrying,
+  questionType,
 }: {
   result: SubmitAnswerResponse;
   onTryAgain: () => void;
   shuffledKeys: string[];
   isRetrying: boolean;
+  questionType: Question["q_type"];
 }) {
+  const isOpenEnded = questionType === "structured" || questionType === "essay";
   const canTryAgain = !result.is_correct && result.attempts < 4;
   const isFinalWrong = !result.is_correct && !canTryAgain;
   const hintText = result.hint;
@@ -192,6 +195,7 @@ function FeedbackCard({
 
   // Map the original correct option number to its shuffled display number.
   const correctDisplayKey = (() => {
+    if (isOpenEnded) return null;
     if (!correctOriginalKey) return null;
     const dispIdx = shuffledKeys.indexOf(correctOriginalKey);
     return dispIdx >= 0 ? String(dispIdx + 1) : correctOriginalKey;
@@ -264,7 +268,9 @@ function FeedbackCard({
             )}
             {finalExplanation && (
               <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
-                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">Explanation</p>
+                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">
+                  {isOpenEnded ? "Model answer" : "Explanation"}
+                </p>
                 <p className="text-stone-900/70 text-sm leading-relaxed whitespace-pre-line">{finalExplanation}</p>
               </div>
             )}
@@ -283,7 +289,9 @@ function FeedbackCard({
             )}
             {finalExplanation && (
               <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
-                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">Explanation</p>
+                <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">
+                  {isOpenEnded ? "Model answer" : "Explanation"}
+                </p>
                 <p className="text-stone-900/70 text-sm leading-relaxed whitespace-pre-line">{finalExplanation}</p>
               </div>
             )}
@@ -323,7 +331,7 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
           <LockIcon className="w-3 h-3" /> Reviewed
         </span>
       </div>
-      <p className="text-stone-900 text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
+      <p className={`text-stone-900 text-xl font-semibold leading-relaxed mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
       {opts && (
         <div className="space-y-3">
           {shuffledKeys.map((origKey, idx) => {
@@ -360,9 +368,17 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
           })}
         </div>
       )}
+      {!opts && (
+        <div className="rounded-xl px-5 py-4 border border-orange-900/15 bg-orange-900/5">
+          <p className="text-xs font-bold uppercase tracking-wide text-stone-400 mb-2">Your answer</p>
+          <p className="text-sm text-stone-900/80 leading-relaxed whitespace-pre-line">
+            {record.selectedDisplayKey || "(no answer submitted)"}
+          </p>
+        </div>
+      )}
       <div className="mt-4 px-4 py-3 rounded-xl border"
         style={{ background: result.is_correct ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)", borderColor: result.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)" }}>
-        <p className="text-stone-900/60 text-sm leading-relaxed">{result.feedback}</p>
+        <p className="text-stone-900/60 text-sm leading-relaxed whitespace-pre-line">{result.feedback}</p>
       </div>
     </div>
   );
@@ -508,12 +524,38 @@ export default function QuizPage() {
 
   const handleNextQuestion = async () => {
     if (result?.quiz_complete) { router.push(`/quiz/${sessionId}/results`); return; }
+    if (!question) return;
+    const openEnded = question.q_type === "structured" || question.q_type === "essay";
+    const needsAdvance = openEnded && (!result || (!result.is_correct && result.attempts < 4));
+    setWaitingForNext(true);
+    if (needsAdvance) {
+      try {
+        const advanced = await advanceQuestion(sessionId, question.q_id);
+        const finalizedResult = advanced.result;
+        setHistory((prev) => prev.some((item) => item.question.q_id === question.q_id)
+          ? prev
+          : [...prev, {
+              question,
+              shuffledKeys,
+              selectedDisplayKey: selectedDisplayKey ?? "",
+              result: finalizedResult,
+            }]
+        );
+        if (advanced.quiz_complete) {
+          router.push(`/quiz/${sessionId}/results`);
+          return;
+        }
+      } catch (e) {
+        setWaitingForNext(false);
+        setError(e instanceof Error ? e.message : "Could not advance to the next question.");
+        return;
+      }
+    }
     setResult(null);
     setIsRetrying(false);
     setSelectedDisplayKey(null);
     setError("");
     setViewIndex(-1);
-    setWaitingForNext(true);
     // The next question is generated in the background after the previous
     // answer was submitted (LLM call plus grounding validation, sometimes
     // with a retry or two on a cold GPU endpoint). Poll fast at first for the
@@ -547,7 +589,10 @@ export default function QuizPage() {
 
   const isViewingHistory = viewIndex >= 0;
   const isLive = viewIndex === -1;
-  const answerResolved = !!result && !isRetrying && (result.is_correct || result.attempts >= 4);
+  const isOpenEnded = question.q_type === "structured" || question.q_type === "essay";
+  const answerResolved = !!result && !isRetrying && (
+    isOpenEnded || result.is_correct || result.attempts >= 4
+  );
 
   const progress = ((question.q_index + 1) / question.total_questions) * 100;
   const displayedQNum = isViewingHistory ? history[viewIndex].question.q_index + 1 : question.q_index + 1;
@@ -607,7 +652,7 @@ export default function QuizPage() {
                   </span>
                 )}
               </div>
-              <p className="text-stone-900 text-xl font-semibold leading-relaxed mb-8">{question.question}</p>
+              <p className={`text-stone-900 text-xl font-semibold leading-relaxed mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
 
               {/* MCQ options — shuffled display */}
               {question.q_type === "mcq" && question.options && (
@@ -660,6 +705,7 @@ export default function QuizPage() {
               {(question.q_type === "structured" || question.q_type === "essay") && (
                 <textarea id="essay-answer" placeholder="Type your answer here..."
                   className="w-full min-h-[160px] rounded-xl px-4 py-3 text-stone-900 placeholder-white/30 border border-orange-900/15 bg-orange-900/5 backdrop-blur-sm outline-none focus:border-orange-600/60 text-sm leading-relaxed resize-none transition-all duration-200"
+                  value={selectedDisplayKey ?? ""}
                   onChange={(e) => setSelectedDisplayKey(e.target.value)} disabled={!!result && !isRetrying} />
               )}
             </>
@@ -706,7 +752,13 @@ export default function QuizPage() {
                 </span>
               ) : <span className="flex items-center justify-center gap-2">Submit Answer <ArrowRightIcon /></span>}
             </button>
-            <NavBtn id="btn-next-disabled" disabled={true} onClick={() => {}}>Next <ArrowRightIcon /></NavBtn>
+            <NavBtn
+              id={isOpenEnded ? "btn-next-open-ended" : "btn-next-disabled"}
+              disabled={!isOpenEnded || waitingForNext}
+              onClick={handleNextQuestion}
+            >
+              {waitingForNext ? "Preparing..." : "Next"} <ArrowRightIcon />
+            </NavBtn>
           </div>
         ) : (
           /* After answer resolved */
@@ -758,7 +810,13 @@ export default function QuizPage() {
 
         {/* Feedback card — only on live question */}
         {isLive && result && (
-          <FeedbackCard result={result} onTryAgain={handleTryAgain} shuffledKeys={shuffledKeys} isRetrying={isRetrying} />
+          <FeedbackCard
+            result={result}
+            onTryAgain={handleTryAgain}
+            shuffledKeys={shuffledKeys}
+            isRetrying={isRetrying}
+            questionType={question.q_type}
+          />
         )}
       </div>
     </main>

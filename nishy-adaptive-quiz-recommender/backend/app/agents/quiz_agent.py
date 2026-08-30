@@ -6,8 +6,10 @@ import math
 import random
 import re
 import uuid
+from functools import lru_cache
 from typing import List, Optional, Tuple
 
+import httpx
 from dotenv import load_dotenv
 
 from app.graph.state import AssessmentState, QuestionRecord
@@ -145,6 +147,9 @@ Return only compact JSON:
 {{"question":"(a) ...\\n(b) ...","model_answer":"Complete source-grounded model answer covering every sub-part.","correct_answer":"Same content as model_answer; this is the grading reference.","marks_breakdown":{{"content":40,"accuracy":30,"terminology":20,"examples":10}}}}
 
 Rules:
+- Treat "{topic}" as a biological concept label, never as an uploaded filename.
+- Assess exactly ONE coherent biological concept. Never merge separate numbered source questions or unrelated topics.
+- Put every labelled sub-part on its own line and keep the learner-facing stem concise and readable.
 - marks_breakdown keys must describe what that mark actually rewards for THIS question
   (reuse content/accuracy/terminology/examples or write your own category names), and the
   integer values must sum to exactly 100.
@@ -171,6 +176,9 @@ Return only compact JSON:
 {{"question":"Discuss/Explain/Evaluate ...","model_answer":"Complete source-grounded model answer or key points the essay is expected to cover, in 4-8 sentences.","correct_answer":"Same content as model_answer; this is the grading reference."}}
 
 Rules:
+- Treat "{topic}" as a biological concept label, never as an uploaded filename.
+- Assess exactly ONE coherent biological concept. Never merge separate numbered source questions or unrelated topics.
+- Keep the learner-facing question concise and use line breaks for any scenario or statements.
 - The question must invite discussion, explanation, comparison, or evaluation — never a single fact or one-word answer.
 - Every claim in model_answer must be directly supported by the excerpts; it must be real content a grader can compare the student's essay against, not a label.
 - Do not refer to the PDF, excerpts, context, document, text, source, or page in the question.
@@ -276,6 +284,16 @@ def _validate_fill_blank(q_data: dict) -> dict:
 _DEFAULT_MARKS_BREAKDOWN = {"content": 40, "accuracy": 30, "terminology": 20, "examples": 10}
 
 
+def _normalize_open_ended_text(value: object) -> str:
+    """Keep intentional question structure while cleaning noisy whitespace."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Models sometimes return all labelled parts on one line.  Keeping each
+    # part on its own line makes long structured questions immediately scannable.
+    text = re.sub(r"\s+(?=\([a-dA-D]\)\s*)", "\n", text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    return "\n".join(line for line in lines if line).strip()
+
+
 def _validate_structured(q_data: dict) -> dict:
     """Validate a structured item and normalize its marks_breakdown to sum to 100.
 
@@ -284,12 +302,17 @@ def _validate_structured(q_data: dict) -> dict:
     entirely — evaluation always fell back to a generic default regardless of
     what the question actually asked (see evaluation_agent.py).
     """
-    question = re.sub(r"\s+", " ", str(q_data.get("question", ""))).strip()
-    model_answer = re.sub(r"\s+", " ", str(q_data.get("model_answer", ""))).strip()
-    if len(question.split()) < 6:
+    question = _normalize_open_ended_text(q_data.get("question", ""))
+    model_answer = _normalize_open_ended_text(q_data.get("model_answer", ""))
+    if len(question.split()) < 12:
         raise ValueError("Structured question stem is missing or too short")
-    if len(model_answer.split()) < 15:
+    labelled_parts = re.findall(r"(?:^|\s)\([a-dA-D]\)", question)
+    if len(labelled_parts) < 2:
+        raise ValueError("Structured question must contain at least two labelled sub-parts")
+    if len(model_answer.split()) < 30:
         raise ValueError("Structured model answer is missing or too short")
+    if re.search(r"\b(?:your study material|the (?:pdf|document|text|source|excerpt))\b", question, re.IGNORECASE):
+        raise ValueError("Structured question contains source-facing instructions")
 
     breakdown = q_data.get("marks_breakdown")
     cleaned: dict = {}
@@ -322,12 +345,16 @@ def _validate_structured(q_data: dict) -> dict:
 
 def _validate_essay(q_data: dict) -> dict:
     """Validate an essay item has a real question and a substantive model answer."""
-    question = re.sub(r"\s+", " ", str(q_data.get("question", ""))).strip()
-    model_answer = re.sub(r"\s+", " ", str(q_data.get("model_answer", ""))).strip()
-    if len(question.split()) < 6:
+    question = _normalize_open_ended_text(q_data.get("question", ""))
+    model_answer = _normalize_open_ended_text(q_data.get("model_answer", ""))
+    if len(question.split()) < 12:
         raise ValueError("Essay question stem is missing or too short")
-    if len(model_answer.split()) < 15:
+    if not re.search(r"\b(?:discuss|explain|evaluate|compare|analyse|analyze|justify|assess)\b", question, re.IGNORECASE):
+        raise ValueError("Essay question must require extended biological reasoning")
+    if len(model_answer.split()) < 40:
         raise ValueError("Essay model answer is missing or too short")
+    if re.search(r"\b(?:your study material|the (?:pdf|document|text|source|excerpt))\b", question, re.IGNORECASE):
+        raise ValueError("Essay question contains source-facing instructions")
     q_data["question"] = question
     q_data["model_answer"] = model_answer
     q_data["correct_answer"] = str(q_data.get("correct_answer") or model_answer).strip()
@@ -958,12 +985,289 @@ def _persist_question(state: AssessmentState, index: int, question: dict) -> Non
     })
 
 
+def _previous_learner_questions(state: AssessmentState, q_type: str) -> List[dict]:
+    """Load persisted question history without making generation depend on it."""
+    student_id = str(state.get("student_id", "")).strip()
+    if not student_id:
+        return []
+    try:
+        return DbService().get_previous_questions(
+            student_id,
+            exclude_session_id=str(state.get("session_id", "")),
+            q_type=q_type,
+        )
+    except Exception:
+        logger.warning("Could not load cross-session question history", exc_info=True)
+        return []
+
+
+_GENERIC_OPEN_ENDED_TOPICS = {
+    "biology", "biology 1", "general", "general biology", "uploaded pdf",
+    "question paper", "question paper item", "source recovery",
+}
+
+
+def _clean_topic_label(value: object) -> str:
+    label = re.sub(r"\s+", " ", str(value or "")).strip(" .,:;?-_\"'")
+    label = re.sub(r"^(?:the|main)\s+", "", label, flags=re.IGNORECASE)
+    label = re.sub(
+        r"\s+(?:is|are)\s+(?:not\s+)?(?:correct|agreeable|given|listed).*$",
+        "",
+        label,
+        flags=re.IGNORECASE,
+    )
+    words = label.split()
+    if len(words) > 8:
+        label = " ".join(words[:8])
+    return label.title() if label else ""
+
+
+def _infer_open_ended_topic(text: object) -> str:
+    """Infer a learner-facing concept from one source question, never its filename."""
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    patterns = (
+        r"regarding\s+(?:the\s+)?(.+?)(?=\s+(?:is|are)\b|\?|\s+[A-Ea-e]\s*[).])",
+        r"(?:required\s+for|used\s+for)\s+(.+?)(?=\s+(?:is|are)\b|\?|\s+[A-Ea-e]\s*[).])",
+        r"(?:the\s+)?(human\s+[a-z -]+?\s+system)\b",
+        r"(?:about|of)\s+(the\s+)?([a-z][a-z -]{3,45}?)(?=\s+(?:is|are|differs|contains|given)\b|\?|$)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        raw = match.group(match.lastindex or 1)
+        label = _clean_topic_label(raw)
+        if label and label.casefold() not in _GENERIC_OPEN_ENDED_TOPICS:
+            return label
+    return ""
+
+
+def _source_question_units(source_chunks: List[dict]) -> List[dict]:
+    """Split exam-bank chunks into individual numbered questions.
+
+    PDF extraction frequently puts questions 48 and 49 in one chunk. Treating
+    that chunk as prose caused unrelated topics to be fused into one prompt.
+    """
+    units: List[dict] = []
+    boundary = re.compile(r"(?<![\w.])(\d{1,2})\s*\.\s+(?=[A-Z])")
+    for chunk in source_chunks:
+        raw = re.sub(r"\s+", " ", str(chunk.get("text", ""))).strip()
+        matches = list(boundary.finditer(raw))
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+            body = raw[match.end():end].strip()
+            if len(body.split()) < 10:
+                continue
+            stem = re.split(r"\s+[A-Ea-e]\s*[).]\s+|\s+[1-5]\s*[)]\s+", body, maxsplit=1)[0].strip()
+            if len(stem.split()) < 5:
+                continue
+            claims = [
+                re.split(r"\s+1\s*[).]\s+", re.sub(r"\s+", " ", item), maxsplit=1)[0].strip(" .;:-")
+                for item in re.findall(
+                    r"(?:^|\s)[A-Ea-e]\s*[).]\s*(.+?)(?=(?:\s+[A-Ea-e]\s*[).]\s*)|$)",
+                    body,
+                )
+            ]
+            claims = [claim for claim in claims if len(claim.split()) >= 3]
+            units.append({"text": body, "stem": stem, "claims": claims, "chunk": chunk})
+    return units
+
+
+def _open_ended_context_topic(topic: str, chunks: List[dict]) -> str:
+    current = _clean_topic_label(topic)
+    if current and current.casefold() not in _GENERIC_OPEN_ENDED_TOPICS:
+        return current
+    units = _source_question_units(chunks)
+    for unit in units:
+        inferred = _infer_open_ended_topic(unit["stem"])
+        if inferred:
+            return inferred
+    for chunk in chunks:
+        inferred = _infer_open_ended_topic(chunk.get("text", ""))
+        if inferred:
+            return inferred
+    return "Biological Processes"
+
+
+def _source_fallback_open_ended(
+    topic: str,
+    source_chunks: List[dict],
+    q_type: str,
+    diff_label: str = "medium",
+) -> Optional[dict]:
+    """Build a conservative, source-only structured/essay item when the model is unavailable.
+
+    Mirrors _source_fallback_mcq's role for MCQ: a deterministic, directly
+    source-quoted recovery so a cold or unreachable Modal endpoint cannot
+    hard-fail quiz setup for these types. Previously there was no fallback
+    at all here, so a 45s Modal timeout became an unrecoverable fatal error
+    (FATAL_ERRORS matches "Question generation service unavailable") and the
+    whole session died on the first question — MCQ never hit this because
+    _batch_mcq_quiz_agent has this same kind of recovery.
+
+    The prompt still varies by hard/medium/easy — indirect two-step reasoning
+    for hard, one application step for medium, direct recall for easy — the
+    same contract as STRUCTURED_PROMPT/ESSAY_PROMPT, so a cold-start recovery
+    question isn't a flat, always-identical template regardless of difficulty.
+    """
+    units = _source_question_units(source_chunks)
+    # Prefer one complete, lettered source question.  Never merge two numbered
+    # MCQs merely because the PDF extractor placed them in the same chunk.
+    unit = next((item for item in units if len(item["claims"]) >= 3), units[0] if units else None)
+    if unit:
+        display_topic = _infer_open_ended_topic(unit["stem"]) or _open_ended_context_topic(topic, [unit["chunk"]])
+        claims = unit["claims"][:5]
+        if not claims:
+            claims = [unit["stem"]]
+        claim_lines = "\n".join(f"• {claim}" for claim in claims)
+        relationships = "; ".join(claims)
+        if q_type == "structured":
+            question = (
+                f"Consider the following biological statements about {display_topic}:\n"
+                f"{claim_lines}\n"
+                "(a) Organise the stated features into a clear biological comparison.\n"
+                "(b) Analyse two relationships between a named structure, process, or condition and its stated outcome.\n"
+                "(c) Use the comparison to justify one biologically consistent conclusion."
+            )
+            model_answer = (
+                f"The response should accurately organise these stated relationships: {relationships}. "
+                "For part (a), each named feature must remain paired with the biological item described. "
+                "For part (b), two of those pairs should be connected through explicit structure-function or cause-effect reasoning. "
+                "For part (c), the conclusion must follow from that comparison and use the same precise biological terminology."
+            )
+            return {
+                "question": question,
+                "model_answer": model_answer,
+                "correct_answer": model_answer,
+                "marks_breakdown": {
+                    "accurate_comparison": 35,
+                    "biological_relationships": 30,
+                    "cause_effect_reasoning": 25,
+                    "scientific_terminology": 10,
+                },
+                "_display_topic": display_topic,
+                "_evidence_chunks": [unit["chunk"]],
+            }
+        question = (
+            f"Analyse {display_topic} using the following biological statements as the focus:\n"
+            f"{claim_lines}\n"
+            "Compare the stated features, explain at least two structure-function or cause-effect relationships, "
+            "and develop a justified biological conclusion."
+        )
+        model_answer = (
+            f"A complete essay should accurately integrate these stated relationships: {relationships}. "
+            "It should first group related features and compare the biological items they describe. "
+            "It should then explain at least two relationships as connected structure-function or cause-effect sequences. "
+            "The final conclusion should follow from the comparison, retain the named conditions and outcomes, "
+            "and use precise biological terminology throughout rather than presenting disconnected facts."
+        )
+        return {
+            "question": question,
+            "model_answer": model_answer,
+            "correct_answer": model_answer,
+            "_display_topic": display_topic,
+            "_evidence_chunks": [unit["chunk"]],
+        }
+
+    sentences: List[str] = []
+    seen = set()
+    # Prose-note recovery also stays inside one chunk, preventing unrelated
+    # passages from separate pages becoming a fabricated relationship.
+    for chunk in source_chunks[:1]:
+        raw_text = re.sub(r"\s+", " ", str(chunk.get("text", ""))).strip()
+        for sentence in re.split(r"(?<=[.!?;:])\s+", raw_text):
+            sentence = sentence.strip()
+            key = sentence.casefold()
+            if len(sentence.split()) < 8 or key in seen:
+                continue
+            seen.add(key)
+            sentences.append(sentence)
+        if len(sentences) >= 6:
+            break
+    if len(sentences) < 2:
+        return None
+
+    clean_topic = _open_ended_context_topic(topic, source_chunks[:1])
+    observation_one = sentences[0].rstrip(".")
+    observation_two = sentences[1].rstrip(".")
+
+    if q_type == "structured":
+        model_answer = " ".join(sentences[:4])
+        if diff_label == "hard":
+            question = (
+                f'A learner records two observations while studying {clean_topic}: '
+                f'"{observation_one}" and "{observation_two}". '
+                "(a) Analyse the biological relationship between these observations. "
+                "(b) Predict one consequence if that relationship is disrupted. "
+                "(c) Justify the prediction as a cause-effect sequence."
+            )
+        elif diff_label == "easy":
+            question = (
+                f'Consider the biological concept {clean_topic}. '
+                "(a) State two defining features, structures, or stages involved in this concept. "
+                "(b) Explain how those two points are biologically connected."
+            )
+        else:
+            question = (
+                f'A learner observes that "{observation_one}" while investigating {clean_topic}. '
+                "(a) Explain the structure-process relationship responsible for this observation. "
+                "(b) Apply that relationship to predict a biologically consistent outcome."
+            )
+        return {
+            "question": question,
+            "model_answer": model_answer,
+            "correct_answer": model_answer,
+            "marks_breakdown": {
+                "source_supported_biological_facts": 30,
+                "structure_process_relationship": 30,
+                "cause_effect_reasoning": 25,
+                "scientific_terminology": 15,
+            },
+            "_display_topic": clean_topic,
+            "_evidence_chunks": source_chunks[:1],
+        }
+
+    # essay
+    model_answer = " ".join(sentences[:6])
+    if diff_label == "hard":
+        question = (
+            f'Critically analyse how the observations "{observation_one}" and "{observation_two}" '
+            f'can be integrated to explain {clean_topic}. Compare their roles, develop the connecting '
+            "cause-effect chain, and justify the likely outcome if one link in that chain is disrupted."
+        )
+    elif diff_label == "easy":
+        question = (
+            f'Explain {clean_topic} as a coherent biological account. Describe its principal '
+            "structures or stages, connect each with its function, and state the resulting biological significance."
+        )
+    else:
+        question = (
+            f'Discuss how the observation "{observation_one}" illustrates the central process in '
+            f'{clean_topic}. Explain the relevant structure-function relationship and use it to '
+            "predict one biologically consistent consequence under changed conditions."
+        )
+    return {
+        "question": question,
+        "model_answer": model_answer,
+        "correct_answer": model_answer,
+        "_display_topic": clean_topic,
+        "_evidence_chunks": source_chunks[:1],
+    }
+
+
 def _sequential_quiz_agent(state: AssessmentState) -> dict:
     """Retrieve before generation, validate against that retrieval, and fail closed."""
     logger.info("[QuizAgent] Starting | session=%s | q_index=%s", state["session_id"], state.get("current_q_index", 0))
     llm = LlmService()
     rag = RagService()
     grounding = GroundingService()
+    # Don't hold the whole request for the full 45s Modal timeout when the
+    # endpoint is cold — structured/essay had no deterministic fallback at
+    # all, so a cold-start timeout here previously became an unrecoverable
+    # fatal error ("Question generation service unavailable" is in
+    # FATAL_ERRORS) and killed quiz setup outright. MCQ never hit this
+    # because _batch_mcq_quiz_agent already does this same health probe.
+    endpoint_warm = llm.check_health()
     logs = list(state.get("agent_logs", []))
     questions = list(state.get("questions", []))
     blueprint = state.get("quiz_blueprint") or build_blueprint(state)
@@ -983,13 +1287,19 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
     diff_score = state.get("current_difficulty", INIT_DIFFICULTY.get(state.get("difficulty_mode", "adaptive"), 0.5))
     diff_label, bloom = get_diff_info(diff_score)
     q_type = state.get("exam_type", "mcq")
+    historical_questions = _previous_learner_questions(state, q_type)
     prompt_template = {
         "mcq": MCQ_PROMPT,
         "structured": STRUCTURED_PROMPT,
         "essay": ESSAY_PROMPT,
         "fill_blank": FILL_BLANK_PROMPT,
     }.get(q_type, MCQ_PROMPT)
-    existing = [question["question"] for question in questions]
+    # Keep the anti-repeat prompt compact; the validator still checks the full
+    # 120-question history below without paying that token/latency cost.
+    existing = [
+        question["question"]
+        for question in [*questions, *historical_questions[:30]]
+    ]
     no_repeat = ""
     if existing:
         no_repeat = "\nAlready generated; do not repeat or paraphrase:\n" + "\n".join(f"- {item}" for item in existing)
@@ -1011,14 +1321,17 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
     queries.extend(str(chunk["text"])[:240] for chunk in source_seeds[:4])
 
     for attempt, query in enumerate(queries, start=1):
+        if not endpoint_warm:
+            break
         chunks = _select_usable_chunks(rag.retrieve(state["chroma_collection_id"], query, k=10))
         if not chunks:
             logs.append(f"[QuizAgent] Retrieval attempt {attempt} was weak or empty")
             continue
         had_source_context = True
+        prompt_topic = _open_ended_context_topic(topic, chunks) if q_type in ("structured", "essay") else topic
         prompt = prompt_template.format(
             context=_format_context(chunks),
-            topic=topic,
+            topic=prompt_topic,
             subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
             bloom_level=bloom,
             diff_label=diff_label,
@@ -1037,6 +1350,13 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 candidate = _validate_structured(candidate)
             elif q_type == "essay":
                 candidate = _validate_essay(candidate)
+            duplicate_reason = (
+                _semantic_duplicate_reason(candidate, questions, grounding, {})
+                or _semantic_duplicate_reason(candidate, historical_questions)
+            )
+            if duplicate_reason:
+                logs.append(f"[QuizAgent] Cross-session duplicate rejected: {duplicate_reason}")
+                continue
             audit = (
                 _embedding_grounding_audit(grounding, candidate, chunks)
                 if q_type == "fill_blank"
@@ -1068,13 +1388,14 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
     # similarity filter because they come from get_source_chunks(), not
     # semantic search. This preserves PDF grounding while recovering from
     # poor topic-label ↔ chunk cosine alignment.
-    if accepted is None and not service_error and source_seeds:
+    if accepted is None and not service_error and source_seeds and endpoint_warm:
         seed_chunks = _select_seed_chunks(source_seeds)
         if seed_chunks:
             logs.append("[QuizAgent] Falling back to direct PDF seed chunks for generation")
+            prompt_topic = _open_ended_context_topic(topic, seed_chunks) if q_type in ("structured", "essay") else topic
             prompt = prompt_template.format(
                 context=_format_context(seed_chunks),
-                topic=topic,
+                topic=prompt_topic,
                 subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
                 bloom_level=bloom,
                 diff_label=diff_label,
@@ -1091,6 +1412,15 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                         candidate = _validate_structured(candidate)
                     elif q_type == "essay":
                         candidate = _validate_essay(candidate)
+                    duplicate_reason = (
+                        _semantic_duplicate_reason(candidate, questions, grounding, {})
+                        or _semantic_duplicate_reason(candidate, historical_questions)
+                    )
+                    if duplicate_reason:
+                        logs.append(f"[QuizAgent] Seed duplicate rejected: {duplicate_reason}")
+                        candidate = None
+                    if candidate is None:
+                        raise ValueError("generated question repeats learner history")
                     audit = _embedding_grounding_audit(grounding, candidate, seed_chunks)
                     if audit["grounding_status"] == "grounded":
                         accepted = candidate
@@ -1107,6 +1437,35 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 if isinstance(exc, RuntimeError):
                     service_error = f"Question generation service unavailable: {exc}"
 
+    # ── Deterministic source-only recovery ────────────────────────────────
+    # Structured/essay had no fallback at all before this: a cold or
+    # unreachable Modal endpoint meant "accepted is None" unconditionally,
+    # which fell straight through to the fatal-error return below and killed
+    # the whole quiz. Recover the same way MCQ already does via
+    # _source_fallback_mcq — a deterministic item built directly from source
+    # sentences, so setup always produces a real, grounded question.
+    if accepted is None and q_type in ("structured", "essay") and source_seeds:
+        fallback = _source_fallback_open_ended(topic, source_seeds, q_type, diff_label)
+        if fallback is not None:
+            try:
+                fallback_chunks = fallback.pop("_evidence_chunks", None) or _select_seed_chunks(source_seeds) or source_seeds[:MAX_SOURCE_CHUNKS]
+                fallback = _validate_structured(fallback) if q_type == "structured" else _validate_essay(fallback)
+                duplicate_reason = (
+                    _semantic_duplicate_reason(fallback, questions, grounding, {})
+                    or _semantic_duplicate_reason(fallback, historical_questions)
+                )
+                if duplicate_reason:
+                    raise ValueError(f"source recovery repeats learner history: {duplicate_reason}")
+                fallback_audit = _embedding_grounding_audit(grounding, fallback, fallback_chunks)
+                if fallback_audit["grounding_status"] == "grounded":
+                    accepted = fallback
+                    accepted_chunks = fallback_chunks
+                    audit = fallback_audit
+                    had_source_context = True
+                    logs.append(f"[QuizAgent] Used source-only recovery for {q_type} after generation was unavailable")
+            except Exception as exc:
+                logs.append(f"[QuizAgent] Source-only {q_type} recovery failed: {exc}")
+
     if accepted is None or audit is None:
         error = service_error if had_source_context and service_error else INSUFFICIENT_SOURCE_MESSAGE
         return {
@@ -1117,10 +1476,13 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
 
     evidence_id = audit["evidence_chunk_id"]
     primary = next((chunk for chunk in accepted_chunks if chunk["chunk_id"] == evidence_id), accepted_chunks[0])
+    record_topic = topic
+    if q_type in ("structured", "essay"):
+        record_topic = str(accepted.pop("_display_topic", "")).strip() or _open_ended_context_topic(topic, accepted_chunks)
     q_id = str(uuid.uuid4())[:8]
     question_record: QuestionRecord = {
         "q_id": q_id,
-        "topic": topic,
+        "topic": record_topic,
         "bloom_level": bloom,
         "difficulty": diff_score,
         "q_type": q_type,
@@ -1670,6 +2032,299 @@ _TOPIC_FALLBACK_BANK: list[tuple[str, list[dict]]] = [
             "correct_answer": "1",
             "model_answer": "P700 is the reaction-centre chlorophyll pair of Photosystem I. Its name reflects its strongest absorption near 700 nm, whereas P680 is the corresponding reaction centre of Photosystem II.",
         },
+        {
+            "_difficulty": "hard",
+            "question": "A chloroplast evolves oxygen while neither reducing NADP+ nor accumulating electrons in Photosystem I. Which lesion best explains this pattern?",
+            "options": {
+                "1": "Electron transfer through the cytochrome b6f complex is blocked",
+                "2": "The oxygen-evolving complex works faster than normal",
+                "3": "Ferredoxin transfers electrons to NADP+ more rapidly",
+                "4": "ATP synthase allows increased proton movement",
+                "5": "RuBisCO binds carbon dioxide with greater affinity",
+            },
+            "correct_answer": "1",
+            "model_answer": "Oxygen evolution shows that excitation and water oxidation at Photosystem II still occur. A cytochrome b6f block prevents those electrons from reaching Photosystem I, so downstream NADP+ reduction fails without requiring the oxygen-evolving complex itself to be defective.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "If a mutant lacks the Photosystem II oxygen-evolving complex but retains functional Photosystem I, which illuminated outcome is most plausible?",
+            "options": {
+                "1": "Cyclic electron flow can form ATP without oxygen or NADPH production",
+                "2": "Linear electron flow produces oxygen and NADPH normally",
+                "3": "Photosystem I replaces water splitting and releases oxygen",
+                "4": "The Calvin cycle directly supplies electrons to Photosystem II",
+                "5": "ATP synthase reduces NADP+ independently of electron transport",
+            },
+            "correct_answer": "1",
+            "model_answer": "Without the oxygen-evolving complex, Photosystem II cannot replace electrons by oxidising water, so normal linear flow, oxygen release, and NADPH formation fail. Functional Photosystem I can still support cyclic electron flow, which contributes to a proton gradient and ATP formation without producing NADPH or oxygen.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "Far-red light preferentially excites Photosystem I while Photosystem II excitation remains low. Which change best restores balanced linear electron flow?",
+            "options": {
+                "1": "Increase excitation energy delivered to Photosystem II",
+                "2": "Block electron transfer from Photosystem I to ferredoxin",
+                "3": "Prevent water oxidation at the oxygen-evolving complex",
+                "4": "Close ATP synthase proton channels completely",
+                "5": "Inhibit plastoquinone reduction by Photosystem II",
+            },
+            "correct_answer": "1",
+            "model_answer": "Linear electron flow requires coordinated excitation of both photosystems. When Photosystem I is preferentially excited, increasing energy transfer to Photosystem II restores the upstream electron supply rather than blocking another component of the same pathway.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "An inhibitor stops ferredoxin-NADP+ reductase while both photosystems and the cytochrome complex remain active. Which combined response is expected first?",
+            "options": {
+                "1": "NADPH formation falls while reduced ferredoxin accumulates",
+                "2": "Oxygen evolution stops before any electron carrier changes",
+                "3": "Photosystem II immediately replaces Photosystem I",
+                "4": "The Calvin cycle produces additional NADPH directly",
+                "5": "Water oxidation increases because NADP+ reduction is blocked",
+            },
+            "correct_answer": "1",
+            "model_answer": "Ferredoxin-NADP+ reductase accepts electrons from reduced ferredoxin and transfers them to NADP+. Blocking the enzyme therefore lowers NADPH formation and causes electrons to accumulate on the immediate upstream carrier while the earlier light reactions can initially remain active.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "If the oxygen-evolving complex of Photosystem II is inhibited, which immediate observation should occur under light?",
+            "options": {
+                "1": "Oxygen release and replacement of Photosystem II electrons decrease",
+                "2": "Photosystem I begins oxidising water instead",
+                "3": "NADP+ reduction becomes independent of electrons",
+                "4": "The Calvin cycle releases molecular oxygen",
+                "5": "ATP synthase directly excites P680 chlorophyll",
+            },
+            "correct_answer": "1",
+            "model_answer": "The oxygen-evolving complex oxidises water to replace electrons lost by P680 in Photosystem II and releases oxygen. Inhibiting it therefore directly lowers oxygen evolution and restricts continued electron supply from Photosystem II.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "After Photosystem I absorbs light, its reaction-centre electron is transferred onward. Which molecule normally receives it next?",
+            "options": {"1": "Ferredoxin", "2": "Water", "3": "RuBP", "4": "Oxygen", "5": "RuBisCO"},
+            "correct_answer": "1",
+            "model_answer": "Excited Photosystem I transfers high-energy electrons through its acceptors to ferredoxin. Ferredoxin can then deliver them to ferredoxin-NADP+ reductase for NADPH formation or participate in cyclic electron flow.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "If plastocyanin cannot donate electrons to Photosystem I, which process is affected most directly?",
+            "options": {
+                "1": "Replacement of electrons lost from oxidised P700",
+                "2": "Splitting of water at the Photosystem II donor side",
+                "3": "Binding of carbon dioxide to RuBP",
+                "4": "Diffusion of oxygen through stomata",
+                "5": "Synthesis of chlorophyll in the stroma",
+            },
+            "correct_answer": "1",
+            "model_answer": "Plastocyanin transfers electrons from the cytochrome b6f pathway to oxidised P700 in Photosystem I. Preventing this donation most directly stops replacement of the electron that P700 lost after excitation.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "If cyclic electron flow around Photosystem I increases, which product rises without a matching rise in NADPH?",
+            "options": {"1": "ATP", "2": "Oxygen", "3": "Glucose", "4": "Carbon dioxide", "5": "Water"},
+            "correct_answer": "1",
+            "model_answer": "Cyclic electron flow returns Photosystem I electrons through carriers that support proton-gradient formation. This drives extra ATP synthesis but does not transfer electrons to NADP+ and does not involve water oxidation, so it adds neither NADPH nor oxygen.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which reaction-centre chlorophyll pair belongs to Photosystem II?",
+            "options": {"1": "P680", "2": "P700", "3": "NADP+", "4": "Ferredoxin", "5": "Plastocyanin"},
+            "correct_answer": "1",
+            "model_answer": "P680 is the reaction-centre chlorophyll pair of Photosystem II. Absorbed light excites P680 electrons, and the oxygen-evolving complex replaces them using electrons obtained from water.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which photosystem contains the water-splitting oxygen-evolving complex?",
+            "options": {"1": "Photosystem II", "2": "Photosystem I", "3": "Both photosystems", "4": "Neither photosystem", "5": "ATP synthase"},
+            "correct_answer": "1",
+            "model_answer": "The oxygen-evolving complex is associated with Photosystem II. It oxidises water, releases oxygen and protons, and supplies electrons to replace those lost from excited P680.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "What is the final electron acceptor downstream of Photosystem I in non-cyclic electron flow?",
+            "options": {"1": "NADP+", "2": "P680", "3": "Water", "4": "Plastoquinone", "5": "Cytochrome b6f"},
+            "correct_answer": "1",
+            "model_answer": "NADP+ is the final electron acceptor in non-cyclic electron flow. Ferredoxin-NADP+ reductase transfers electrons to NADP+, producing NADPH for use in carbon reduction reactions.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which mobile carrier transfers electrons from the cytochrome b6f complex to Photosystem I?",
+            "options": {"1": "Plastocyanin", "2": "Ferredoxin", "3": "RuBisCO", "4": "NADP+", "5": "Chlorophyll b"},
+            "correct_answer": "1",
+            "model_answer": "Plastocyanin is the mobile copper-containing carrier that transfers electrons from cytochrome b6f to oxidised P700 in Photosystem I. Ferredoxin acts later on the acceptor side of Photosystem I.",
+        },
+    ]),
+    ("lipid", [
+        {
+            "_difficulty": "hard",
+            "question": "A membrane remains fluid at low temperature but becomes unusually permeable at high temperature. Which lipid change best explains both observations?",
+            "options": {
+                "1": "A higher proportion of unsaturated fatty acid tails",
+                "2": "Complete removal of all phospholipid phosphate groups",
+                "3": "Replacement of phospholipids by cellulose fibres",
+                "4": "A higher proportion of long saturated fatty acid tails",
+                "5": "Conversion of membrane proteins into triglycerides",
+            },
+            "correct_answer": "1",
+            "model_answer": "Cis double bonds create bends in unsaturated fatty acid tails and prevent tight packing, helping the membrane remain fluid at low temperature. The same reduced packing can increase permeability when temperature rises, explaining both observations.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "An animal stores equal masses of glycogen and triglyceride, then faces prolonged food deprivation. Why does triglyceride provide the larger energy reserve?",
+            "options": {
+                "1": "It is more reduced and stored with much less associated water",
+                "2": "It contains nitrogen that is directly converted into ATP",
+                "3": "It dissolves in cytoplasm and is oxidised without enzymes",
+                "4": "It releases glucose without hydrolysis or respiration",
+                "5": "It contains fewer carbon-hydrogen bonds than glycogen",
+            },
+            "correct_answer": "1",
+            "model_answer": "Triglycerides contain many energy-rich carbon-hydrogen bonds and are more reduced than carbohydrates. They are also stored without the large quantity of associated water held by glycogen, giving more usable energy per unit mass.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "A mutation prevents bile salts from emulsifying dietary fat while pancreatic lipase remains active. Which combined effect is most likely?",
+            "options": {
+                "1": "Reduced lipid digestion and reduced absorption of fat-soluble vitamins",
+                "2": "Increased lipid surface area and faster monoglyceride uptake",
+                "3": "Complete inhibition of carbohydrate digestion in the mouth",
+                "4": "Increased amino acid absorption through intestinal villi",
+                "5": "Direct conversion of triglycerides into glycogen in the lumen",
+            },
+            "correct_answer": "1",
+            "model_answer": "Emulsification divides large fat droplets into smaller droplets and increases the surface available to lipase. Without it, lipid digestion decreases and micelle-dependent absorption of lipids and fat-soluble vitamins is reduced.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "Cells synthesize phospholipids normally but cannot attach hydrophilic phosphate-containing heads. Which cellular structure would be disrupted most directly?",
+            "options": {
+                "1": "The selectively permeable membrane bilayer",
+                "2": "The peptide backbone of every enzyme",
+                "3": "The phosphodiester backbone of nuclear DNA",
+                "4": "The glycosidic bonds within stored glycogen",
+                "5": "The cellulose microfibrils of plant cell walls",
+            },
+            "correct_answer": "1",
+            "model_answer": "A phospholipid must contain a hydrophilic head and hydrophobic tails to assemble into a bilayer in water. Losing the polar head prevents normal bilayer organisation and therefore directly disrupts cellular membranes.",
+        },
+        {
+            "_difficulty": "hard",
+            "question": "Two lipid samples contain identical fatty acid chain lengths, but one has more cis double bonds. Which paired property should that sample show?",
+            "options": {
+                "1": "A lower melting point and weaker packing between tails",
+                "2": "A higher melting point and stronger packing between tails",
+                "3": "Greater water solubility and formation of peptide bonds",
+                "4": "Fewer bends in its tails and a solid state at lower temperature",
+                "5": "Loss of all stored chemical energy and complete polarity",
+            },
+            "correct_answer": "1",
+            "model_answer": "Cis double bonds introduce bends that reduce close contact between neighbouring fatty acid tails. Weaker intermolecular interactions lower the melting point, so the more unsaturated lipid remains fluid at a lower temperature.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "After lipase hydrolyses a triglyceride, which products should increase directly?",
+            "options": {
+                "1": "Fatty acids and glycerol or monoglycerides",
+                "2": "Amino acids and nucleotides",
+                "3": "Glucose and galactose only",
+                "4": "Cellulose and phosphate ions",
+                "5": "Peptides and nitrogenous bases",
+            },
+            "correct_answer": "1",
+            "model_answer": "Lipase hydrolyses ester bonds in triglycerides, releasing fatty acids and glycerol-related products such as monoglycerides. It does not hydrolyse proteins, nucleic acids, or polysaccharides.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "A plant replaces saturated membrane fatty acids with unsaturated fatty acids during cold weather. What is the main advantage?",
+            "options": {
+                "1": "Membrane fluidity is maintained because the tails pack less tightly",
+                "2": "The membrane becomes a rigid cellulose cell wall",
+                "3": "All membrane transport proteins become unnecessary",
+                "4": "The phospholipids dissolve freely in the cytoplasm",
+                "5": "The membrane begins storing genetic information",
+            },
+            "correct_answer": "1",
+            "model_answer": "Double bonds bend unsaturated fatty acid tails and reduce tight packing between phospholipids. This helps preserve membrane fluidity and normal membrane function as temperature decreases.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "If phospholipids are placed in water, which arrangement is expected because of their amphipathic nature?",
+            "options": {
+                "1": "Hydrophilic heads face water while hydrophobic tails avoid it",
+                "2": "Hydrophobic tails face water while heads cluster away from it",
+                "3": "Every molecule dissolves as a completely non-polar solute",
+                "4": "Phospholipids polymerise into a chain of amino acids",
+                "5": "Their fatty acid tails form hydrogen bonds with water",
+            },
+            "correct_answer": "1",
+            "model_answer": "Phospholipids have polar hydrophilic heads and non-polar hydrophobic tails. In water they arrange so that heads contact water and tails are shielded from it, enabling bilayer formation.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "A person cannot efficiently absorb dietary lipids from the small intestine. Which transport particles would consequently decrease after a fatty meal?",
+            "options": {
+                "1": "Chylomicrons entering lymphatic vessels",
+                "2": "Haemoglobin molecules entering red blood cells",
+                "3": "Glycogen granules entering blood capillaries",
+                "4": "Cellulose fibres entering hepatic veins",
+                "5": "DNA molecules entering intestinal lacteals",
+            },
+            "correct_answer": "1",
+            "model_answer": "Absorbed fatty acids and monoglycerides are reassembled into triglycerides and packaged into chylomicrons in intestinal epithelial cells. Chylomicrons then enter lacteals, so impaired lipid absorption reduces this transport pathway.",
+        },
+        {
+            "_difficulty": "medium",
+            "question": "When a triglyceride is formed from glycerol and three fatty acids, which type of reaction creates its ester bonds?",
+            "options": {
+                "1": "Condensation with the removal of water",
+                "2": "Hydrolysis with the addition of three water molecules",
+                "3": "Translation on a ribosome",
+                "4": "Replication using DNA polymerase",
+                "5": "Ionisation without covalent bond formation",
+            },
+            "correct_answer": "1",
+            "model_answer": "Each fatty acid forms an ester bond with a hydroxyl group of glycerol through condensation. Three ester bonds form in a triglyceride, with one water molecule released for each bond.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which components combine to form one triglyceride molecule?",
+            "options": {
+                "1": "One glycerol and three fatty acids",
+                "2": "Three glycerol and one amino acid",
+                "3": "One glucose and three phosphates",
+                "4": "Two nucleotides and one glycerol",
+                "5": "One protein and three monosaccharides",
+            },
+            "correct_answer": "1",
+            "model_answer": "A triglyceride consists of one glycerol molecule joined to three fatty acids by three ester bonds. It is formed through condensation reactions that release water.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which bond joins a fatty acid to glycerol in a triglyceride?",
+            "options": {"1": "Ester bond", "2": "Peptide bond", "3": "Glycosidic bond", "4": "Hydrogen bond", "5": "Phosphodiester bond"},
+            "correct_answer": "1",
+            "model_answer": "An ester bond forms between the carboxyl group of a fatty acid and a hydroxyl group of glycerol. Three ester bonds occur in a triglyceride.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which part of a phospholipid is hydrophilic?",
+            "options": {"1": "The phosphate-containing head", "2": "The fatty acid tails", "3": "Every carbon-hydrogen bond", "4": "Only the terminal methyl groups", "5": "The entire molecule equally"},
+            "correct_answer": "1",
+            "model_answer": "The phosphate-containing head is polar and interacts with water, making it hydrophilic. The hydrocarbon fatty acid tails are non-polar and hydrophobic.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "What is the main biological role of triglycerides in animals?",
+            "options": {"1": "Long-term energy storage", "2": "Storing genetic information", "3": "Catalysing every reaction", "4": "Forming cellulose cell walls", "5": "Transporting oxygen in blood"},
+            "correct_answer": "1",
+            "model_answer": "Triglycerides are concentrated, long-term energy stores in animals. Their oxidation releases substantial energy, and fat deposits can also provide insulation and protection.",
+        },
+        {
+            "_difficulty": "easy",
+            "question": "Which feature distinguishes an unsaturated fatty acid from a saturated fatty acid?",
+            "options": {"1": "At least one carbon-carbon double bond", "2": "A peptide bond", "3": "A phosphate-containing head", "4": "Three glycerol molecules", "5": "No carbon atoms"},
+            "correct_answer": "1",
+            "model_answer": "An unsaturated fatty acid contains one or more carbon-carbon double bonds in its hydrocarbon chain. A saturated fatty acid contains no carbon-carbon double bonds.",
+        },
     ]),
     ("cellular respiration", [
         {
@@ -1831,6 +2486,184 @@ def _make_fallback_topic_question(
     return None
 
 
+@lru_cache(maxsize=64)
+def _wikipedia_topic_material(topic: str) -> tuple[str, str, tuple[str, ...]]:
+    """Fetch one compact, factual Biology reference for an arbitrary topic."""
+    response = httpx.get(
+        "https://en.wikipedia.org/w/api.php",
+        params={
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": f"{topic} biology",
+            "gsrnamespace": 0,
+            "gsrlimit": 5,
+            "prop": "extracts|links",
+            "explaintext": 1,
+            "exchars": 6000,
+            "pllimit": 200,
+            "redirects": 1,
+            "format": "json",
+            "formatversion": 2,
+        },
+        timeout=httpx.Timeout(5.0, connect=3.0),
+        headers={"User-Agent": "AdaptiveIQ/1.0 educational quiz generator"},
+    )
+    response.raise_for_status()
+    pages = response.json().get("query", {}).get("pages", [])
+    pages = sorted(pages, key=lambda page: int(page.get("index", 9999)))
+    page = next(
+        (item for item in pages if len(str(item.get("extract", "")).split()) >= 40),
+        None,
+    )
+    if not page:
+        return "", "", ()
+    links = tuple(
+        str(link.get("title", "")).strip()
+        for link in page.get("links", [])
+        if 1 <= len(str(link.get("title", "")).split()) <= 5
+        and ":" not in str(link.get("title", ""))
+    )
+    return str(page.get("title", topic)).strip(), str(page.get("extract", "")).strip(), links
+
+
+def _compact_cloze_sentence(sentence: str, term: str, max_words: int = 10) -> str:
+    words = sentence.split()
+    term_words = term.split()
+    lower_words = [word.casefold().strip(".,;:()[]") for word in words]
+    first = term_words[0].casefold().strip(".,;:()[]") if term_words else ""
+    try:
+        term_index = lower_words.index(first)
+    except ValueError:
+        term_index = 0
+    start = max(0, term_index - max_words // 2)
+    end = min(len(words), start + max_words)
+    start = max(0, end - max_words)
+    excerpt = " ".join(words[start:end]).strip(" .")
+    return re.sub(re.escape(term), "_____", excerpt, count=1, flags=re.IGNORECASE)
+
+
+def _universal_topic_fallback(
+    topic: str,
+    existing_questions: list,
+    diff_label: str,
+) -> dict:
+    """Create a relevant MCQ for any topic when Modal is unavailable.
+
+    Wikipedia is used only as an emergency factual reference. If that lookup is
+    also unavailable, a valid scientific-inquiry item keeps setup recoverable
+    without inventing a topic-specific biological fact.
+    """
+    used = {str(question.get("question", "")).casefold() for question in existing_questions}
+    try:
+        title, extract, links = _wikipedia_topic_material(topic)
+    except Exception as exc:
+        logger.warning("Wikipedia topic recovery failed for '%s': %s", topic, exc)
+        title, extract, links = "", "", ()
+
+    sentences = [
+        re.sub(r"\s+", " ", sentence).strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", extract)
+        if 8 <= len(sentence.split()) <= 55
+    ]
+    usable_links = [
+        link for link in links
+        if link.casefold() != title.casefold()
+        and not re.search(r"\b(?:history|list|outline|portal)\b", link, re.IGNORECASE)
+    ]
+    concepts = [title or topic, *usable_links]
+    seen_concepts = set()
+    concepts = [
+        concept for concept in concepts
+        if concept and not (concept.casefold() in seen_concepts or seen_concepts.add(concept.casefold()))
+    ]
+
+    candidates = []
+    for sentence in sentences:
+        matching = [
+            concept for concept in concepts
+            if re.search(rf"\b{re.escape(concept)}\b", sentence, re.IGNORECASE)
+        ]
+        correct = max(matching, key=len) if matching else (title or topic)
+        distractors = [concept for concept in concepts if concept.casefold() != correct.casefold()]
+        if len(distractors) < 4:
+            continue
+        cloze = _compact_cloze_sentence(sentence, correct)
+        if "_____" not in cloze:
+            continue
+        if diff_label == "hard":
+            stem = f'While analysing {topic}, evidence shows "{cloze}". Which concept must be integrated first to explain this result?'
+        elif diff_label == "medium":
+            stem = f'If this observation about {topic} is applied biologically, which term completes the relationship: "{cloze}"?'
+        else:
+            stem = f'Which term completes this statement about {topic}: "{cloze}"?'
+        # Keep the same strict size contract as model-generated MCQs.
+        if len(stem.split()) > 30:
+            continue
+        candidates.append({
+            "question": stem,
+            "options": {
+                "1": correct,
+                "2": distractors[0],
+                "3": distractors[1],
+                "4": distractors[2],
+                "5": distractors[3],
+            },
+            "correct_answer": "1",
+            "model_answer": (
+                f'The biological reference states: "{sentence}" '
+                f"Therefore, {correct} is the term that completes the stated relationship about {topic}."
+            ),
+        })
+    for candidate in candidates:
+        if candidate["question"].casefold() not in used:
+            return _validate_mcq(candidate)
+
+    # Network-independent last resort: still assess evidence-based biological
+    # reasoning about the requested topic instead of failing setup or silently
+    # substituting an unrelated Biology chapter.
+    templates = {
+        "hard": (
+            f"Two controlled studies of {topic} produce opposite outcomes. Which next step best distinguishes a causal effect from an uncontrolled association?",
+            "Repeat both studies while controlling the differing variable",
+            ["Acceptance of the larger result without replication", "Removal of the control group from both studies", "Simultaneous alteration of several variables", "Selective use of observations supporting one outcome"],
+            "Controlling the differing variable and repeating both studies tests whether that variable caused the conflicting outcome. Replication and controlled comparison provide stronger biological evidence than selective observation or simultaneous changes.",
+        ),
+        "medium": (
+            f"If a proposed factor affecting {topic} is removed in an experiment, which result provides the strongest evidence that the factor has a functional role?",
+            "A reproducible change occurs compared with a matched control",
+            ["Removal of the control from the experiment", "Simultaneous change of several unrelated factors", "Use of one unrecorded observation", "Assumption of the expected result without measurement"],
+            "A reproducible difference from a matched control links removal of the factor with the observed change. This controlled comparison supports a functional relationship while reducing alternative explanations.",
+        ),
+        "easy": (
+            f"Which investigation would provide the most reliable basic evidence when studying {topic}?",
+            "Repeated measurements with an appropriate control",
+            ["One measurement without a control", "A conclusion recorded before observation", "Only results that support the prediction", "Several variables changed without records"],
+            "Repeated measurements improve reliability, while an appropriate control provides a valid comparison. Together they give stronger biological evidence than a single uncontrolled or selectively reported observation.",
+        ),
+    }
+    stem, correct, distractors, explanation = templates[diff_label]
+    return _validate_mcq({
+        "question": stem,
+        "options": {"1": correct, "2": distractors[0], "3": distractors[1], "4": distractors[2], "5": distractors[3]},
+        "correct_answer": "1",
+        "model_answer": explanation,
+    })
+
+
+def _topic_fallback_capacity(topic: str, existing_questions: list, diff_label: str) -> int:
+    """Count distinct curated questions available for this topic/difficulty."""
+    topic_lower = topic.casefold()
+    used_stems = {question.get("question", "").casefold() for question in existing_questions}
+    for keyword, bank in _TOPIC_FALLBACK_BANK:
+        if keyword in topic_lower:
+            return sum(
+                1 for question in bank
+                if question["question"].casefold() not in used_stems
+                and (not question.get("_difficulty") or question.get("_difficulty") == diff_label)
+            )
+    return 0
+
+
 def _difficulty_candidate_rejection(candidate: dict, diff_label: str) -> str:
     """Reject a difficulty badge when the stem does not demand that cognition."""
     stem = str(candidate.get("question", "")).strip()
@@ -1876,6 +2709,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     questions = list(state.get("questions", []))
     requested = int(state.get("num_questions", 5))
     current_index = int(state.get("current_q_index", 0))
+    historical_questions = _previous_learner_questions(state, "mcq")
 
     if len(questions) >= requested or current_index < len(questions):
         return {"questions": questions, "agent_logs": logs}
@@ -1888,7 +2722,8 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
         difficulty = INIT_DIFFICULTY.get(state.get("difficulty_mode", "hard"), 0.8)
     diff_label, bloom = get_diff_info(difficulty)
     prior_questions = "\n".join(
-        f"- {question.get('question', '')}" for question in questions
+        f"- {question.get('question', '')}"
+        for question in [*questions, *historical_questions[:30]]
     ) or "- none"
 
     # A single LLM draft is often rejected by the difficulty/relevance checks
@@ -1897,8 +2732,34 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     # falling back to the small curated bank, which only covers a handful of
     # topics and otherwise hard-fails the whole quiz setup.
     candidate = None
+    service_error = ""
+    fallback_candidate = _make_fallback_topic_question(
+        topic, [*questions, *historical_questions], difficulty, diff_label
+    )
+    is_universal_fallback = False
     llm = LlmService()
-    for attempt in range(1, 4):
+    endpoint_warm = llm.check_health()
+    if fallback_candidate is None and not endpoint_warm:
+        is_universal_fallback = True
+        fallback_candidate = _universal_topic_fallback(
+            topic, [*questions, *historical_questions], diff_label
+        )
+    remaining_questions = max(1, requested - len(questions))
+    fallback_capacity = _topic_fallback_capacity(
+        topic, [*questions, *historical_questions], diff_label
+    )
+    # A complete curated set is both faster and more reliable than waiting for
+    # a remote generation call.  This is especially important after a health
+    # probe succeeds but the larger Modal inference subsequently stalls.
+    prefer_curated = fallback_candidate is not None and fallback_capacity >= remaining_questions
+    if fallback_candidate is not None and (is_universal_fallback or not endpoint_warm or prefer_curated):
+        candidate = _validate_mcq(dict(fallback_candidate))
+        logs.append(
+            f"[QuizAgent] Used a distinct local {diff_label} topic question "
+            "without waiting for remote inference"
+        )
+
+    for attempt in range(1, 4) if candidate is None else range(0):
         prompt = TOPIC_ONLY_MCQ_PROMPT.format(
             topic=topic,
             subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
@@ -1912,14 +2773,16 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
             # Skip the 3-second health-check probe — Modal GPU containers take
             # 30-60 s to cold-start, so the probe always times out and blocks
             # the topic-only path. Let the full-timeout inference call handle failures.
-            raw = llm.call_json(prompt, max_new_tokens=700)
+            raw = llm.call_json(prompt, max_new_tokens=384)
             parsed = _validate_mcq(raw)
             rejection = _topic_candidate_rejection(parsed, topic, diff_label)
             if rejection:
                 logger.warning("[QuizAgent] Rejected topic candidate (attempt %d): %s", attempt, rejection)
                 logs.append(f"[QuizAgent] Rejected model question (attempt {attempt}): {rejection}")
                 continue
-            duplicate_reason = _semantic_duplicate_reason(parsed, questions, None, {})
+            duplicate_reason = _semantic_duplicate_reason(
+                parsed, [*questions, *historical_questions], None, {}
+            )
             if duplicate_reason:
                 logger.warning("[QuizAgent] Duplicate detected (attempt %d), retrying: %s", attempt, duplicate_reason)
                 logs.append(f"[QuizAgent] Duplicate question rejected (attempt {attempt}): {duplicate_reason}")
@@ -1929,16 +2792,30 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
         except Exception as exc:
             logger.warning("[QuizAgent] LLM call failed for topic '%s' (attempt %d): %s", topic, attempt, exc)
             logs.append(f"[QuizAgent] LLM attempt {attempt} failed ({exc})")
+            if fallback_candidate is None:
+                fallback_candidate = _universal_topic_fallback(
+                    topic, [*questions, *historical_questions], diff_label
+                )
+            if fallback_candidate is not None:
+                candidate = _validate_mcq(dict(fallback_candidate))
+                logs.append("[QuizAgent] Recovered immediately with a relevant curated topic question")
+                break
             if isinstance(exc, RuntimeError):
+                service_error = f"Question generation service unavailable: {exc}"
                 # Service-level failure (Modal unreachable/timed out) — an
                 # immediate retry against the same dead endpoint won't help.
                 break
 
     if candidate is None:
-        candidate = _make_fallback_topic_question(topic, questions, difficulty, diff_label)
+        candidate = fallback_candidate
     if candidate is None:
+        candidate = _universal_topic_fallback(
+            topic, [*questions, *historical_questions], diff_label
+        )
+    if candidate is None:
+        error = service_error or f'Could not generate a relevant {diff_label} question for "{topic}".'
         return {
-            "error": f'Could not generate a relevant {diff_label} question for "{topic}".',
+            "error": error,
             "questions": questions,
             "agent_logs": logs + ["[QuizAgent] Refused an unrelated generic fallback"],
         }
@@ -2061,6 +2938,10 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         adaptive_slot = _with_live_difficulty(slot, active_difficulty)
         pending_slots[offset] = adaptive_slot
         blueprint[absolute_index] = adaptive_slot
+    # Historical comparisons deliberately use fast lexical/fact-set checks.
+    # Re-embedding up to 120 old questions on every turn would recreate the
+    # exact next-question latency this history feature is intended to solve.
+    historical_questions = _previous_learner_questions(state, "mcq")
     accepted_candidates: List[dict] = list(existing_questions)
     generated_by_index: dict[int, tuple[dict, List[dict], dict]] = {}
     semantic_embedding_cache: dict[str, list[float]] = {}
@@ -2137,6 +3018,8 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 grounding if use_embedding_duplicate_check else None,
                 semantic_embedding_cache,
             )
+            if not duplicate_reason:
+                duplicate_reason = _semantic_duplicate_reason(candidate, historical_questions)
             if duplicate_reason:
                 rejection_by_index[absolute_index] = duplicate_reason
                 logs.append(

@@ -15,6 +15,7 @@ from app.services.llm_service import LlmService
 from app.services.rag_service import RagService
 from app.services.hint_pipeline import generate_adaptive_hint
 from app.graph.state import AssessmentState, AnswerRecord
+from app.agents.quiz_agent import _DEFAULT_MARKS_BREAKDOWN
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -266,6 +267,37 @@ def _normalize_exact_answer(value: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip(" .,:;!?\t\r\n")
 
 
+def _local_open_ended_evaluation(student_answer: str, model_answer: str, q_type: str) -> dict:
+    """Fast source-bound partial grading when the remote rubric model is cold."""
+    stop_words = {
+        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+        "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "with",
+    }
+    student_terms = {
+        token for token in re.findall(r"[a-z][a-z0-9-]{2,}", student_answer.casefold())
+        if token not in stop_words
+    }
+    model_terms = {
+        token for token in re.findall(r"[a-z][a-z0-9-]{2,}", model_answer.casefold())
+        if token not in stop_words
+    }
+    coverage = len(student_terms & model_terms) / max(len(model_terms), 1)
+    expected_words = 70 if q_type == "structured" else 140
+    depth = min(len(student_answer.split()) / expected_words, 1.0)
+    score = round(min(1.0, (coverage * 0.75) + (depth * 0.25)), 2)
+    if not student_answer.strip():
+        score = 0.0
+    return {
+        "score": score,
+        "is_correct": score >= 0.5,
+        "feedback": (
+            f"Source-keyword coverage: {round(coverage * 100)}%; response depth: "
+            f"{round(depth * 100)}%. Strengthen the missing biological relationships and justify each link."
+        ),
+        "misconception": None,
+    }
+
+
 def evaluation_agent(state: AssessmentState) -> dict:
     """
     Evaluation Agent.
@@ -402,43 +434,79 @@ def evaluation_agent(state: AssessmentState) -> dict:
             result["correct_answer_text"] = correct_text
             result["explanation"] = explanation
 
-    elif q_type == "structured":
-        marks_breakdown = question.get(
-            "marks_breakdown",
-            {"content": 40, "accuracy": 30, "terminology": 20, "examples": 10}
-        )
-        prompt = STRUCTURED_EVAL_PROMPT.format(
-            question=question["question"],
-            model_answer=question["model_answer"],
-            marks_breakdown=json.dumps(marks_breakdown),
-            student_answer=student_answer
-        )
+    elif q_type in ("structured", "essay"):
+        # Open-ended work keeps the adaptive hint progression, while the API's
+        # explicit advance action lets the learner move on at any point.
+        if q_type == "structured":
+            marks_breakdown = question.get("marks_breakdown") or _DEFAULT_MARKS_BREAKDOWN
+            prompt = STRUCTURED_EVAL_PROMPT.format(
+                question=question["question"],
+                model_answer=question["model_answer"],
+                marks_breakdown=json.dumps(marks_breakdown),
+                student_answer=student_answer,
+            )
+        else:
+            prompt = ESSAY_EVAL_PROMPT.format(
+                question=question["question"],
+                model_answer=question["model_answer"],
+                student_answer=student_answer,
+            )
         try:
-            eval_data = llm.call_json(prompt)
-            result["score"]        = float(eval_data.get("score", 0.0))
-            result["is_correct"]   = eval_data.get("is_correct", result["score"] >= 0.5)
-            result["feedback"]     = eval_data.get("feedback", "")
-            result["misconception"] = eval_data.get("misconception")
+            endpoint_warm = not hasattr(llm, "check_health") or llm.check_health()
+            eval_data = (
+                llm.call_json(prompt)
+                if endpoint_warm
+                else _local_open_ended_evaluation(
+                    student_answer, question.get("model_answer", ""), q_type
+                )
+            )
+            score = float(eval_data.get("score", 0.0))
+            is_correct = bool(eval_data.get("is_correct", score >= 0.5)) if q_type == "structured" else score >= 0.5
+            rubric_feedback = str(eval_data.get("feedback", "")).strip()
+            misconception = eval_data.get("misconception")
         except Exception as e:
-            result["feedback"] = f"Evaluation error: {e}. Please try again."
-            logs.append(f"[EvaluationAgent] Structured eval failed: {e}")
+            score = 0.0
+            is_correct = False
+            rubric_feedback = ""
+            misconception = None
+            logs.append(f"[EvaluationAgent] {q_type.capitalize()} eval failed: {e}")
 
-    # ── Essay: Holistic LLM rubric ─────────────────
-    elif q_type == "essay":
-        prompt = ESSAY_EVAL_PROMPT.format(
-            question=question["question"],
-            model_answer=question["model_answer"],
-            student_answer=student_answer
-        )
-        try:
-            eval_data = llm.call_json(prompt)
-            result["score"]        = float(eval_data.get("score", 0.0))
-            result["is_correct"]   = result["score"] >= 0.5
-            result["feedback"]     = eval_data.get("feedback", "")
-            result["misconception"] = eval_data.get("misconception")
-        except Exception as e:
-            result["feedback"] = f"Evaluation error: {e}. Please try again."
-            logs.append(f"[EvaluationAgent] Essay eval failed: {e}")
+        result["score"] = score
+        result["is_correct"] = is_correct
+        result["misconception"] = misconception
+        model_answer = question.get("model_answer") or "Insufficient source context to provide a valid explanation."
+
+        if is_correct:
+            result["feedback"] = (
+                (f"{rubric_feedback}\n\n" if rubric_feedback else "")
+                + f"**Detailed Explanation:**\n{model_answer}"
+            )
+            result["correct_answer"] = model_answer
+            result["correct_answer_text"] = model_answer
+            result["explanation"] = model_answer
+            result["is_terminal"] = True
+        elif attempt_num <= 3:
+            hint = generate_adaptive_hint(
+                llm,
+                rag,
+                question,
+                attempt_num - 1,
+                state["chroma_collection_id"],
+                previous_hints=previous_hints,
+            )
+            result["feedback"] = (f"{rubric_feedback}\n\n" if rubric_feedback else "") + hint
+            result["hint"] = hint
+            result["hint_level"] = ("HARD", "MEDIUM", "EASY")[attempt_num - 1]
+            result["hints_used"] = attempt_num
+        else:
+            result["feedback"] = (
+                (f"{rubric_feedback}\n\n" if rubric_feedback else "")
+                + f"**Detailed Explanation:**\n{model_answer}"
+            )
+            result["correct_answer"] = model_answer
+            result["correct_answer_text"] = model_answer
+            result["explanation"] = model_answer
+            result["is_terminal"] = True
 
     answers.append(result)
 

@@ -468,7 +468,10 @@ def build_resources(topic: str) -> List[Dict]:
     def _khan_academy(topic: str) -> Optional[Dict]:
         query = f'site:khanacademy.org/science/biology "{topic}" biology'
         url = _ddg_first_url(query=query, must_contain="khanacademy.org")
-        if not url or not _is_reachable(url):
+        # The search resolver already restricts the result to Khan Academy.
+        # A second serial HEAD/GET round trip added latency and discarded
+        # valid pages when the site rate-limited probes with 403.
+        if not url:
             return None
         return {
             "label": "English",

@@ -7,7 +7,9 @@ from app.agents.quiz_agent import (
     _expand_source_combination_options,
     _semantic_duplicate_reason,
     _select_usable_chunks,
+    _source_fallback_open_ended,
     _source_fallback_mcq,
+    _validate_structured,
     _validate_mcq,
     _infer_biology_topic,
     _make_fallback_topic_question,
@@ -347,6 +349,88 @@ class FiveOptionMcqTests(unittest.TestCase):
 
 
 class SourceGroundedPipelineTests(unittest.TestCase):
+    def test_question_bank_recovery_uses_one_concept_and_readable_parts(self):
+        chunk = {
+            "chunk_id": "page-8",
+            "source": "Biology 1.pdf",
+            "page": 8,
+            "text": (
+                "48. Which statements regarding the main terrestrial biomes of the world are not agreeable "
+                "A) Tropical rainforest - Annual rainfall between 1500 to 2000 mm "
+                "B) Chaparral - Small trees, shrubs and herbaceous plants are present "
+                "C) Coniferous forests - Plants bear adaptations to avoid accumulation of snow "
+                "D) Temperate grassland - Tall grasses and mixed grasses occur "
+                "E) Desert - Shrubs possess deep roots "
+                "49. Which statements regarding antibiotics are correct "
+                "A) Many antibiotics are produced by microbial fermentation "
+                "B) Only fungi are used for commercial production of antibiotics "
+                "C) Tetracycline inhibits protein synthesis in bacteria"
+            ),
+        }
+
+        fallback = _source_fallback_open_ended("Biology 1", [chunk], "structured", "hard")
+        evidence = fallback.pop("_evidence_chunks")
+        validated = _validate_structured(fallback)
+
+        self.assertEqual(fallback["_display_topic"], "Terrestrial Biomes Of The World")
+        self.assertNotIn("Biology 1", validated["question"])
+        self.assertNotIn("antibiotic", validated["question"].casefold())
+        self.assertIn("\n(a)", validated["question"])
+        self.assertIn("\n(b)", validated["question"])
+        self.assertEqual(evidence, [chunk])
+
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.GroundingService")
+    @patch("app.agents.quiz_agent.RagService")
+    @patch("app.agents.quiz_agent.LlmService")
+    def test_cold_structured_and_essay_generate_without_history_name_error(
+        self, llm_cls, rag_cls, grounding_cls, db_cls
+    ):
+        chunk = {
+            "chunk_id": "transport-1",
+            "text": (
+                "Water moves across a selectively permeable membrane down a water potential gradient. "
+                "Solute concentration changes the water potential of a biological compartment. "
+                "Membrane proteins support selective movement of particular dissolved substances. "
+                "ATP can supply energy when transport occurs against a concentration gradient. "
+                "Surface area influences the rate available for exchange across a membrane. "
+                "A shorter diffusion distance can increase the rate of biological exchange."
+            ),
+            "source": "biology.pdf",
+            "page": 4,
+            "heading": "Membrane transport",
+            "distance": 0.05,
+        }
+        llm_cls.return_value.check_health.return_value = False
+        rag_cls.return_value.get_source_chunks.return_value = [chunk]
+        grounding_cls.return_value.score.return_value = 0.80
+        grounding_cls.return_value.threshold = 0.55
+        db_cls.return_value.get_previous_questions.return_value = []
+
+        for exam_type in ("structured", "essay"):
+            with self.subTest(exam_type=exam_type):
+                state = {
+                    "session_id": f"cold-{exam_type}",
+                    "student_id": "student",
+                    "chroma_collection_id": f"cold-{exam_type}",
+                    "topics": ["Membrane transport"],
+                    "num_questions": 5,
+                    "exam_type": exam_type,
+                    "difficulty_mode": "adaptive",
+                    "current_difficulty": 0.8,
+                    "current_q_index": 0,
+                    "questions": [],
+                    "quiz_blueprint": [],
+                    "flagged_questions": [],
+                    "agent_logs": [],
+                }
+
+                result = quiz_agent(state)
+
+                self.assertIsNone(result.get("error"))
+                self.assertEqual(result["questions"][0]["q_type"], exam_type)
+                self.assertEqual(result["questions"][0]["grounding_status"], "grounded")
+
     @patch("app.agents.quiz_agent.DbService")
     @patch("app.agents.quiz_agent.GroundingService")
     @patch("app.agents.quiz_agent.RagService")
@@ -582,6 +666,137 @@ class SourceGroundedPipelineTests(unittest.TestCase):
         )
 
 class TopicOnlyAdaptiveTests(unittest.TestCase):
+    @patch("app.agents.quiz_agent.httpx.get")
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.LlmService")
+    def test_modal_500_recovers_for_an_uncurated_biology_topic(
+        self, llm_cls, db_cls, http_get
+    ):
+        llm_cls.return_value.check_health.return_value = True
+        llm_cls.return_value.call_json.side_effect = RuntimeError(
+            "Modal inference returned HTTP 500: Internal Server Error"
+        )
+        db_cls.return_value.get_previous_questions.return_value = []
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "query": {"pages": [{
+                "index": 1,
+                "title": "Protein",
+                "extract": (
+                    "Proteins are large biomolecules composed of one or more chains of amino acids. "
+                    "Amino acids in a polypeptide are joined by peptide bonds. "
+                    "Many enzymes are proteins that catalyse biochemical reactions. "
+                    "Ribosomes synthesize polypeptide chains using information carried by messenger RNA."
+                ),
+                "links": [
+                    {"title": "Amino acid"}, {"title": "Peptide bond"},
+                    {"title": "Enzyme"}, {"title": "Ribosome"},
+                    {"title": "Messenger RNA"}, {"title": "Polypeptide"},
+                ],
+            }]}
+        }
+        http_get.return_value = response
+        state = {
+            "session_id": "protein-modal-500",
+            "student_id": "student",
+            "document_ids": [],
+            "requested_topic": "protein",
+            "questions": [],
+            "current_q_index": 0,
+            "num_questions": 5,
+            "exam_type": "mcq",
+            "difficulty_mode": "adaptive",
+            "current_difficulty": 0.8,
+            "agent_logs": [],
+            "flagged_questions": [],
+            "quiz_blueprint": [],
+        }
+
+        result = quiz_agent(state)
+
+        self.assertIsNone(result.get("error"))
+        self.assertEqual(result["questions"][0]["topic"], "protein")
+        self.assertEqual(result["questions"][0]["difficulty"], 0.8)
+        self.assertIn("protein", result["questions"][0]["question"].casefold())
+        self.assertEqual(len(result["questions"][0]["options"]), 5)
+
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.LlmService")
+    def test_warm_but_unreliable_modal_does_not_block_lipids_quiz(
+        self, llm_cls, db_cls
+    ):
+        llm_cls.return_value.check_health.return_value = True
+        llm_cls.return_value.call_json.side_effect = RuntimeError("Modal inference timed out after 45s")
+        db_cls.return_value.get_previous_questions.return_value = []
+        state = {
+            "session_id": "lipids-fast-fallback",
+            "student_id": "student",
+            "document_ids": [],
+            "requested_topic": "Lipids",
+            "questions": [],
+            "current_q_index": 0,
+            "num_questions": 5,
+            "exam_type": "mcq",
+            "difficulty_mode": "adaptive",
+            "current_difficulty": 0.8,
+            "agent_logs": [],
+            "flagged_questions": [],
+            "quiz_blueprint": [],
+        }
+
+        result = quiz_agent(state)
+
+        self.assertIsNone(result.get("error"))
+        self.assertEqual(result["questions"][0]["topic"], "Lipids")
+        self.assertEqual(result["questions"][0]["difficulty"], 0.8)
+        self.assertIn("lipid", " ".join([
+            result["questions"][0]["question"],
+            result["questions"][0]["model_answer"],
+        ]).casefold())
+        llm_cls.return_value.call_json.assert_not_called()
+
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.LlmService")
+    def test_cold_photosystem_uses_a_new_hard_bank_item_without_timeout(
+        self, llm_cls, db_cls
+    ):
+        llm_cls.return_value.check_health.return_value = False
+        db_cls.return_value.get_previous_questions.return_value = [{
+            "question": (
+                "Illuminated thylakoids release oxygen and acidify their lumen, "
+                "but produce no NADPH. Which defect best fits all three observations?"
+            ),
+            "options": {},
+            "correct_answer": "",
+            "model_answer": "",
+        }]
+        state = {
+            "session_id": "photosystem-cold",
+            "student_id": "student",
+            "document_ids": [],
+            "requested_topic": "Photosystem",
+            "questions": [],
+            "current_q_index": 0,
+            "num_questions": 5,
+            "exam_type": "mcq",
+            "difficulty_mode": "adaptive",
+            "current_difficulty": 0.8,
+            "agent_logs": [],
+            "flagged_questions": [],
+            "quiz_blueprint": [],
+        }
+
+        result = quiz_agent(state)
+
+        self.assertIsNone(result.get("error"))
+        self.assertEqual(len(result["questions"]), 1)
+        self.assertNotEqual(
+            result["questions"][0]["question"],
+            db_cls.return_value.get_previous_questions.return_value[0]["question"],
+        )
+        llm_cls.return_value.call_json.assert_not_called()
+
     @patch("app.agents.quiz_agent.DbService")
     @patch("app.agents.quiz_agent.LlmService")
     def test_topic_only_question_uses_model_and_current_adaptive_difficulty(self, llm_cls, db_cls):

@@ -7,6 +7,32 @@ from app.agents.recommendation_agent import _generate_concept_notes, recommendat
 
 class RecallNotesTests(unittest.TestCase):
     @patch("app.agents.recommendation_agent.build_resources")
+    @patch("app.agents.recommendation_agent.LlmService")
+    def test_fast_snapshot_uses_no_model_or_live_web(self, llm_cls, resources):
+        state = {
+            "session_id": "fast",
+            "subject": "Biology",
+            "chroma_collection_id": "fast",
+            "topic_scores": {"Transport": {"correct": 0, "total": 1}},
+            "questions": [{
+                "q_id": "q1", "topic": "Transport",
+                "model_answer": (
+                    "Membranes regulate movement between compartments through selective biological mechanisms. "
+                    "Concentration relationships influence the direction and net rate of that movement."
+                ),
+                "source_chunks": [], "source_file": "biology.pdf", "page_number": 1,
+            }],
+            "answers": [{"q_id": "q1", "attempts": 4, "is_correct": False}],
+            "agent_logs": [],
+        }
+
+        result = recommendation_agent(state, fast=True)
+
+        self.assertTrue(result["recommendations"][0]["concept_notes"])
+        llm_cls.return_value.call.assert_not_called()
+        resources.assert_not_called()
+
+    @patch("app.agents.recommendation_agent.build_resources")
     @patch("app.agents.recommendation_agent.RagService")
     @patch("app.agents.recommendation_agent.LlmService")
     def test_perfect_score_gets_enrichment_not_false_weak_area(self, llm_cls, rag_cls, resources):

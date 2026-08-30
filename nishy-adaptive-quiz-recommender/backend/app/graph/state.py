@@ -42,6 +42,7 @@ class AnswerRecord(TypedDict):
     correct_answer: NotRequired[Optional[str]]
     correct_answer_text: NotRequired[Optional[str]]
     explanation: NotRequired[Optional[str]]
+    is_terminal: NotRequired[bool]
 
 
 class AssessmentState(TypedDict):
@@ -87,6 +88,7 @@ class AssessmentState(TypedDict):
     # ── Pending answer (set by API before evaluation) ──────
     _pending_answer: str
     _answer_time_sec: int
+    _skip_requested: NotRequired[bool]
 
     # ── Output ────────────────────────────────────────────
     weak_topics: List[str]

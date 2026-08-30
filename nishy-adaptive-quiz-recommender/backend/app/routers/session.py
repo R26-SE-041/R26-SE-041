@@ -16,6 +16,8 @@ from app.schemas.session import StartSessionResponse, SessionStatusResponse, Cre
 from app.services.db_service import DbService
 from app.graph.graph import get_graph
 from app.graph.state import AssessmentState
+from app.services.question_prefetch import prefetch_next_question
+from app.services.session_work import submit_session_work
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -71,6 +73,7 @@ def _initial_state(
         "bloom_scores":           {},
         "_pending_answer":        "",
         "_answer_time_sec":       0,
+        "_skip_requested":        False,
         "weak_topics":            [],
         "strong_topics":          [],
         "recommendations":        [],
@@ -105,6 +108,8 @@ def _run_setup_phase(session_id: str, state: AssessmentState):
             chunk_count = len(final_state.get("raw_chunks", []))
             db.update_session_progress(session_id, topics, chunk_count)
             db.update_session_status(session_id, "ready")
+            # Start a one-question look-ahead while the learner reads Q1.
+            submit_session_work(session_id, prefetch_next_question, session_id)
             _session_logs[session_id].append(f"[Setup] SUCCESS: {len(questions)} questions generated")
             logger.info(f"Session {session_id} setup complete | {len(questions)} question(s)")
         else:

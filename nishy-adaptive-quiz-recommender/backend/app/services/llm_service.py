@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODAL_ENDPOINT_URL = "https://nisharahtheva--nishy-qwen-api-generate.modal.run"
+DEFAULT_MODAL_ENDPOINT_URL = "https://nisharahtheva--nishy-qwen-adaptive-quiz-web-endpoint.modal.run/generate"
 MODAL_ENDPOINT_URL = os.getenv(
     "MODAL_ENDPOINT_URL", DEFAULT_MODAL_ENDPOINT_URL
 ).strip()
@@ -53,17 +53,19 @@ class QwenModalService:
         """Return whether the configured Modal generation endpoint is reachable."""
         try:
             endpoint = self._require_endpoint()
-            response = httpx.post(
-                endpoint,
+            health_endpoint = (
+                endpoint[:-len("/generate")] + "/health"
+                if endpoint.rstrip("/").endswith("/generate")
+                else endpoint
+            )
+            response = httpx.get(
+                health_endpoint,
                 headers=self._headers(),
-                json={"prompt": "Reply with OK.", "max_new_tokens": 8},
-                # This is a circuit-breaker probe, not a cold-start request.
-                # If a warm endpoint cannot answer quickly, callers should use
-                # their deterministic source-grounded fallback immediately.
                 timeout=httpx.Timeout(3.0, connect=2.0),
             )
             response.raise_for_status()
-            return bool(str(response.json().get("response", "")).strip())
+            payload = response.json()
+            return payload.get("status") == "ok" or bool(str(payload.get("response", "")).strip())
         except Exception as exc:
             logger.error("[ModalHealthCheck] %s", exc)
             return False

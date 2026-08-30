@@ -151,7 +151,7 @@ def _generate_concept_notes(
         return _extractive_recall_notes(list(source_chunks or []))
 
 
-def recommendation_agent(state: AssessmentState) -> dict:
+def recommendation_agent(state: AssessmentState, fast: bool = False) -> dict:
     """
     Recommendation Agent.
     Input:  state['topic_scores'], state['answers'], state['chroma_collection_id']
@@ -163,8 +163,8 @@ def recommendation_agent(state: AssessmentState) -> dict:
     resource_map = _load_resource_map()
     collection_id = state.get("chroma_collection_id", "")
 
-    llm = LlmService()
-    rag = RagService()
+    llm = None if fast else LlmService()
+    rag = None if fast else RagService()
 
     weak_topics = []
     strong_topics = []
@@ -178,7 +178,7 @@ def recommendation_agent(state: AssessmentState) -> dict:
     # exaggerate weakness; the final attempt number is the meaningful signal.
     topic_attempts = {}
     for a in answers:
-        if not (a.get("is_correct") or a.get("attempts", 0) >= 4):
+        if not (a.get("is_terminal") or a.get("is_correct") or a.get("attempts", 0) >= 4):
             continue
         q_id = a.get("q_id")
         q = next((q for q in questions if q.get("q_id") == q_id), {})
@@ -246,19 +246,30 @@ def recommendation_agent(state: AssessmentState) -> dict:
                         "source": question.get("source_file", "Quiz explanation"),
                         "page": question.get("page_number", 0),
                     })
-        concept_notes = _generate_concept_notes(
-            topic,
-            rag,
-            llm,
-            collection_id,
-            subject,
-            source_chunks=topic_source_chunks,
-        )
+        curated = _curated_resources(topic, resource_map)
+        resource_executor = None
+        resource_future = None
+        if not fast and not curated:
+            resource_executor = ThreadPoolExecutor(max_workers=1)
+            resource_future = resource_executor.submit(build_resources, topic)
+
+        if fast:
+            concept_notes = _extractive_recall_notes(topic_source_chunks)
+        else:
+            concept_notes = _generate_concept_notes(
+                topic,
+                rag,
+                llm,
+                collection_id,
+                subject,
+                source_chunks=topic_source_chunks,
+            )
 
         # Priority 1: hand-curated resource_map (pre-verified, no network wait) —
         # skip the expensive live scrape entirely when we already have exact links.
-        curated = _curated_resources(topic, resource_map)
-        if curated:
+        if fast:
+            resources = curated
+        elif curated:
             resources = curated
             logger.info(f"[RecommendationAgent] '{topic}': using curated resources (scrape skipped)")
         else:
@@ -267,7 +278,9 @@ def recommendation_agent(state: AssessmentState) -> dict:
             # — TutorialsPoint: exact tutorial via DDG site:tutorialspoint.com search
             # — YouTube: specific video ID from search results page JSON
             logger.info(f"[RecommendationAgent] '{topic}': scraping specific resource URLs...")
-            resources = build_resources(topic)
+            resources = resource_future.result() if resource_future else []
+            if resource_executor:
+                resource_executor.shutdown(wait=False)
             logger.info(
                 f"[RecommendationAgent] '{topic}': scraped {len(resources)} resources "
                 f"({[r['source'] for r in resources]})"

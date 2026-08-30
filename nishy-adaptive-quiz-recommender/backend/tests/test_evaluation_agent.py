@@ -176,6 +176,36 @@ class AttemptFlowTests(unittest.TestCase):
             ["A validated hard Biology hint."],
         )
 
+    @patch("app.agents.evaluation_agent.generate_adaptive_hint")
+    @patch("app.agents.evaluation_agent.RagService")
+    @patch("app.agents.evaluation_agent.LlmService")
+    def test_open_ended_response_keeps_retry_and_returns_adaptive_hint(
+        self, llm_cls, _rag, generate_hint
+    ):
+        llm_cls.return_value.call_json.return_value = {
+            "score": 0.35,
+            "is_correct": False,
+            "feedback": "The response identifies one relevant relationship.",
+        }
+        question = {
+            **QUESTION,
+            "q_type": "structured",
+            "model_answer": "A complete source-grounded explanation of the biological relationships.",
+            "marks_breakdown": {"facts": 50, "reasoning": 50},
+        }
+        state = self._state([], pending="A partial extended response")
+        state["questions"] = [question]
+
+        generate_hint.return_value = "A source-grounded structured-answer hint."
+
+        update = evaluation_agent(state)
+        result = update["answers"][-1]
+
+        self.assertEqual(update["current_q_index"], 0)
+        self.assertEqual(result["attempts"], 1)
+        self.assertEqual(result["hint"], "A source-grounded structured-answer hint.")
+        self.assertNotIn("Detailed Explanation", result["feedback"])
+
 
 if __name__ == "__main__":
     unittest.main()
