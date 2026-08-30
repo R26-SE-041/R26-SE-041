@@ -36,7 +36,7 @@ interface IconProps {
 export default function Icon({ color = "currentColor", name, size = 18, strokeWidth = 2 }: IconProps) {
   const common = { fill: "none", stroke: color, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth };
   return (
-    <Svg accessibilityElementsHidden focusable={false} height={size} viewBox="0 0 24 24" width={size}>
+    <Svg accessible={false} focusable={false} height={size} viewBox="0 0 24 24" width={size}>
       {name === "activity" && <Path {...common} d="M3 12h4l2.5-7 5 14 2.5-7h4" />}
       {name === "arrow-left" && <><Line {...common} x1="20" x2="4" y1="12" y2="12" /><Polyline {...common} points="10 18 4 12 10 6" /></>}
       {name === "bolt" && <Path {...common} d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />}
@@ -65,5 +65,5 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
 }
 
 export function StatusDot({ color, size = 9 }: { color: string; size?: number }) {
-  return <Svg accessibilityElementsHidden height={size} viewBox="0 0 10 10" width={size}><Circle cx="5" cy="5" fill={color} r="5" /></Svg>;
+  return <Svg accessible={false} height={size} viewBox="0 0 10 10" width={size}><Circle cx="5" cy="5" fill={color} r="5" /></Svg>;
 }

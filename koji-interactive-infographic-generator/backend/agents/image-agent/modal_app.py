@@ -33,10 +33,13 @@ from pydantic import BaseModel, Field
 FLUX_MODEL_ID   = "black-forest-labs/FLUX.1-dev"
 FLUX_CACHE_PATH = "/model-cache/flux-dev"
 
-IMAGE_HEIGHT         = 512
-IMAGE_WIDTH          = 512
-NUM_INFERENCE_STEPS  = 25   # 20-30 optimal for FLUX.1-dev flow matching
-GUIDANCE_SCALE       = 3.5  # FLUX.1-dev recommended default
+from shared.image_policies import (
+    GUIDANCE_SCALE,
+    IMAGE_HEIGHT,
+    IMAGE_WIDTH,
+    NUM_INFERENCE_STEPS,
+    POLICY_VERSION,
+)
 
 # ── Volume (weights stored here — no re-download on cold start) ───────────────
 
@@ -234,7 +237,9 @@ class GenerateRequest(BaseModel):
     domain: Literal["generic", "anatomy"] = "generic"
     organ: str | None = Field(default=None, max_length=80)
     view: str | None = Field(default=None, max_length=80)
-    use_skill_rules: bool = True
+    use_policy_rules: bool = True
+    # Backward compatibility for callers deployed before image-runtime-v2.
+    use_skill_rules: bool | None = None
 
 
 @web_app.get("/health")
@@ -298,10 +303,16 @@ def generate(req: GenerateRequest) -> dict:
         from shared.image_policies import select_image_policy
 
         policy = select_image_policy(domain)
+        apply_policy_rules = (
+            req.use_skill_rules
+            if req.use_skill_rules is not None
+            else req.use_policy_rules
+        )
         generation_prompt = policy.apply(
             generation_prompt,
             memory_context=req.memory_context or "",
             feedback=feedback,
+            apply_domain_rules=apply_policy_rules,
         )
         result = agent.generate.remote({"prompt": generation_prompt, "seed": req.seed})
 
@@ -328,7 +339,11 @@ def generate(req: GenerateRequest) -> dict:
                 "view": view,
                 "seed": req.seed,
                 "input_contract": "enhanced_prompt_json" if enhanced_payload else "direct_prompt",
-                "anatomy_output_rules_applied": domain == "anatomy",
+                "anatomy_output_rules_applied": domain == "anatomy" and apply_policy_rules,
+                "policy_version": POLICY_VERSION,
+                "domain_rules_applied": bool(apply_policy_rules),
+                "memory_context_applied": bool((req.memory_context or "").strip()),
+                "regeneration_feedback_applied": bool(feedback),
             },
             "safety": result.get("safety"),
             "error": None,

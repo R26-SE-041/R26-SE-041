@@ -4,39 +4,39 @@ import { Platform, StyleSheet } from "react-native";
 export type ThemeMode = "dark" | "light";
 
 export const darkColors = {
-  background: "#070711",
-  surface: "#141428",
-  surfaceSoft: "#22223b",
-  border: "#34344d",
-  primary: "#8b5cf6",
-  primaryBright: "#a78bfa",
-  cyan: "#22d3ee",
-  text: "#f4f2ff",
-  textMuted: "#a7a3c2",
-  textDim: "#77728f",
-  success: "#34d399",
-  warning: "#fbbf24",
-  danger: "#fb7185",
-  canvas: "#020205",
-  shadow: "rgba(0,0,0,0.28)",
+  background: "#201914",
+  surface: "rgba(53, 41, 32, 0.78)",
+  surfaceSoft: "rgba(255, 244, 226, 0.08)",
+  border: "rgba(255, 232, 202, 0.18)",
+  primary: "#d97745",
+  primaryBright: "#f2a06f",
+  cyan: "#d8a56d",
+  text: "#fff7ea",
+  textMuted: "#d9c7b2",
+  textDim: "#a99580",
+  success: "#91a878",
+  warning: "#e9ad5c",
+  danger: "#e27661",
+  canvas: "#17120f",
+  shadow: "rgba(8,4,2,0.36)",
 } as const;
 
 export const lightColors: ColorPalette = {
-  background: "#f4f6fc",
-  surface: "#ffffff",
-  surfaceSoft: "#eef0f8",
-  border: "#d8dbea",
-  primary: "#6d28d9",
-  primaryBright: "#7c3aed",
-  cyan: "#087f9d",
-  text: "#19162c",
-  textMuted: "#5d5870",
-  textDim: "#6b6480",
-  success: "#15803d",
-  warning: "#b45309",
-  danger: "#be123c",
-  canvas: "#eef0f8",
-  shadow: "rgba(38,32,70,0.12)",
+  background: "#f4eadb",
+  surface: "rgba(255, 255, 255, 0.48)",
+  surfaceSoft: "rgba(255, 253, 247, 0.36)",
+  border: "rgba(255, 255, 255, 0.68)",
+  primary: "#c95f32",
+  primaryBright: "#b94f27",
+  cyan: "#a5683f",
+  text: "#33261f",
+  textMuted: "#705d50",
+  textDim: "#927b6c",
+  success: "#647a51",
+  warning: "#c88935",
+  danger: "#b84c3d",
+  canvas: "#e8dac6",
+  shadow: "rgba(91,54,29,0.14)",
 };
 
 export type ColorPalette = { [Key in keyof typeof darkColors]: string };
@@ -54,7 +54,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>("dark");
+  const [mode, setMode] = useState<ThemeMode>("light");
   const value = useMemo<ThemeContextValue>(() => ({
     colors: mode === "dark" ? darkColors : lightColors,
     mode,
@@ -70,10 +70,10 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 22,
     ...Platform.select({
-      web: { boxShadow: `0 18px 60px ${colors.shadow}` } as object,
+      web: { boxShadow: `0 24px 70px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.82)`, backdropFilter: "blur(24px) saturate(125%)", WebkitBackdropFilter: "blur(24px) saturate(125%)" } as object,
       default: { elevation: 5 },
     }),
   },

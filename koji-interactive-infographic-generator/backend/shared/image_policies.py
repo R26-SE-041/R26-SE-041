@@ -1,7 +1,7 @@
-"""Typed prompt policies for the FLUX image agent.
+"""Versioned, executable runtime policies for the FLUX image agent.
 
-FLUX does not consume PERSONA/SKILL files directly.  The application selects
-one explicit policy and supplies the resulting text prompt to the model.
+This module is the image agent's source of truth. Behaviour is represented as
+typed data and tested code instead of Markdown that diffusion cannot execute.
 """
 
 from __future__ import annotations
@@ -12,6 +12,19 @@ from typing import Literal
 
 ImageDomain = Literal["generic", "anatomy"]
 
+POLICY_VERSION = "image-runtime-v2"
+IMAGE_HEIGHT = 512
+IMAGE_WIDTH = 512
+NUM_INFERENCE_STEPS = 25
+GUIDANCE_SCALE = 3.5
+MAX_CONTEXT_CHARS = 2_000
+
+
+def _clean_context(value: str) -> str:
+    """Bound optional runtime context and remove control-character noise."""
+    printable = "".join(char for char in value if char in "\n\t" or ord(char) >= 32)
+    return " ".join(printable.split())[:MAX_CONTEXT_CHARS]
+
 
 @dataclass(frozen=True)
 class ImagePromptPolicy:
@@ -19,17 +32,26 @@ class ImagePromptPolicy:
     policy_id: str
     mandatory_suffix: str = ""
 
-    def apply(self, prompt: str, *, memory_context: str = "", feedback: str = "") -> str:
+    def apply(
+        self,
+        prompt: str,
+        *,
+        memory_context: str = "",
+        feedback: str = "",
+        apply_domain_rules: bool = True,
+    ) -> str:
         """Compose model input while keeping mandatory rules at highest priority."""
         sections = [prompt.strip()]
-        if memory_context.strip():
-            sections.append(f"Validated relevant generation preferences: {memory_context.strip()}")
-        if feedback.strip():
+        memory_context = _clean_context(memory_context)
+        feedback = _clean_context(feedback)
+        if memory_context:
+            sections.append(f"Validated relevant generation preferences: {memory_context}")
+        if feedback:
             sections.append(
                 "User-requested corrections for this retry: "
                 f"{feedback.strip()}. Preserve all correct educational content and the original learning objective."
             )
-        if self.mandatory_suffix:
+        if apply_domain_rules and self.mandatory_suffix:
             sections.append(self.mandatory_suffix)
         return "\n\n".join(section for section in sections if section)
 

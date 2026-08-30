@@ -128,6 +128,21 @@ def image_node(state: PipelineState) -> dict[str, Any]:
             or state.get("raw_prompt")
             or ""
         )
+        memory_context = ""
+        if config.get("enable_memento", True):
+            try:
+                from shared.memory import MemoryManager
+
+                memories = MemoryManager(agent_name="image-agent").recall_scoped(
+                    best_prompt, limit=3,
+                )
+                memory_context = "\n".join(
+                    str(item.get("content") or "").strip()
+                    for item in memories if item.get("content")
+                )
+            except Exception:
+                # Memory is optional and must never prevent image rendering.
+                memory_context = ""
         resp = requests.post(
             url,
             json={
@@ -141,7 +156,9 @@ def image_node(state: PipelineState) -> dict[str, Any]:
                 "domain": "anatomy" if (state.get("anatomy_spec") or {}).get("is_anatomy") else "generic",
                 "organ": (state.get("anatomy_spec") or {}).get("organ"),
                 "view": (state.get("anatomy_spec") or {}).get("view"),
-                "use_skill_rules": config.get("enable_skill_rules", True),
+                "use_policy_rules": config.get("enable_skill_rules", True),
+                "memory_context": memory_context,
+                "regeneration_feedback": state.get("retry_feedback"),
             },
             timeout=360,
         )

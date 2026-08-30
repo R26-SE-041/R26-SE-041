@@ -16,7 +16,9 @@ import InteractiveCanvas from "./components/InteractiveCanvas";
 import FeedbackControls, { createOutputId, FeedbackReason } from "./components/FeedbackControls";
 import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
 import ThreeDViewer from "./components/ThreeDViewer";
+import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
+import { saveHistoryItem, updateHistoryItem } from "./historyStorage";
 import { ColorPalette, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
 import {
   PROMPT_AGENT_URL,
@@ -30,6 +32,7 @@ import {
 const BACKEND_HEALTH_URL = BACKEND_URL;
 
 type Stage = "idle" | "enhancing" | "preview" | "generating" | "done";
+type GenerationWorkspace = "general" | "anatomy" | "history";
 export type SpeedMode = "normal" | "pro" | "promax";
 type ThreeDStage = "idle" | "converting" | "done";
 type Health = "ok" | "error" | "checking";
@@ -183,6 +186,7 @@ function Home({ accessToken }: AppProps) {
   const { colors, mode: themeMode, toggleTheme } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
+  const [workspace, setWorkspace] = useState<GenerationWorkspace>("general");
   const [prompt, setPrompt] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [speedMode, setSpeedMode] = useState<SpeedMode>("pro");
@@ -215,6 +219,7 @@ function Home({ accessToken }: AppProps) {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [evaluationRetries, setEvaluationRetries] = useState(0);
   const [evaluationWarning, setEvaluationWarning] = useState<string | null>(null);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
 
   const isLoading = stage === "enhancing" || stage === "generating";
   // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
@@ -321,6 +326,7 @@ function Home({ accessToken }: AppProps) {
     setEvaluation(null);
     setEvaluationRetries(0);
     setEvaluationWarning(null);
+    setCurrentHistoryId(null);
   };
 
   const handlePromptChange = (value: string) => {
@@ -328,19 +334,55 @@ function Home({ accessToken }: AppProps) {
     if (stage !== "idle") reset();
   };
 
+  const selectWorkspace = (next: GenerationWorkspace) => {
+    if (next === workspace || isLoading) return;
+    reset();
+    setPrompt("");
+    setWorkspace(next);
+  };
+
+  const archiveResult = async (result: QualityControlledImage): Promise<string | null> => {
+    const id = createOutputId("history");
+    const mode = result.anatomy.is_anatomy ? "anatomy" : "general";
+    try {
+      await saveHistoryItem({
+        id,
+        createdAt: new Date().toISOString(),
+        prompt: prompt.trim(),
+        enhancedPrompt: result.prompt,
+        imageBase64: result.image,
+        mode,
+        speedMode,
+        anatomy: result.anatomy,
+        evaluation: result.evaluation ? {
+          visualScore: result.evaluation.visualScore,
+          pedagogicalScore: result.evaluation.pedagogicalScore,
+          feedback: result.evaluation.feedback,
+        } : null,
+      });
+      setCurrentHistoryId(id);
+      return id;
+    } catch {
+      return null;
+    }
+  };
+
   const callEnhance = async (
     raw: string,
     retryFeedback?: string,
   ): Promise<{ prompt: string; anatomy: AnatomySpec; payload: EnhancedPromptPayload }> => {
+    const routedRaw = workspace === "anatomy"
+      ? `Human anatomy educational illustration: ${raw}`
+      : raw;
     const [anatomyMemory, genericMemory] = await Promise.all([
-      recallMemory("prompt-anatomy", raw),
-      recallMemory("prompt-generic", raw),
+      recallMemory("prompt-anatomy", routedRaw),
+      recallMemory("prompt-generic", routedRaw),
     ]);
     const response = await fetch(`${PROMPT_AGENT_URL}/enhance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        raw_prompt: raw,
+        raw_prompt: routedRaw,
         speed_mode: speedMode,
         retry_feedback: retryFeedback,
         anatomy_memory: anatomyMemory,
@@ -393,8 +435,9 @@ function Home({ accessToken }: AppProps) {
     anatomy: AnatomySpec,
     regenerationFeedback?: string,
     enhancement?: EnhancedPromptPayload,
+    useRuntimeContext = true,
   ): Promise<string> => {
-    const memoryContext = await recallMemory("image-agent", finalPrompt);
+    const memoryContext = useRuntimeContext ? await recallMemory("image-agent", finalPrompt) : "";
     const response = await fetch(`${IMAGE_AGENT_URL}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -559,10 +602,10 @@ function Home({ accessToken }: AppProps) {
     return { ...best!, retryCount: 2, warning: "Quality threshold was not reached; showing the best of three attempts." };
   };
 
-  const localizeAnatomy = async (image: string, anatomy: AnatomySpec): Promise<void> => {
+  const localizeAnatomy = async (image: string, anatomy: AnatomySpec): Promise<AnatomyAnnotation[]> => {
     setAnatomyAnnotations([]);
     setLocalizationError(null);
-    if (!anatomy.is_anatomy || !anatomy.organ) return;
+    if (!anatomy.is_anatomy || !anatomy.organ) return [];
     try {
       const response = await fetch(`${INTERACTIVE_AGENT_URL}/auto-labels`, {
         method: "POST",
@@ -593,14 +636,53 @@ function Home({ accessToken }: AppProps) {
         .filter((item: AnatomyAnnotation | null): item is AnatomyAnnotation => item !== null);
       setAnatomyAnnotations(annotations);
       markWarm("interactive");
+      return annotations;
     } catch (caught) {
       setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
+      return [];
     }
   };
 
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
     reset();
+    if (workspace === "general") {
+      const rawPrompt = prompt.trim();
+      const anatomy: AnatomySpec = { is_anatomy: false };
+      const payload: EnhancedPromptPayload = {
+        schema_version: "1.0",
+        final_prompt: rawPrompt,
+        anatomy_spec: anatomy,
+        route: "generic",
+        anatomy_mode: null,
+      };
+      try {
+        setStage("generating");
+        const image = await runTimed("image", () => callGenerate(rawPrompt, anatomy, undefined, undefined, false));
+        const result: QualityControlledImage = {
+          image,
+          prompt: rawPrompt,
+          anatomy,
+          payload,
+          evaluation: null,
+          retryCount: 0,
+          warning: null,
+        };
+        setEnhancedPrompt(rawPrompt);
+        setEnhancedPromptJson(null);
+        setAnatomySpec(anatomy);
+        setImageBase64(image);
+        setEvaluation(null);
+        setImageOutputId(createOutputId("image"));
+        markWarm("image");
+        setStage("done");
+        await archiveResult(result);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Image generation failed");
+        setStage("idle");
+      }
+      return;
+    }
     try {
       setStage("enhancing");
       const enhanced = await runTimed("prompt", () => callEnhance(prompt.trim()));
@@ -635,9 +717,10 @@ function Home({ accessToken }: AppProps) {
       setEvaluationWarning(result.warning);
       setImageOutputId(createOutputId("image"));
       setStage("done");
-      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).catch((caught) => {
-        setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
-      });
+      const historyId = await archiveResult(result);
+      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
+        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Image generation failed");
       setStage("preview");
@@ -677,6 +760,26 @@ function Home({ accessToken }: AppProps) {
     setGlbBase64(null);
     setThreedError(null);
     setError(null);
+    if (workspace === "general") {
+      const rawPrompt = prompt.trim();
+      const anatomy: AnatomySpec = { is_anatomy: false };
+      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: rawPrompt, anatomy_spec: anatomy, route: "generic", anatomy_mode: null };
+      try {
+        setStage("generating");
+        const image = await runTimed("image", () => callGenerate(rawPrompt, anatomy, feedback, undefined, false));
+        setImageBase64(image);
+        setEvaluation(null);
+        setEvaluationRetries(0);
+        setImageOutputId(createOutputId("image"));
+        markWarm("image");
+        setStage("done");
+        await archiveResult({ image, prompt: rawPrompt, anatomy, payload, evaluation: null, retryCount: 0, warning: null });
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Image regeneration failed");
+        setStage("done");
+      }
+      return;
+    }
     try {
       setStage("generating");
       const finalPrompt = enhancedPrompt || prompt.trim();
@@ -692,9 +795,10 @@ function Home({ accessToken }: AppProps) {
       setEvaluationWarning(result.warning);
       setImageOutputId(createOutputId("image"));
       setStage("done");
-      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).catch((caught) => {
-        setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
-      });
+      const historyId = await archiveResult(result);
+      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
+        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Image regeneration failed");
       setStage("done");
@@ -750,6 +854,9 @@ function Home({ accessToken }: AppProps) {
         setGlbSizeKb(data.size_kb);
         setThreedStage("done");
         markWarm("threed");
+        if (currentHistoryId) {
+          await updateHistoryItem(currentHistoryId, { glbBase64: data.glb_base64, glbSizeKb: data.size_kb });
+        }
         return;
       }
       throw new Error("3D conversion timed out after 20 minutes");
@@ -768,11 +875,15 @@ function Home({ accessToken }: AppProps) {
 
   const loadingLabel = stage === "enhancing"
     ? `Enhancing with Qwen 2.5-3B on ${speed.promptGpu}...`
-    : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
+    : workspace === "general"
+      ? `Sending your raw prompt directly to FLUX.1-dev on ${speed.imageGpu}...`
+      : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
+      <View pointerEvents="none" style={styles.ambientTop} />
+      <View pointerEvents="none" style={styles.ambientBottom} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -783,31 +894,88 @@ function Home({ accessToken }: AppProps) {
         >
           <View style={styles.container}>
             <View style={styles.header}>
-              <Pressable
-                accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
-                onPress={toggleTheme}
-                style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}
-              >
-                <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={15} />
-                <Text style={styles.themeToggleText}>{themeMode === "dark" ? "Light mode" : "Dark mode"}</Text>
-              </Pressable>
-              <View style={styles.brandRow}>
-                <Text style={styles.brand}>EduVision</Text>
+              <View style={styles.topBar}>
+                <View style={styles.brandRow}>
+                  <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
+                  <Text style={styles.brand}>EduVision</Text>
+                </View>
+                <Pressable
+                  accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+                  onPress={toggleTheme}
+                  style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}
+                >
+                  <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={15} />
+                  <Text style={styles.themeToggleText}>{themeMode === "dark" ? "Light mode" : "Dark mode"}</Text>
+                </Pressable>
               </View>
-              <Text style={styles.title}>Generate & <Text style={styles.titleAccent}>Interact</Text>{"\n"}with Educational AI</Text>
-              <Text style={styles.subtitle}>
-                Enhance with Qwen 2.5-3B, generate with FLUX.1-dev, and tap any object to analyze with SAM 2 + Qwen2.5-VL.
-              </Text>
-              <View style={[shared.wrap, styles.healthWrap]}>
-                <HealthPill label="Prompt Agent" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
-                <HealthPill label="Image Agent" now={now} status={imageHealth} warmUntil={warmUntil.image} />
-                <HealthPill label="Eval Agent" now={now} status={evalHealth} warmUntil={warmUntil.eval} />
-                <HealthPill label="Interactive Agent" now={now} status={interactiveHealth} warmUntil={warmUntil.interactive} />
-                <HealthPill label="3D Agent" now={now} status={displayedThreeDHealth} warmUntil={warmUntil.threed} />
+              <View style={styles.heroGrid}>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.eyebrow}>A VISUAL LEARNING STUDIO</Text>
+                  <Text style={styles.title}>Make ideas <Text style={styles.titleAccent}>visible.</Text></Text>
+                  <Text style={styles.subtitle}>
+                    Create thoughtful educational imagery, explore human anatomy, and turn flat visuals into interactive learning experiences.
+                  </Text>
+                </View>
+                <View style={styles.systemGlass}>
+                  <View style={styles.systemHeader}>
+                    <View><Text style={styles.systemKicker}>STUDIO STATUS</Text><Text style={styles.systemTitle}>Creative engine</Text></View>
+                    <View style={styles.liveBadge}><StatusDot color={colors.success} /><Text style={styles.liveBadgeText}>Live</Text></View>
+                  </View>
+                  <View style={[shared.wrap, styles.healthWrap]}>
+                    <HealthPill label="Prompt" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
+                    <HealthPill label="Image" now={now} status={imageHealth} warmUntil={warmUntil.image} />
+                    <HealthPill label="Eval" now={now} status={evalHealth} warmUntil={warmUntil.eval} />
+                    <HealthPill label="Interact" now={now} status={interactiveHealth} warmUntil={warmUntil.interactive} />
+                    <HealthPill label="3D" now={now} status={displayedThreeDHealth} warmUntil={warmUntil.threed} />
+                  </View>
+                  <Text style={styles.warmNote}>Warm-state estimates update after successful studio activity.</Text>
+                </View>
               </View>
-              <Text style={styles.warmNote}>Warm time is an estimate based on successful activity in this session.</Text>
             </View>
 
+            <View accessibilityRole="tablist" style={styles.workspaceTabs}>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: workspace === "general", disabled: isLoading }}
+                disabled={isLoading}
+                onPress={() => selectWorkspace("general")}
+                style={({ pressed }) => [styles.workspaceTab, workspace === "general" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+              >
+                <Icon color={workspace === "general" ? colors.primaryBright : colors.textMuted} name="wand" size={20} />
+                <View style={styles.workspaceTabCopy}>
+                  <Text style={[styles.workspaceTabTitle, workspace === "general" && styles.workspaceTabTitleActive]}>Image Generation</Text>
+                  <Text style={styles.workspaceTabDescription}>General educational visuals and diagrams</Text>
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: workspace === "anatomy", disabled: isLoading }}
+                disabled={isLoading}
+                onPress={() => selectWorkspace("anatomy")}
+                style={({ pressed }) => [styles.workspaceTab, workspace === "anatomy" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+              >
+                <Icon color={workspace === "anatomy" ? colors.primaryBright : colors.textMuted} name="target" size={20} />
+                <View style={styles.workspaceTabCopy}>
+                  <Text style={[styles.workspaceTabTitle, workspace === "anatomy" && styles.workspaceTabTitleActive]}>Human Anatomy Generation</Text>
+                  <Text style={styles.workspaceTabDescription}>Validated organs, views, labels, and 3D</Text>
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: workspace === "history", disabled: isLoading }}
+                disabled={isLoading}
+                onPress={() => selectWorkspace("history")}
+                style={({ pressed }) => [styles.workspaceTab, workspace === "history" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+              >
+                <Icon color={workspace === "history" ? colors.primaryBright : colors.textMuted} name="layers" size={20} />
+                <View style={styles.workspaceTabCopy}>
+                  <Text style={[styles.workspaceTabTitle, workspace === "history" && styles.workspaceTabTitleActive]}>History</Text>
+                  <Text style={styles.workspaceTabDescription}>Your last 50 local creations</Text>
+                </View>
+              </Pressable>
+            </View>
+
+            {workspace === "history" ? <HistoryPanel /> : <>
             <View style={styles.speedSection}>
               <Text style={[shared.label, styles.centerText]}>Speed Mode</Text>
               <View style={[shared.wrap, styles.speedPicker]}>
@@ -835,35 +1003,42 @@ function Home({ accessToken }: AppProps) {
                 })}
               </View>
               <Text style={styles.hint}>
-                {speedMode === "normal" && "Standard GPUs - same quality, moderate wait times."}
-                {speedMode === "pro" && "Upgraded GPUs - faster enhancement and interactive analysis."}
-                {speedMode === "promax" && "Top-tier GPUs - maximum speed across all stages."}
+                {workspace === "general" && `${speed.label} sends the raw prompt directly to FLUX on ${speed.imageGpu}.`}
+                {workspace === "anatomy" && speedMode === "normal" && "Standard GPUs - same validated anatomy workflow, moderate wait times."}
+                {workspace === "anatomy" && speedMode === "pro" && "Upgraded GPUs - faster enhancement and interactive analysis."}
+                {workspace === "anatomy" && speedMode === "promax" && "Top-tier GPUs - maximum speed across the validated anatomy pipeline."}
               </Text>
             </View>
 
-            <PersonalMemoryPanel accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />
+            {workspace === "anatomy" && <PersonalMemoryPanel accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />}
 
             <View style={[shared.card, styles.promptCard]}>
-              <Text style={shared.label}>Your Prompt</Text>
+              <Text style={shared.label}>{workspace === "anatomy" ? "Human Anatomy Prompt" : "Your Prompt"}</Text>
               <TextInput
                 accessibilityLabel="Your prompt"
                 editable={!isLoading}
                 multiline
                 numberOfLines={4}
                 onChangeText={handlePromptChange}
-                placeholder="e.g. photosynthesis diagram for 8th graders with labeled chloroplasts"
+                placeholder={workspace === "anatomy"
+                  ? "e.g. anterior view of the human heart for medical students"
+                  : "e.g. photosynthesis diagram for 8th graders with labeled chloroplasts"}
                 placeholderTextColor={colors.textDim}
                 style={styles.promptInput}
                 textAlignVertical="top"
                 value={prompt}
               />
               <View style={styles.promptFooter}>
-                <Text style={styles.hint}>Enhance selects the anatomy or general prompt workflow, then shows a preview before generation.</Text>
+                <Text style={styles.hint}>
+                  {workspace === "anatomy"
+                    ? "Anatomy mode enforces a human-anatomy route and validates the requested organ and view."
+                    : "Raw mode sends your prompt directly to the base FLUX model without enhancement, memory, evaluation, or retries."}
+                </Text>
                 <View style={styles.actionButtons}>
                   <ActionButton
                     disabled={isLoading || !prompt.trim()}
                     icon="wand"
-                    label={stage === "enhancing" ? "Enhancing..." : "Enhance Prompt"}
+                    label={workspace === "general" ? (stage === "generating" ? "Generating..." : "Generate Image") : (stage === "enhancing" ? "Enhancing..." : "Enhance Prompt")}
                     loading={isLoading}
                     onPress={handleSubmit}
                   />
@@ -876,7 +1051,7 @@ function Home({ accessToken }: AppProps) {
                 <ActivityIndicator color={colors.primaryBright} size="large" />
                 <Text style={styles.loadingText}>{loadingLabel}</Text>
                 <View style={styles.stageRow}>
-                  <StagePill active={stage === "enhancing"} done={stage === "generating"} label="Enhance" />
+                  {workspace === "anatomy" && <StagePill active={stage === "enhancing"} done={stage === "generating"} label="Enhance" />}
                   <StagePill active={stage === "generating"} label="Generate" />
                 </View>
                 <View style={styles.inlineInfo}><Icon color={colors.textMuted} name={speed.icon} size={14} /><Text style={styles.gpuText}>{speed.label}. GPU: {stage === "enhancing" ? speed.promptGpu : speed.imageGpu}</Text></View>
@@ -1017,6 +1192,7 @@ function Home({ accessToken }: AppProps) {
                 <Icon color={colors.textMuted} name="arrow-left" size={16} /><Text style={styles.ghostText}>New prompt</Text>
               </Pressable>
             )}
+            </>}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1114,35 +1290,56 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
-  container: { width: "100%", maxWidth: 980, alignSelf: "center", gap: 16 },
-  header: { alignItems: "center", paddingVertical: 12, gap: 0 },
-  themeToggle: { alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surfaceSoft, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 13, paddingVertical: 11, marginBottom: 4, minHeight: 44 },
+  safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
+  ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },
+  ambientBottom: { position: "absolute", width: 520, height: 520, borderRadius: 260, left: -230, bottom: -170, backgroundColor: "rgba(175, 125, 73, 0.16)" },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 44 },
+  container: { width: "100%", maxWidth: 1040, alignSelf: "center", gap: 20 },
+  header: { paddingVertical: 8, gap: 40 },
+  topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  themeToggle: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, ...Platform.select({ web: { boxShadow: `0 12px 35px ${colors.shadow}`, backdropFilter: "blur(20px)" } as object }) },
   themeToggleText: { color: colors.text, fontSize: 12, fontWeight: "800" },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
-  brand: { color: colors.text, fontSize: 18, fontWeight: "800", letterSpacing: 0.4 },
-  title: { color: colors.text, fontSize: 32, lineHeight: 40, fontWeight: "900", textAlign: "center", letterSpacing: -0.8 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
+  brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
+  brand: { color: colors.primaryBright, fontSize: 17, fontWeight: "900", letterSpacing: 2.4, textTransform: "uppercase" },
+  heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 34 },
+  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 500, minWidth: 280, maxWidth: "100%" as unknown as number },
+  eyebrow: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 2.6, marginBottom: 12 },
+  title: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, 'Times New Roman', serif", default: "serif" }), fontSize: 58, lineHeight: 63, fontWeight: "700", textAlign: "left", letterSpacing: -2 },
   titleAccent: { color: colors.primaryBright },
-  subtitle: { color: colors.textMuted, textAlign: "center", fontSize: 15, lineHeight: 23, maxWidth: 680, marginTop: 10 },
-  healthWrap: { justifyContent: "center", gap: 8, marginTop: 12 },
-  healthPill: { gap: 7, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
+  subtitle: { color: colors.textMuted, textAlign: "left", fontSize: 16, lineHeight: 26, maxWidth: 610, marginTop: 16 },
+  systemGlass: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 290, maxWidth: "100%" as unknown as number, padding: 20, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 28px 80px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.86)`, backdropFilter: "blur(28px) saturate(130%)" } as object }) },
+  systemHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
+  systemKicker: { color: colors.textDim, fontSize: 9, fontWeight: "900", letterSpacing: 1.8 },
+  systemTitle: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontSize: 22, fontWeight: "700", marginTop: 3 },
+  liveBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 50, backgroundColor: "rgba(100,122,81,0.10)" },
+  liveBadgeText: { color: colors.success, fontWeight: "800", fontSize: 11 },
+  healthWrap: { gap: 7 },
+  healthPill: { flexGrow: 1, minWidth: 86, gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   agentSignals: { flexDirection: "row", alignItems: "center", gap: 10 },
   signal: { flexDirection: "row", alignItems: "center", gap: 5 },
   healthLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   healthState: { color: colors.textDim, fontSize: 12 },
-  warmNote: { color: colors.textDim, fontSize: 12, textAlign: "center", marginTop: 9 },
-  speedSection: { gap: 12, alignItems: "center" },
+  warmNote: { color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
+  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 6, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 22px 65px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.88)`, backdropFilter: "blur(26px) saturate(125%)" } as object }) },
+  workspaceTab: { flex: 1, minWidth: 260, minHeight: 74, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: "transparent" },
+  workspaceTabActive: { borderColor: "rgba(185,79,39,0.38)", backgroundColor: "rgba(201,95,50,0.13)" },
+  workspaceTabCopy: { flex: 1, gap: 3 },
+  workspaceTabTitle: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
+  workspaceTabTitleActive: { color: colors.text },
+  workspaceTabDescription: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
+  speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 24, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { backdropFilter: "blur(18px)", boxShadow: `0 18px 50px ${colors.shadow}` } as object }) },
   centerText: { textAlign: "center" },
   speedPicker: { justifyContent: "center", gap: 10 },
-  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
-  speedPillActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.17)" },
+  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 15, borderRadius: 20, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  speedPillActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(201,95,50,0.12)" },
   speedName: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
   speedNameActive: { color: colors.text },
   speedDesc: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   hint: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
   promptCard: { gap: 14 },
-  promptInput: { minHeight: 112, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 14, fontSize: 15, lineHeight: 22 },
+  promptInput: { minHeight: 124, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 17, fontSize: 15, lineHeight: 23 },
   promptFooter: { gap: 14 },
   actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 10 },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -1153,7 +1350,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   stageRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   stagePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.surfaceSoft, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 50, overflow: "hidden" },
   stagePillText: { color: colors.textDim, fontSize: 11 },
-  stagePillActive: { backgroundColor: "rgba(139,92,246,0.27)" },
+  stagePillActive: { backgroundColor: "rgba(201,95,50,0.18)" },
   stagePillActiveText: { color: colors.text },
   stagePillDone: { color: colors.success },
   gpuText: { color: colors.textMuted, fontSize: 11 },
