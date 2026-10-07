@@ -841,7 +841,7 @@ class _PromptAgentBase:
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/root/skills": skills_vol},
     timeout=120,
-    scaledown_window=300,
+    scaledown_window=1200,
 )
 class PromptAgentNormal(_PromptAgentBase):
     """Qwen2.5-3B-Instruct on T4 (Normal mode)."""
@@ -851,7 +851,7 @@ class PromptAgentNormal(_PromptAgentBase):
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/root/skills": skills_vol},
     timeout=60,
-    scaledown_window=300,
+    scaledown_window=1200,
 )
 class PromptAgentA10G(_PromptAgentBase):
     """Same model as PromptAgentNormal but on A10G for faster inference (Pro / Pro Max modes)."""
@@ -862,7 +862,7 @@ class PromptAgentA10G(_PromptAgentBase):
     secrets=[modal.Secret.from_name("hf-secret")],
     volumes={"/root/skills": skills_vol, "/root/adapters": prompt_lora_vol},
     timeout=60,
-    scaledown_window=300,
+    scaledown_window=1200,
 )
 class PromptAgentAnatomyLoRA(_PromptAgentBase):
     """Qwen prompt agent with the Colab-trained five-organ anatomy adapter."""

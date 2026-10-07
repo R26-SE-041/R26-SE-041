@@ -242,7 +242,7 @@ class _ThreeDAgentBase:
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=3600,  # cold-start + shape + texture can exceed 20 min
-    scaledown_window=900,
+    scaledown_window=1200,
 )
 class ThreeDAgentA10G(_ThreeDAgentBase):
     """Hunyuan3D-2 on A10G (24 GB VRAM) — Normal mode."""
@@ -252,7 +252,7 @@ class ThreeDAgentA10G(_ThreeDAgentBase):
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=3600,
-    scaledown_window=900,
+    scaledown_window=1200,
 )
 class ThreeDAgentA100(_ThreeDAgentBase):
     """Hunyuan3D-2 on A100 (40 GB VRAM) — Pro mode."""
@@ -266,7 +266,7 @@ class ThreeDAgentA100(_ThreeDAgentBase):
     volumes={"/model-cache": threed_vol},
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=3600,
-    scaledown_window=900,   # retain loaded pipelines to avoid repeated cold starts
+    scaledown_window=1200,  # retain loaded pipelines to avoid repeated cold starts
 )
 class ThreeDAgentH100(_ThreeDAgentBase):
     """Hunyuan3D-2 on H100 (80 GB VRAM) — Pro Max mode. Fastest 3D conversion."""
