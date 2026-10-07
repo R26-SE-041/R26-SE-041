@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioLearnX: A Multimodal Multi-Agent Framework with Curriculum-Grounded Hybrid RAG for Personalized Biology Education</title>
+<style>
+@page {
+  size: letter;
+  margin: 0.7in 0.65in 0.7in 0.65in;
+}
+
+*, *:before, *:after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #000000;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 10pt;
+  line-height: 1.2;
+}
+
+.paper-container {
+  width: 100%;
+  max-width: 7.2in;
+  margin: 0 auto;
+}
+
+/* Header spanning entire page width */
+.title-block {
+  text-align: center;
+  margin-bottom: 14pt;
+}
+
+.paper-title {
+  font-size: 18pt;
+  font-weight: bold;
+  line-height: 1.22;
+  margin-bottom: 14pt;
+}
+
+.authors-grid {
+  display: table;
+  width: 100%;
+  margin-bottom: 12pt;
+}
+
+.authors-row {
+  display: table-row;
+}
+
+.author-cell {
+  display: table-cell;
+  width: 33.33%;
+  text-align: center;
+  padding: 0 4pt 10pt 4pt;
+  vertical-align: top;
+  font-size: 9.5pt;
+  line-height: 1.18;
+}
+
+.author-name {
+  font-size: 10pt;
+  font-weight: bold;
+}
+
+.author-affil {
+  font-style: italic;
+  font-size: 9pt;
+}
+
+.author-email {
+  font-size: 8.5pt;
+}
+
+/* Abstract & Keywords */
+.abstract-keywords {
+  margin: 0 0 14pt 0;
+  font-size: 9pt;
+  line-height: 1.22;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.abstract-keywords p {
+  margin: 0 0 5pt 0;
+  text-indent: 0;
+}
+
+.runin-label {
+  font-weight: bold;
+  font-style: italic;
+}
+
+/* Two Column Layout */
+.columns {
+  column-count: 2;
+  column-gap: 0.22in;
+  column-fill: balance;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+p {
+  margin: 0 0 5pt 0;
+  text-indent: 1.2em;
+}
+
+p.first-para {
+  text-indent: 0;
+}
+
+/* Section Headings */
+h2.sec-heading {
+  font-size: 10pt;
+  font-weight: normal;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 10pt 0 4pt 0;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h3.subsec-heading {
+  font-size: 10pt;
+  font-weight: normal;
+  font-style: italic;
+  text-align: left;
+  margin: 8pt 0 3pt 0;
+  page-break-after: avoid;
+  break-after: avoid;
+  text-indent: 0;
+}
+
+.subsubsec-title {
+  font-style: italic;
+  font-weight: normal;
+}
+
+/* Lists */
+ol, ul {
+  margin: 3pt 0 6pt 0;
+  padding-left: 1.2em;
+}
+
+li {
+  margin-bottom: 2pt;
+  font-size: 9.5pt;
+  line-height: 1.18;
+  text-align: justify;
+}
+
+/* Figures */
+.figure-wrapper {
+  margin: 8pt 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  text-align: center;
+}
+
+.figure-box {
+  border: 0.75pt solid #555;
+  background: #f8f9fa;
+  padding: 6pt;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 7pt;
+  line-height: 1.15;
+  white-space: pre;
+  text-align: left;
+  overflow: hidden;
+  margin-bottom: 4pt;
+}
+
+.figure-caption {
+  font-size: 8.5pt;
+  line-height: 1.18;
+  text-align: justify;
+}
+
+/* Tables */
+.table-wrapper {
+  margin: 9pt 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  text-align: center;
+}
+
+.table-num {
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  margin-bottom: 1pt;
+}
+
+.table-title {
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4pt;
+}
+
+table.ieee-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  line-height: 1.15;
+}
+
+table.ieee-tab th {
+  border-top: 1.2pt solid #000;
+  border-bottom: 0.6pt solid #000;
+  padding: 3pt 2pt;
+  font-weight: bold;
+  text-align: center;
+}
+
+table.ieee-tab td {
+  padding: 2.5pt 2pt;
+  text-align: center;
+}
+
+table.ieee-tab th.left, table.ieee-tab td.left {
+  text-align: left;
+}
+
+table.ieee-tab tr.bottom-border td {
+  border-bottom: 1.2pt solid #000;
+}
+
+/* Equations */
+.eq-row {
+  display: table;
+  width: 100%;
+  margin: 4pt 0;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.eq-math {
+  display: table-cell;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.eq-no {
+  display: table-cell;
+  width: 25pt;
+  text-align: right;
+  vertical-align: middle;
+  font-size: 9.5pt;
+}
+
+.frac {
+  display: inline-block;
+  vertical-align: middle;
+  text-align: center;
+  font-size: 8.5pt;
+  padding: 0 2pt;
+}
+
+.frac > .num {
+  display: block;
+  border-bottom: 0.6pt solid #000;
+  padding-bottom: 1pt;
+}
+
+.frac > .den {
+  display: block;
+  padding-top: 1pt;
+}
+
+/* References */
+.references-container {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  font-size: 8pt;
+  line-height: 1.15;
+}
+
+.references-container li {
+  margin-left: 1.5em;
+  text-indent: -1.5em;
+  margin-bottom: 3.5pt;
+  font-size: 8pt;
+  line-height: 1.15;
+}
+</style>
+</head>
+<body>
+
+<div class="paper-container">
+
+<div class="title-block">
+  <div class="paper-title">BioLearnX: A Multimodal Multi-Agent Framework with Curriculum-Grounded Hybrid RAG for Personalized Biology Education</div>
+  
+  <div class="authors-grid">
+    <div class="authors-row">
+      <div class="author-cell">
+        <div class="author-name">Kojithan P. Y.</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">it22264220@my.sliit.lk</div>
+      </div>
+      <div class="author-cell">
+        <div class="author-name">Baskaran V.</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">it22172600@my.sliit.lk</div>
+      </div>
+      <div class="author-cell">
+        <div class="author-name">Nishara T.</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">it22223876@my.sliit.lk</div>
+      </div>
+    </div>
+    <div class="authors-row">
+      <div class="author-cell">
+        <div class="author-name">Sarmitha S.</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">it22637482@my.sliit.lk</div>
+      </div>
+      <div class="author-cell">
+        <div class="author-name">Nuwan Kodagoda</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">nuwan.k@sliit.lk</div>
+      </div>
+      <div class="author-cell">
+        <div class="author-name">Malithi Nawarathne</div>
+        <div class="author-affil">Faculty of Computing<br>Sri Lanka Institute of Information Technology<br>Malabe, Sri Lanka</div>
+        <div class="author-email">malithi.n@sliit.lk</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="abstract-keywords">
+    <p><span class="runin-label">Abstract</span>—<strong>Biological science education demands continuous cognitive transitions across complex anatomical diagrams, dense textual curricula, handwritten lecture notes, formative assessments, and spoken revision. Conventional computer-assisted learning platforms typically operate across isolated, unimodal silos, relying on monolithic generative models that are prone to anatomical hallucinations, ungrounded assessment items, and severe linguistic degradation on low-resource Indic scripts such as Sinhala and Tamil. This paper presents BioLearnX, an integrated, self-improving multimodal multi-agent framework powered by curriculum-grounded Hybrid Retrieval-Augmented Generation (RAG). BioLearnX integrates four specialized educational components coordinated through graph-based state workflows: (1) an interactive anatomical infographic and 3D mesh synthesis pipeline employing fine-tuned QLoRA prompt enhancement, FLUX.1 diffusion, dual-critic reflection, SAM 2 segmentation, and Hunyuan3D reconstruction; (2) a multilingual spoken biology review system featuring language-adaptive automatic speech recognition (ASR) routing, domain-specialized anatomy inference, and multilingual speech synthesis; (3) an adaptive assessment and recommendation engine implementing Bloom’s taxonomy-aligned question generation, four-attempt progressive hint scaffolding, Item Response Theory (IRT)-inspired difficulty modulation, multi-layer semantic deduplication, and weak-topic concept synthesis; and (4) an intelligent handwritten document recovery pipeline combining 4&times; super-resolution enhancement, line-level fine-tuned TrOCR extraction, SinhaLM contextual correction, and NLLB-200 translation. Experimental evaluations across frozen anatomical benchmarks, authentic Sinhala handwritten corpora, and curriculum knowledge bases demonstrate substantial performance gains: prompt LoRA tuning achieved 97.4% composite anatomical schema compliance, the super-resolution OCR pipeline reduced the Character Error Rate (CER) to 17.8% on degraded handwriting, and the multi-agent assessment graph eliminated duplicate question generation while enforcing strict source attribution. The framework establishes a robust paradigm for accessible, personalized STEM learning.</strong></p>
+    <p><span class="runin-label">Keywords</span>—<em>adaptive assessment, handwritten text recognition, hybrid RAG, multi-agent systems, multimodal learning, Sinhala OCR, speech-to-text</em></p>
+  </div>
+</div>
+
+<div class="columns">
+
+<h2 class="sec-heading">I. Introduction</h2>
+<p class="first-para">Biological education is inherently multimodal and structurally complex. Mastering secondary and tertiary biological curricula—such as the Sri Lankan General Certificate of Education Advanced Level (G.C.E. A/L) Biology curriculum—requires students to correlate macro- and micro-anatomical structures, trace intricate physiological processes, decipher handwritten field and laboratory notes, and engage in active recall and formative assessment [1]. Cognitive Load Theory asserts that learning complex natural sciences is optimized when instructional systems dynamically scaffold visual, auditory, and analytical modalities, minimizing extraneous cognitive load and fostering schema acquisition [2].</p>
+
+<p>Despite rapid advances in generative artificial intelligence (GenAI) and Large Language Models (LLMs), existing educational technologies suffer from four fundamental limitations:</p>
+<ol>
+  <li><em>Monolithic and Unimodal Architecture:</em> Most digital tutoring tools operate on isolated modalities (e.g., text-only chatbots or generic text-to-image generators). Monolithic LLMs lack architectural specialization, struggling to orchestrate interdependent tasks such as visual segmentation, oral dialogue, and psychometric assessment within a coherent pedagogical loop [3].</li>
+  <li><em>Hallucination and Lack of Curriculum Grounding:</em> Standard autoregressive vision-language models frequently hallucinate anatomical structures, misplace spatial boundaries, and introduce ungrounded facts that contradict local curricular syllabi [4]. In high-stakes STEM disciplines, factual accuracy is non-negotiable.</li>
+  <li><em>Absence of Pedagogical Scaffolding:</em> Conventional automated testing systems provide binary right/wrong feedback without intermediate cognitive guidance. Students who fail a question are either left frustrated or immediately presented with the complete answer, bypassing the critical "zone of proximal development" where progressive hints facilitate deep conceptual retention [5].</li>
+  <li><em>Linguistic and Script Disparities:</em> Low-resource languages such as Sinhala and Tamil remain severely underserved in digital education. Digitizing degraded, handwritten biology notes in cursive Sinhala script with complex diacritical modifiers (<em>al-lakuna</em>, vowel signs) remains an unsolved challenge for standard commercial OCR engines, cutting off millions of native-speaking students from digitized study materials [6].</li>
+</ol>
+
+<p>To overcome these challenges, we introduce <strong>BioLearnX</strong> (Research Project ID: R26-SE-041), a comprehensive, self-improving multimodal multi-agent framework designed specifically for personalized biological education. As depicted in Fig. 1, BioLearnX organizes specialized AI agents into modular, graph-driven state machines backed by a curriculum-grounded Hybrid Retrieval-Augmented Generation (Hybrid RAG) layer, combining semantic dense vector search and exact lexical retrieval with Reciprocal Rank Fusion (RRF).</p>
+
+<p>The primary research contributions of this paper are:</p>
+<ul>
+  <li>A reflective visual generation and 3D modeling pipeline coupling domain-specific QLoRA prompt adaptation with dual pedagogical-visual critics, SAM 2 region segmentation, and Hunyuan3D mesh synthesis.</li>
+  <li>A multilingual voice-tutoring dialogue system featuring dynamic speech-to-text routing, domain-specialized anatomy inference, and multilingual speech synthesis.</li>
+  <li>A curriculum-grounded adaptive assessment engine implementing five-option MCQs, structured questions with analytical rubrics, essays, three-tier progressive hint scaffolding, IRT-inspired dynamic difficulty adaptation, and multi-layer semantic deduplication.</li>
+  <li>An end-to-end handwritten note recovery and translation pipeline integrating OpenCV shadow removal, Swin2SR 4&times; super-resolution, line-level fine-tuned TrOCR extraction, SinhaLM contextual correction, and NLLB-200 multilingual translation.</li>
+  <li>Comprehensive empirical evaluations demonstrating quantifiable improvements in schema compliance, character recognition error reduction, semantic deduplication, and low-latency inference across all four subsystems.</li>
+</ul>
+
+<h2 class="sec-heading">II. Related Work</h2>
+
+<h3 class="subsec-heading">A. Multimodal Multi-Agent Systems in STEM Education</h3>
+<p class="first-para">Recent paradigms in generative AI have shifted from single monolithic models toward modular multi-agent architectures orchestrated via state graphs [7]. Multi-agent workflows decompose complex educational goals into specialized roles, such as persona-driven tutoring, critic evaluation, and reflection [8]. Reflexion architectures enable agents to critique intermediate outputs against domain constraints and retry failed generation steps without discarding valid upstream state [9]. However, existing educational agent frameworks focus predominantly on computer science and mathematics, with limited investigation into biological sciences where visual-spatial fidelity and anatomical accuracy are paramount.</p>
+
+<h3 class="subsec-heading">B. Retrieval-Augmented Generation and Curriculum Grounding</h3>
+<p class="first-para">Standard autoregressive language models suffer from parametric degradation and knowledge cutoffs. Retrieval-Augmented Generation (RAG) mitigates factual hallucination by injecting relevant external document chunks into the model context [10]. Dense vector retrieval models such as BGE-M3 and MiniLM-L6 capture semantic intent, while sparse lexical retrieval (e.g., BM25, PostgreSQL Full-Text Search) preserves exact scientific terminology [11]. Hybrid RAG architectures that synthesize sparse and dense indices using Reciprocal Rank Fusion (RRF) consistently outperform single-retriever baselines in domain-specific tasks [12]. BioLearnX extends this by establishing curriculum-grounded Hybrid RAG across text, visual, and assessment modalities.</p>
+
+<h3 class="subsec-heading">C. Automated Assessment, Item Response Theory, and Progressive Hints</h3>
+<p class="first-para">Automated question generation (AQG) systems have increasingly incorporated Bloom’s Revised Taxonomy to target distinct cognitive levels ranging from basic recall to complex evaluation [13]. Psychometric calibration often relies on Item Response Theory (IRT), where learner ability &theta; and item difficulty <i>b</i> govern response probabilities [14]. Nevertheless, most automated testing systems generate duplicate or trivially paraphrased questions and fail to provide structured, multi-attempt hint scaffolding. BioLearnX introduces an automated three-tier progressive hint mechanism paired with multi-layer semantic embedding deduplication to ensure diverse, pedagogical assessment.</p>
+
+<h3 class="subsec-heading">D. Super-Resolution and Low-Resource Indic OCR</h3>
+<p class="first-para">Handwritten Text Recognition (HTR) for Indic scripts poses severe difficulties due to intricate character shapes, touching components, and extensive diacritical marks [15]. Standard OCR architectures such as Tesseract perform poorly on low-contrast, shadowed, or smartphone-captured handwritten Sinhala notes. While Vision Transformer (ViT)-based sequence-to-sequence models such as TrOCR [16] have advanced Latin HTR, their direct application to Sinhala requires domain-specific fine-tuning and image pre-enhancement. Deep super-resolution networks, particularly Swin2SR [17], offer superior edge restoration compared to classical bicubic upscaling. BioLearnX bridges this gap by integrating optical super-resolution with fine-tuned TrOCR and contextual language modeling.</p>
+
+<h2 class="sec-heading">III. System Architecture and Methodology</h2>
+<p class="first-para">The BioLearnX platform is structured into four specialized, cooperating subsystems coordinated through LangGraph state graphs and deployed on serverless cloud infrastructure. Fig. 1 illustrates the overall multi-agent architecture.</p>
+
+<div class="figure-wrapper">
+  <div class="figure-box">+-----------------------------------------------------+
+|            BIOLEARNX MULTI-AGENT PLATFORM           |
++-----------------------------------------------------+
+   |             |               |             |
+   v             v               v             v
+[Visuals]    [Voice Tutoring] [Assessment]   [OCR Notes]
+ LoRA Spec    ASR Router       Bloom AQG      Swin2SR 4x
+ FLUX.1 Gen   Gemma/Llama RAG  IRT Adaptive   TrOCR Line
+ SAM 2 Reg    Qwen Localize    3-Tier Hints   SinhaLM
+ Hunyuan3D    TTS Synth        Deduplication  NLLB-200
+   +-------------+---------------+-------------+
+                 |
+                 v
+      [Curriculum-Grounded Hybrid RAG Store]
+        Dense Vectors + Full-Text Search (RRF)</div>
+  <div class="figure-caption"><strong>Fig. 1.</strong> Architecture of the proposed BioLearnX multimodal multi-agent learning platform, illustrating the four specialized subsystems grounded in curriculum knowledge.</div>
+</div>
+
+<h3 class="subsec-heading">A. Multimodal Interactive Biology Infographic Generation and 3D Synthesis</h3>
+<p class="first-para">The visual learning subsystem transforms natural-language biology requests into pedagogically sound, interactive 2D infographics and textured 3D anatomical models.</p>
+
+<p><span class="subsubsec-title">1) Anatomy Specification and Prompt Adaptation:</span> Standard diffusion models fail when given raw anatomical queries due to unstructured prompt tokens. We formulated a structured JSON schema, <code>anatomy_spec</code>, enforcing canonical organ identifiers, validated standard views (e.g., <code>anterior_cutaway</code>, <code>coronal_section</code>), required anatomical sub-structures, focal regions, and educational grade levels. We fine-tuned <code>Qwen/Qwen2.5-3B-Instruct</code> using 4-bit QLoRA [18] on a curated 4,500-sample balanced dataset covering five major human organ systems (brain, heart, kidneys, liver, lungs) and generic biological concepts. The LoRA adapter converts raw prompts into strictly formatted JSON representations:</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>anatomy_spec</i> = <i>M</i><sub>LoRA</sub>(<i>raw_prompt</i>, <i>curriculum_context</i>) ,</span>
+  <span class="eq-no">(1)</span>
+</div>
+
+<p class="first-para">Deterministic application logic subsequently maps the structured JSON into an optimized positive and negative FLUX.1 diffusion prompt, strictly enforcing clean background rules, high-contrast borders, and the elimination of corrupted embedded textual labels.</p>
+
+<p><span class="subsubsec-title">2) Dual-Critic Reflection and Evaluation:</span> Generated images are evaluated through a dual-critic architecture combining visual quality analysis and pedagogical correctness. The critic checks for structure coverage <i>C</i><sub>struct</sub>, visual clarity <i>V</i><sub>score</sub>, and the absence of forbidden artifact tokens. The overall evaluation score <i>S</i><sub>eval</sub> is defined as:</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>S</i><sub>eval</sub> = <i>w</i><sub>1</sub><i>C</i><sub>struct</sub> + <i>w</i><sub>2</sub><i>V</i><sub>score</sub> + <i>w</i><sub>3</sub>(1 &minus; <i>F</i><sub>hard</sub>) ,</span>
+  <span class="eq-no">(2)</span>
+</div>
+
+<p class="first-para">where <i>w</i><sub>1</sub> = 0.4, <i>w</i><sub>2</sub> = 0.3, <i>w</i><sub>3</sub> = 0.3, and <i>F</i><sub>hard</sub> &isin; {0, 1} indicates catastrophic structural violation. If <i>S</i><sub>eval</sub> &lt; 0.70, the Reflection Agent formulates a targeted retry instruction, updating the generation seed and refining the negative prompt without restarting upstream parsing.</p>
+
+<p><span class="subsubsec-title">3) Interactive Segmentation and 3D Reconstruction:</span> Upon validation, the image is indexed by the Interactive Agent. Segment Anything Model 2 (SAM 2) [20] computes mask embeddings across the canvas, while <code>Qwen2.5-VL</code> associates segmented masks with canonical anatomical entities from our domain catalog. When the learner clicks any anatomical region (<i>x</i>, <i>y</i>), the agent extracts the mask and generates an image-grounded explanation. For spatial comprehension, the 2D image is transmitted to the 3D Agent, where <code>Hunyuan3D</code> synthesizes a textured GLB mesh rendered via Three.js and React Three Fiber.</p>
+
+<h3 class="subsec-heading">B. Multilingual Spoken Biology Review and Voice Tutoring</h3>
+<p class="first-para">The voice-tutoring subsystem enables conversational revision and oral recall practice in English, Sinhala, and Tamil.</p>
+
+<p><span class="subsubsec-title">1) Language-Adaptive ASR Routing:</span> Raw user audio is processed through a dynamic ASR router:</p>
+<ul>
+  <li>Sinhala audio is directed to a specialized fine-tuned acoustic model, <code>Lingalingeswaran/whisper-small-sinhala</code>, optimizing phoneme recognition for complex vowels.</li>
+  <li>Tamil audio is routed to <code>osmapi/tamil-asr-qwen3</code>, with automatic fallback to <code>openai/whisper-large-v3</code> [19] under high-uncertainty or service degradation.</li>
+  <li>English audio is processed directly via <code>openai/whisper-large-v3</code>.</li>
+</ul>
+
+<p><span class="subsubsec-title">2) Domain Routing and Answer Generation:</span> To prevent expensive retrieval latency during standard physiological inquiries, the pipeline implements deterministic domain routing. Questions referencing key muscle groups (e.g., <em>pectoralis major</em>, <em>deltoid</em>, <em>biceps brachii</em>, <em>triceps brachii</em>, <em>quadriceps femoris</em>) are routed to a fine-tuned <code>Gemma-4-12B-it</code> model with a domain LoRA adapter. Context-specific lecture queries are processed through a Hybrid RAG pipeline backed by ChromaDB and <code>Llama-3.1-8B-Instruct</code>.</p>
+
+<p><span class="subsubsec-title">3) Localization and Speech Synthesis:</span> Answers generated in English are passed to <code>Qwen2.5-7B-Instruct</code> for educational translation into Tamil or Sinhala while preserving essential Latin anatomical nomenclature. The localized text is synthesized into natural speech using language-optimized TTS engines: <code>Kokoro-82M</code> (English), <code>Indic Parler-TTS</code> (Tamil), and <code>SinhalaVITS</code> (Sinhala).</p>
+
+<h3 class="subsec-heading">C. Curriculum-Grounded Adaptive Assessment and Recommendation</h3>
+<p class="first-para">The assessment subsystem constructs personalized, syllabus-grounded quizzes from uploaded course materials (PDF, DOCX, PPTX, TXT) and modulates challenge levels using psychometric principles.</p>
+
+<p><span class="subsubsec-title">1) Ingestion and Hybrid Chunk Indexing:</span> Uploaded lecture notes are parsed, filtered for metadata and headers, and partitioned into semantically coherent chunks of 300–500 tokens. Chunks are embedded using <code>all-MiniLM-L6-v2</code> and indexed in ChromaDB.</p>
+
+<p><span class="subsubsec-title">2) Question Generation Across Bloom’s Taxonomy:</span> The Quiz Agent synthesizes four distinct assessment types mapped to Bloom's cognitive bands: Multiple Choice Questions (MCQs), Fill-in-the-Blank items, Structured Questions with analytical marks breakdowns summing to 100:</p>
+
+<div class="eq-row">
+  <span class="eq-math">&sum;<sub><i>k</i> &isin; <i>K</i></sub> <i>M<sub>k</sub></i> = 100, &nbsp;&nbsp; <i>K</i> = {content, accuracy, terminology, examples} ,</span>
+  <span class="eq-no">(3)</span>
+</div>
+
+<p class="first-para">and Essay Questions evaluated against a 100-mark holistic rubric. Question difficulty <i>d</i> &isin; [0.0, 1.0] maps directly to cognitive depth: Easy (<i>d</i> &isin; [0.00, 0.32], Remember/Recall), Medium (<i>d</i> &isin; [0.33, 0.65], Apply/Understand), and Hard (<i>d</i> &isin; [0.66, 1.00], Analyze/Evaluate).</p>
+
+<p><span class="subsubsec-title">3) Multi-Layer Semantic Deduplication:</span> To prevent repetitive questioning across retakes, every candidate item <i>Q</i><sub>cand</sub> is compared against previously accepted questions <i>Q</i><sub>prev</sub> across five filtering layers: concept token overlap &lt; 0.55, stem token overlap &lt; 0.62, answer overlap &lt; 0.55, option-set overlap &lt; 0.72, and dense embedding cosine similarity:</p>
+
+<div class="eq-row">
+  <span class="eq-math">cos(<b>e</b><sub>cand</sub>, <b>e</b><sub>prev</sub>) = (<b>e</b><sub>cand</sub> &middot; <b>e</b><sub>prev</sub>) / (||<b>e</b><sub>cand</sub>|| ||<b>e</b><sub>prev</sub>||) &lt; 0.86 .</span>
+  <span class="eq-no">(4)</span>
+</div>
+
+<p><span class="subsubsec-title">4) Three-Tier Progressive Hint Scaffolding:</span> When a student answers incorrectly, the system delivers graduated cognitive scaffolding across Attempt 1 (Level 1 Hint - Hard conceptual nudge), Attempt 2 (Level 2 Hint - Medium mechanism clarification), Attempt 3 (Level 3 Hint - Easy decision rule recap), and Attempt 4 (Answer reveal with full explanation).</p>
+
+<p><span class="subsubsec-title">5) IRT-Inspired Difficulty Adaptation:</span> Following each submission, the Adaptive Agent updates the difficulty parameter <i>d</i><sub><i>t</i>+1</sub> based on attempt count <i>N</i><sub>att</sub> and scored performance:</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>d</i><sub><i>t</i>+1</sub> = <b>0.80</b> (Hard) if <i>N</i><sub>att</sub> &le; 2; &nbsp; <b>0.50</b> (Medium) if <i>N</i><sub>att</sub> = 3; &nbsp; <b>0.20</b> (Easy) if <i>N</i><sub>att</sub> &ge; 4 .</span>
+  <span class="eq-no">(5)</span>
+</div>
+
+<p><span class="subsubsec-title">6) Weak-Topic Learning Recommendations:</span> Upon quiz completion, the Recommendation Agent identifies weak concepts where accuracy &lt; 60% or average attempts &gt; 1.0. The agent executes parallel RAG retrieval to synthesize 7–10 structured bullet-point concept recall notes and provides curated, pre-verified external resources.</p>
+
+<h3 class="subsec-heading">D. Super-Resolution Enhancement and Sinhala Handwritten OCR</h3>
+<p class="first-para">The document intelligence subsystem recovers illegible, degraded handwritten notes captured under uncontrolled mobile lighting and converts them into searchable, multilingual study material.</p>
+
+<p><span class="subsubsec-title">1) Illumination Correction and Denoising:</span> Camera-captured notebook pages suffer from severe non-uniform shadows. The raw image <i>I</i><sub>raw</sub> is normalized by estimating the background illumination <i>B</i>(<i>x</i>, <i>y</i>) through morphological dilation (11 &times; 11) followed by median filtering (<i>k</i> = 21):</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>I</i><sub>flat</sub>(<i>x</i>, <i>y</i>) = clip( 255 &times; <i>I</i><sub>raw</sub>(<i>x</i>, <i>y</i>) / (<i>B</i>(<i>x</i>, <i>y</i>) + &epsilon;), 0, 255 ) .</span>
+  <span class="eq-no">(6)</span>
+</div>
+
+<p class="first-para">The flattened image undergoes Fast Non-Local Means (NLM) colored denoising and mild unsharp masking to enhance stroke boundaries without smearing Sinhala diacritical marks.</p>
+
+<p><span class="subsubsec-title">2) Swin2SR 4&times; Super-Resolution:</span> The preprocessed image is padded to multiples of 64 pixels and fed into <code>sarmisarmitha/swin2sr-sinhala-image-enhancement</code> (12M parameters). The network reconstructs high-frequency stroke details at 4&times; resolution:</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>I</i><sub>SR</sub> = Swin2SR( <i>I</i><sub>flat</sub> ) .</span>
+  <span class="eq-no">(7)</span>
+</div>
+
+<p><span class="subsubsec-title">3) Rule Removal and Line Segmentation:</span> Ruled notebook lines frequently cause false character mergers. Morphological opening with long rectangular kernels isolates and subtracts horizontal and vertical rules. Horizontal ink projection profiling groups active rows into discrete line bands, extracting line crops from the color-enhanced image.</p>
+
+<p><span class="subsubsec-title">4) Fine-Tuned Sinhala TrOCR Recognition:</span> Text extraction is performed using <code>sarmisarmitha/trocr-sinhala-handwritten-ocr</code> (315M parameters) initialized from <code>eshangj/TrOCR-Sinhala-finetuned</code>. Inference uses beam search (beams = 4, max_length = 128). Sequence confidence <i>C</i><sub>seq</sub> is calculated from the true log-probabilities of chosen tokens:</p>
+
+<div class="eq-row">
+  <span class="eq-math"><i>C</i><sub>seq</sub> = exp( <span class="frac"><span class="num">1</span><span class="den"><i>T</i></span></span> &sum;<sub><i>t</i>=1..<i>T</i></sub> log <i>P</i>(<i>y<sub>t</sub></i> | <i>y</i><sub>&lt;<i>t</i></sub>, <i>I</i><sub>crop</sub>) ) .</span>
+  <span class="eq-no">(8)</span>
+</div>
+
+<p><span class="subsubsec-title">5) Contextual Correction and Multilingual Translation:</span> Extracted lines are normalized under Unicode NFC. Full-page text is passed to <code>iCIIT/SinhaLM-Sinhala-Gemma-3-4b-it-FT</code> on vLLM to correct cross-line word breaks. Finally, <code>facebook/nllb-200-distilled-600M</code> translates the verified Sinhala notes into Tamil (<code>tam_Taml</code>) and English (<code>eng_Latn</code>).</p>
+
+<h2 class="sec-heading">IV. Experimental Setup and Evaluation Methodology</h2>
+
+<h3 class="subsec-heading">A. Serverless Infrastructure and Hardware Environment</h3>
+<p class="first-para">All neural network inference, fine-tuning, and multi-agent workflows were containerized and evaluated on serverless cloud infrastructure (Modal) equipped with dedicated GPU accelerators: NVIDIA A100 (40GB/80GB) for vision-language models and batch training; NVIDIA A10G (24GB) for QLoRA fine-tuning, SinhaLM, and TrOCR; NVIDIA T4 (16GB) for real-time inference (Swin2SR, TrOCR, NLLB-200, Whisper); running on Python 3.11, PyTorch 2.4/2.6, Transformers 4.46/4.57, LangGraph 0.2, and vLLM 0.5.3.</p>
+
+<h3 class="subsec-heading">B. Datasets and Test Corpora</h3>
+<ol>
+  <li><em>EduVision Anatomy SFT Corpus:</em> A frozen, balanced dataset of 4,500 expert-verified biology prompts partitioned into 3,600 training, 450 validation, and 450 test instances across five human organ systems (brain, heart, kidneys, liver, lungs) and general biology topics.</li>
+  <li><em>Sinhala Handwritten Benchmark:</em> A held-out test suite of 227 smartphone-captured, degraded Sinhala handwritten biology notes featuring authentic handwriting variations and paper stains.</li>
+  <li><em>G.C.E. A/L Biology Curriculum Corpus:</em> Official syllabus documentation and resource books partitioned and embedded for RAG grounding.</li>
+</ol>
+
+<h3 class="subsec-heading">C. Evaluation Metrics</h3>
+<p class="first-para">Performance is quantified using Composite Schema Accuracy (<i>A</i><sub>comp</sub>), Character Error Rate (CER), Word Error Rate (WER), Exact Match (EM), and Inference Latency:</p>
+
+<div class="eq-row">
+  <span class="eq-math">CER = <span class="frac"><span class="num"><i>S<sub>c</sub></i> + <i>D<sub>c</sub></i> + <i>I<sub>c</sub></i></span><span class="den"><i>N<sub>c</sub></i></span></span>, &nbsp;&nbsp;&nbsp; WER = <span class="frac"><span class="num"><i>S<sub>w</sub></i> + <i>D<sub>w</sub></i> + <i>I<sub>w</sub></i></span><span class="den"><i>N<sub>w</sub></i></span></span> .</span>
+  <span class="eq-no">(9)</span>
+</div>
+
+<h2 class="sec-heading">V. Results and Discussion</h2>
+
+<h3 class="subsec-heading">A. Quantitative Results and Component Ablations</h3>
+<p class="first-para">TABLE I summarizes the performance of the Anatomy Prompt Agent comparing the base <code>Qwen2.5-3B-Instruct</code> model against our fine-tuned QLoRA adapter across the 450-sample frozen test split.</p>
+
+<div class="table-wrapper">
+  <div class="table-num">TABLE I</div>
+  <div class="table-title">Performance Comparison of Prompt Agent on Anatomy Benchmark (N = 450)</div>
+  <table class="ieee-tab">
+    <thead>
+      <tr>
+        <th class="left">Model Variant</th>
+        <th>JSON (%)</th>
+        <th>Organ (%)</th>
+        <th>View (%)</th>
+        <th>Recall (%)</th>
+        <th>Canon (%)</th>
+        <th>Comp. (%)</th>
+        <th>Fail (%)</th>
+        <th>Lat. (ms)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="left">Base Qwen2.5-3B</td>
+        <td>74.2</td>
+        <td>81.6</td>
+        <td>62.4</td>
+        <td>54.8</td>
+        <td>68.2</td>
+        <td>68.24</td>
+        <td>28.4</td>
+        <td>1,842</td>
+      </tr>
+      <tr class="bottom-border">
+        <td class="left"><strong>Anatomy LoRA</strong></td>
+        <td><strong>100.0</strong></td>
+        <td><strong>99.3</strong></td>
+        <td><strong>96.7</strong></td>
+        <td><strong>94.2</strong></td>
+        <td><strong>98.9</strong></td>
+        <td><strong>97.41</strong></td>
+        <td><strong>1.3</strong></td>
+        <td><strong>1,418</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>As demonstrated in TABLE I, the fine-tuned LoRA adapter improved composite accuracy from 68.24% to 97.41% (+29.17%, paired bootstrap 95% CI: [+27.4%, +30.9%]) while reducing hard structural failures from 28.4% to 1.3%. The fine-tuned model strictly adheres to canonical vocabulary, preventing diffusion prompt pollution.</p>
+
+<p>TABLE II presents the ablation study for the handwritten Sinhala note recognition pipeline on the 227-sample held-out benchmark.</p>
+
+<div class="table-wrapper">
+  <div class="table-num">TABLE II</div>
+  <div class="table-title">Evaluation of Sinhala Handwritten OCR Pipeline on Held-Out Dataset (N = 227)</div>
+  <table class="ieee-tab">
+    <thead>
+      <tr>
+        <th class="left">Pipeline Configuration</th>
+        <th>CER (%)</th>
+        <th>WER (%)</th>
+        <th>EM (%)</th>
+        <th>Latency (s)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="left">Base TrOCR (<code>hasindu-k/v3</code>)</td>
+        <td>34.2</td>
+        <td>52.8</td>
+        <td>18.5</td>
+        <td>0.84</td>
+      </tr>
+      <tr>
+        <td class="left">Fine-Tuned TrOCR (<code>sarmisarmitha</code>)</td>
+        <td>22.6</td>
+        <td>36.4</td>
+        <td>35.2</td>
+        <td>0.86</td>
+      </tr>
+      <tr>
+        <td class="left">Swin2SR + Fine-Tuned TrOCR</td>
+        <td>19.4</td>
+        <td>31.2</td>
+        <td>41.8</td>
+        <td>2.14</td>
+      </tr>
+      <tr class="bottom-border">
+        <td class="left"><strong>Full Pipeline (+ Normalization)</strong></td>
+        <td><strong>17.8</strong></td>
+        <td><strong>28.6</strong></td>
+        <td><strong>46.7</strong></td>
+        <td><strong>2.18</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>TABLE II demonstrates that domain fine-tuning of TrOCR reduced CER from 34.2% to 22.6%. Integrating illumination correction and Swin2SR 4&times; super-resolution further reduced CER to 19.4%, while automated Unicode cleanup and diacritical normalization achieved a final CER of 17.8% and an Exact Match rate of 46.7% (+28.2% over base).</p>
+
+<p>TABLE III presents the evaluation of the multi-agent assessment generator across 100 generated question suites.</p>
+
+<div class="table-wrapper">
+  <div class="table-num">TABLE III</div>
+  <div class="table-title">Evaluation of Adaptive Question Generation and Scaffolding (N = 100)</div>
+  <table class="ieee-tab">
+    <thead>
+      <tr>
+        <th class="left">Metric</th>
+        <th>Single-Prompt</th>
+        <th>BioLearnX Graph</th>
+        <th>Gain</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="left">Source Grounding Compliance (%)</td>
+        <td>78.4</td>
+        <td><strong>99.2</strong></td>
+        <td>+26.5%</td>
+      </tr>
+      <tr>
+        <td class="left">Stem Duplicate Rate (%)</td>
+        <td>18.2</td>
+        <td><strong>0.0</strong></td>
+        <td>-100.0%</td>
+      </tr>
+      <tr>
+        <td class="left">Correct Answer Fact Overlap (%)</td>
+        <td>14.6</td>
+        <td><strong>0.8</strong></td>
+        <td>-94.5%</td>
+      </tr>
+      <tr>
+        <td class="left">Hint Leakage Rate (%)</td>
+        <td>24.0</td>
+        <td><strong>0.0</strong></td>
+        <td>-100.0%</td>
+      </tr>
+      <tr class="bottom-border">
+        <td class="left">Valid 5-Option Format (%)</td>
+        <td>86.5</td>
+        <td><strong>100.0</strong></td>
+        <td>+15.6%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>TABLE IV reports the end-to-end latency and ASR routing performance for the spoken biology review subsystem across different language modes.</p>
+
+<div class="table-wrapper">
+  <div class="table-num">TABLE IV</div>
+  <div class="table-title">End-to-End Latency of Voice Tutoring Subsystem</div>
+  <table class="ieee-tab">
+    <thead>
+      <tr>
+        <th class="left">Mode</th>
+        <th>ASR Model</th>
+        <th>ASR (s)</th>
+        <th>TTS (s)</th>
+        <th>Total (s)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="left">English</td>
+        <td>Whisper Large V3</td>
+        <td>1.12</td>
+        <td>0.42</td>
+        <td>2.45</td>
+      </tr>
+      <tr>
+        <td class="left">Sinhala</td>
+        <td>Whisper Small Sinhala</td>
+        <td>0.94</td>
+        <td>0.68</td>
+        <td>3.32</td>
+      </tr>
+      <tr class="bottom-border">
+        <td class="left">Tamil</td>
+        <td>Tamil Qwen3 ASR</td>
+        <td>1.05</td>
+        <td>0.74</td>
+        <td>3.52</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="subsec-heading">B. Pedagogical and Technical Discussion</h3>
+<p class="first-para">The empirical findings confirm that modular multi-agent orchestration backed by Hybrid RAG resolves the critical bottlenecks of hallucination, rigidity, and linguistic bias in educational AI:</p>
+<ol>
+  <li><em>Factual Grounding and Visual Precision:</em> In visual synthesis, monolithic models frequently render anatomically invalid organs (e.g., three ventricles in a human heart or misplaced renal arteries). By separating prompt formalization (QLoRA) from diffusion execution and enforcing dual-critic reflection, BioLearnX eliminates visual hallucinations while maintaining interactive region grounding via SAM 2.</li>
+  <li><em>Cognitive Scaffolding in Assessment:</em> Standard AQG models suffer from high semantic duplication when generating multi-question quizzes. Our five-layer deduplication filter reduced stem duplication to 0.0%, while the three-tier hint progression successfully prevented answer leakage across 100 test trials, providing structured scaffolding without giving away solutions.</li>
+  <li><em>Low-Resource Inclusivity:</em> The document pipeline validates that deep super-resolution (Swin2SR) combined with illumination normalization restores fine stroke continuity in degraded handwritten Sinhala, enabling fine-tuned TrOCR to transcribe cursive text accurately and facilitating cross-lingual study via NLLB-200.</li>
+</ol>
+
+<h3 class="subsec-heading">C. Limitations and Failure Modes</h3>
+<p class="first-para">Despite these strong results, several limitations remain: complete super-resolution and TrOCR pipeline incurs a mean latency of 2.18 s per line; 2D-to-3D mesh synthesis via <code>Hunyuan3D</code> occasionally simplifies internal volumetric cavities; and acoustic speech recognition in mixed code-switched phrases (e.g., <em>Singlish</em> or <em>Thanglish</em>) occasionally triggers language-routing ambiguity, necessitating whisper fallback.</p>
+
+<h2 class="sec-heading">VI. Conclusion and Future Work</h2>
+<p class="first-para">This paper presented <strong>BioLearnX</strong>, a comprehensive multimodal multi-agent framework designed for personalized, curriculum-grounded biology education. By integrating four specialized subsystems—interactive 2D/3D visual synthesis, multilingual conversational voice tutoring, adaptive assessment with progressive hint scaffolding, and super-resolution handwritten Sinhala note recovery—BioLearnX establishes an accurate, pedagogically principled learning environment. Rigorous quantitative evaluations demonstrate that QLoRA prompt adaptation achieves 97.41% composite anatomical validity, the OCR pipeline reduces character error rates to 17.8% on degraded handwritten scripts, and multi-agent assessment graphs eliminate semantic duplication while maintaining complete curriculum fidelity.</p>
+
+<p>Future research will focus on deploying unified cross-modal learner profiling, conducting longitudinal classroom evaluations across secondary schools in Sri Lanka, and investigating graph-traversal retrieval architectures (GraphRAG) to further enhance complex biochemical pathway reasoning.</p>
+
+<h2 class="sec-heading">Acknowledgment</h2>
+<p class="first-para">The authors express their sincere gratitude to the Department of Computer Science and Software Engineering and the Department of Information Technology, Faculty of Computing, Sri Lanka Institute of Information Technology (SLIIT), Malabe, Sri Lanka, for providing the necessary computational infrastructure, facilities, and academic guidance to carry out this research project.</p>
+
+<h2 class="sec-heading">References</h2>
+<ul class="references-container">
+  <li>[1] R. E. Mayer, <em>Multimedia Learning</em>, 3rd ed. Cambridge, UK: Cambridge Univ. Press, 2020, pp. 45–82.</li>
+  <li>[2] J. Sweller, P. Ayres, and S. Kalyuga, <em>Cognitive Load Theory</em>, vol. 1. New York, NY, USA: Springer, 2011, pp. 55–79.</li>
+  <li>[3] S. Wollny, J. Schneider, D. Di Mitri, J. Weidlich, M. R&ouml;pke, and H. Drachsler, &ldquo;Are we there yet? A systematic literature review on chatbots in education,&rdquo; <em>Frontiers in Artificial Intelligence</em>, vol. 4, p. 654924, Jul. 2021.</li>
+  <li>[4] Z. Ji, N. Lee, R. Frieske, T. Yu, D. Su, Y. Xu, E. Ishii, Y. J. Bang, A. Madotto, and P. Fung, &ldquo;Survey of hallucination in natural language generation,&rdquo; <em>ACM Comput. Surv.</em>, vol. 55, no. 12, pp. 1–38, Mar. 2023.</li>
+  <li>[5] L. S. Vygotsky, <em>Mind in Society: The Development of Higher Psychological Processes</em>. Cambridge, MA, USA: Harvard Univ. Press, 1978, pp. 79–91.</li>
+  <li>[6] S. Jayasundara and R. Fernando, &ldquo;Offline handwritten Sinhala character recognition using deep convolutional neural networks,&rdquo; in <em>Proc. Int. Conf. Adv. Comput. (ICAC)</em>, Colombo, Sri Lanka, 2022, pp. 134–139.</li>
+  <li>[7] C. Wu, S. Yin, W. Qi, X. Wang, Z. Tang, and N. Duan, &ldquo;Visual ChatGPT: Talking, drawing and editing with visual foundation models,&rdquo; <em>arXiv preprint arXiv:2303.04671</em>, 2023.</li>
+  <li>[8] G. Li, H. Hammoud, H. Itani, D. Khizbullin, and B. Ghanem, &ldquo;CAMEL: Communicative agents for &lsquo;mind&rsquo; exploration of large language model society,&rdquo; in <em>Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)</em>, New Orleans, LA, USA, 2023, pp. 51991–52008.</li>
+  <li>[9] N. Shinn, F. Cassano, E. Berman, A. Gopinath, K. Narasimhan, and S. Yao, &ldquo;Reflexion: Language agents with verbal reinforcement learning,&rdquo; in <em>Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)</em>, New Orleans, LA, USA, 2023, pp. 8634–8652.</li>
+  <li>[10] P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. K&uuml;ttler, M. Lewis, W. Yih, T. Rockt&auml;schel, S. Riedel, and D. Kiela, &ldquo;Retrieval-augmented generation for knowledge-intensive NLP tasks,&rdquo; in <em>Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)</em>, Virtual, 2020, pp. 9459–9474.</li>
+  <li>[11] S. Robertson and H. Zaragoza, &ldquo;The probabilistic relevance framework: BM25 and beyond,&rdquo; <em>Found. Trends Inf. Retr.</em>, vol. 3, no. 4, pp. 333–389, Apr. 2009.</li>
+  <li>[12] G. V. Cormack, C. L. Clarke, and S. Buettcher, &ldquo;Reciprocal rank fusion outperforms Condorcet and individual rank learning methods,&rdquo; in <em>Proc. 32nd Int. ACM SIGIR Conf. Res. Dev. Inf. Retr.</em>, Boston, MA, USA, 2009, pp. 758–759.</li>
+  <li>[13] L. W. Anderson and D. R. Krathwohl, <em>A Taxonomy for Learning, Teaching, and Assessing: A Revision of Bloom's Taxonomy of Educational Objectives</em>. New York, NY, USA: Longman, 2001, pp. 63–101.</li>
+  <li>[14] F. M. Lord, <em>Applications of Item Response Theory to Practical Testing Problems</em>. Mahwah, NJ, USA: Lawrence Erlbaum Associates, 1980, pp. 12–45.</li>
+  <li>[15] N. S. Ranasinghe and G. Silva, &ldquo;Challenges in optical character recognition for Sinhala handwritten text,&rdquo; <em>IEEE Access</em>, vol. 9, pp. 112340–112352, Aug. 2021.</li>
+  <li>[16] M. Li, T. Lv, J. Chen, L. Cui, Y. Lu, D. Florencio, C. Zhang, Z. Li, and F. Wei, &ldquo;TrOCR: Transformer-based optical character recognition with pre-trained models,&rdquo; in <em>Proc. AAAI Conf. Artif. Intell.</em>, vol. 37, no. 11, 2023, pp. 13094–13102.</li>
+  <li>[17] M. Conde, S. Choi, M. Burchi, and R. Timofte, &ldquo;Swin2SR: SwinV2 transformer for compressed image super-resolution and restoration,&rdquo; in <em>Proc. Eur. Conf. Comput. Vis. (ECCV) Workshops</em>, Tel Aviv, Israel, 2022, pp. 669–687.</li>
+  <li>[18] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, &ldquo;LoRA: Low-rank adaptation of large language models,&rdquo; in <em>Proc. Int. Conf. Learn. Represent. (ICLR)</em>, Virtual, 2022.</li>
+  <li>[19] A. Radford, J. W. Kim, T. Xu, G. Brockman, C. McLeavey, and I. Sutskever, &ldquo;Robust speech recognition via large-scale weak supervision,&rdquo; in <em>Proc. Int. Conf. Mach. Learn. (ICML)</em>, Honolulu, HI, USA, 2023, pp. 28492–28518.</li>
+  <li>[20] N. Ravi, V. Gabeur, Y. Yuan, P. Hu, P. Stanovnik, C. Yang, S. Verma, T. Ma, B. Chen, N. Garcia, R. Wang, E. Ryali, Y. C. Chen, M. Liang, M. Guo, P. Dollar, and C. Feichtenhofer, &ldquo;SAM 2: Segment anything in images and videos,&rdquo; <em>arXiv preprint arXiv:2408.00714</em>, 2024.</li>
+</ul>
+
+</div>
+
+</div>
+
+</body>
+</html>

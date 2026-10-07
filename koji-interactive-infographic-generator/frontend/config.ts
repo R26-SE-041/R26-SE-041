@@ -29,3 +29,6 @@ export const BACKEND_URL =
 export const EVAL_AGENT_URL =
   process.env.EXPO_PUBLIC_EVAL_AGENT_URL ??
   "https://agal-koji--eval-agent-api.modal.run";
+
+export const SKETCH_AGENT_URL = process.env.EXPO_PUBLIC_SKETCH_AGENT_URL ??
+  "https://agal-koji--sketch-agent-api.modal.run";

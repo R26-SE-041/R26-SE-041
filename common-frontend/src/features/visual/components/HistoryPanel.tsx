@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import SketchCanvas from "./SketchCanvas";
 import Icon from "./Icon";
-import ThreeDViewer from "./ThreeDViewer";
+const ThreeDViewer = React.lazy(() => import("./ThreeDViewer"));
 import { clearHistory, deleteHistoryItem, GenerationHistoryItem, listHistory } from "../historyStorage";
 import { makeSharedStyles, useAppTheme } from "../theme";
 
@@ -14,15 +14,17 @@ function download(item: GenerationHistoryItem) {
   anchor.click();
 }
 
-interface HistoryPanelProps { onResume?: (item: GenerationHistoryItem) => void }
+interface HistoryPanelProps { userId: string; onResume?: (item: GenerationHistoryItem) => void }
 
-export default function HistoryPanel({ onResume }: HistoryPanelProps) {
+export default function HistoryPanel({ onResume, userId }: HistoryPanelProps) {
   const { colors } = useAppTheme();
   const shared = makeSharedStyles(colors);
   const styles = makeStyles(colors);
   const [items, setItems] = useState<GenerationHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GenerationHistoryItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const chats = React.useMemo(() => {
     const grouped = new Map<string, GenerationHistoryItem[]>();
     items.forEach((item) => {
@@ -34,29 +36,31 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    try { setItems(await listHistory()); } finally { setLoading(false); }
-  }, []);
+    setError(null);
+    try { setItems(await listHistory(userId)); } catch (caught) { setError(caught instanceof Error ? caught.message : "History could not be loaded."); } finally { setLoading(false); }
+  }, [userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   const remove = async (id: string) => {
-    await deleteHistoryItem(id);
-    setItems((current) => current.filter((item) => item.id !== id));
-    if (selected?.id === id) setSelected(null);
+    try { await deleteHistoryItem(id, userId); setItems((current) => current.filter((item) => item.id !== id)); if (selected?.id === id) setSelected(null); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "History entry could not be removed."); }
   };
 
   const clear = async () => {
-    await clearHistory();
-    setItems([]);
-    setSelected(null);
+    if (!confirmClear) { setConfirmClear(true); return; }
+    try { await clearHistory(userId); setItems([]); setSelected(null); setConfirmClear(false); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "History could not be cleared."); }
   };
 
   return (
     <View style={styles.section}>
       <View style={styles.header}>
         <View><Text style={styles.eyebrow}>LOCAL ARCHIVE</Text><Text style={styles.title}>Generation history</Text><Text style={styles.subtitle}>Stored only in this browser. Up to 50 creations.</Text></View>
-        {!!items.length && <Pressable onPress={() => void clear()} style={styles.clearButton}><Text style={styles.clearText}>Clear all</Text></Pressable>}
+        {!!items.length && <Pressable onPress={() => void clear()} style={styles.clearButton}><Text style={styles.clearText}>{confirmClear ? "Confirm clear all" : "Clear all"}</Text></Pressable>}
       </View>
+      {error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}
+      {confirmClear && <Pressable onPress={() => setConfirmClear(false)}><Text style={styles.subtitle}>This permanently removes your local visual archive. Cancel</Text></Pressable>}
       {loading && <View style={[shared.card, styles.empty]}><ActivityIndicator color={colors.primary} /><Text style={styles.subtitle}>Opening your local archive…</Text></View>}
       {!loading && !items.length && <View style={[shared.card, styles.empty]}><Icon color={colors.primary} name="layers" size={28} /><Text style={styles.emptyTitle}>No saved generations yet</Text><Text style={styles.subtitle}>Your next successful image will appear here automatically.</Text></View>}
       {selected && (
@@ -80,7 +84,7 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
           {!!selected.anatomyAnnotations?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Verified anatomy labels</Text><View style={styles.labels}>{selected.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View></View>}
           {selected.evaluation && <Text style={styles.score}>Visual {selected.evaluation.visualScore.toFixed(1)} · Educational {selected.evaluation.pedagogicalScore.toFixed(1)}</Text>}
           {!!selected.interactions?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Questions &amp; answers</Text>{selected.interactions.map((interaction) => <View key={interaction.id} style={styles.qaTurn}><Text style={styles.prompt}>{interaction.question || (interaction.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text><Text style={styles.detailText}>{interaction.answer}</Text></View>)}</View>}
-          {selected.glbBase64 ? <View style={styles.modelSection}><Text style={styles.detailLabel}>Interactive 3D model</Text><ThreeDViewer glbBase64={selected.glbBase64} sizeKb={selected.glbSizeKb} /></View> : <Text style={styles.subtitle}>{selected.threeDJob?.status === "converting" ? "3D conversion was started. Continue chat to retrieve or retry it." : selected.threeDJob?.status === "failed" ? `3D conversion failed: ${selected.threeDJob.error ?? "Please retry"}` : "No 3D model was created for this image."}</Text>}
+          {selected.glbBase64 ? <View style={styles.modelSection}><Text style={styles.detailLabel}>Interactive 3D model</Text><React.Suspense fallback={<Text style={styles.subtitle}>Opening the 3D viewer…</Text>}><ThreeDViewer glbBase64={selected.glbBase64} sizeKb={selected.glbSizeKb} /></React.Suspense></View> : <Text style={styles.subtitle}>{selected.threeDJob?.status === "converting" ? "3D conversion was started. Continue chat to retrieve or retry it." : selected.threeDJob?.status === "failed" ? `3D conversion failed: ${selected.threeDJob.error ?? "Please retry"}` : "No 3D model was created for this image."}</Text>}
         </View>
       )}
       <View style={styles.grid}>

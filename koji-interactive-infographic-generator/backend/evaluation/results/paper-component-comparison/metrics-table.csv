@@ -1,0 +1,5 @@
+"score","range","measuring_model","raw_n","raw_mean","raw_sd","pipeline_n","pipeline_mean","pipeline_sd","paired_n","paired_delta_mean","paired_delta_sd"
+"CLIPScore","0–100; higher is better","openai/clip-vit-base-patch16","5","31.823294830322265","1.1675835841055058","5","31.056311798095702","1.2760851083748628","5","-0.7669830322265625","0.5549786602223158"
+"Prompt alignment / Visual score","0–10","Qwen2.5-VL-7B-Instruct","5","9","0","5","9","0","5","0","0"
+"Educational usefulness / Pedagogical score","0–10","Qwen2.5-VL-7B-Instruct","5","9","0","5","9","0","5","0","0"
+"VLM score","0–10","Mean of the two Qwen-VL scores","5","9","0","5","9","0","5","0","0"

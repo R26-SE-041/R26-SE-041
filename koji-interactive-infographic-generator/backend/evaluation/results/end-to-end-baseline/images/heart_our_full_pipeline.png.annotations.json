@@ -1,0 +1,146 @@
+[
+  {
+    "structure_id": "auto.aorta",
+    "label": "Aorta",
+    "anchor_x": 0.25,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.166015625,
+      0.166015625,
+      0.333984375,
+      0.333984375
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R1",
+    "label_x": 0.02,
+    "label_y": 0.25
+  },
+  {
+    "structure_id": "auto.atrioventricular_node",
+    "label": "atrioventricular node",
+    "anchor_x": 0.25,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.166015625,
+      0.5,
+      0.333984375,
+      0.666015625
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R9",
+    "label_x": 0.02,
+    "label_y": 0.58203125
+  },
+  {
+    "structure_id": "auto.pulmonary_artery",
+    "label": "Pulmonary artery",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.333984375,
+      0.166015625,
+      0.5,
+      0.333984375
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R2",
+    "label_x": 0.02,
+    "label_y": 0.31700000000000006
+  },
+  {
+    "structure_id": "auto.atrioventricular_bundle",
+    "label": "atrioventricular bundle",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.333984375,
+      0.333984375,
+      0.5,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R6",
+    "label_x": 0.02,
+    "label_y": 0.416015625
+  },
+  {
+    "structure_id": "auto.left_bundle_branch",
+    "label": "left bundle branch",
+    "anchor_x": 0.58203125,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.5,
+      0.333984375,
+      0.666015625,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R7",
+    "label_x": 0.7,
+    "label_y": 0.416015625
+  },
+  {
+    "structure_id": "auto.right_bundle_branch",
+    "label": "right bundle branch",
+    "anchor_x": 0.75,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.666015625,
+      0.333984375,
+      0.833984375,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R8",
+    "label_x": 0.7,
+    "label_y": 0.483015625
+  },
+  {
+    "structure_id": "auto.right_atrium",
+    "label": "right atrium",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.333984375,
+      0.5,
+      0.5,
+      0.666015625
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R10",
+    "label_x": 0.02,
+    "label_y": 0.6490312500000001
+  },
+  {
+    "structure_id": "auto.left_ventricle",
+    "label": "left ventricle",
+    "anchor_x": 0.58203125,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.5,
+      0.5,
+      0.666015625,
+      0.666015625
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R11",
+    "label_x": 0.7,
+    "label_y": 0.58203125
+  }
+]

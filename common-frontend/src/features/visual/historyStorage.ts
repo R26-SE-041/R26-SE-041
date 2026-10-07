@@ -17,6 +17,7 @@ export interface SketchGenerationMetadata {
   height: number;
 }
 
+
 export interface GenerationHistoryItem {
   id: string;
   createdAt: string;
@@ -60,15 +61,16 @@ export interface GenerationInteraction {
   answer: string;
 }
 
-const DATABASE_NAME = "eduvision-local";
+const DATABASE_NAME = "biolearnx-common-visual";
 const STORE_NAME = "generation-history";
 const DATABASE_VERSION = 1;
 const MAX_HISTORY_ITEMS = 50;
 
-function openDatabase(): Promise<IDBDatabase | null> {
+async function openDatabase(userId: string): Promise<IDBDatabase | null> {
+  if (!userId) throw new Error("Sign in to access visual history.");
   if (typeof indexedDB === "undefined") return Promise.resolve(null);
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    const request = indexedDB.open(`${DATABASE_NAME}:${userId}`, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(STORE_NAME)) {
@@ -89,8 +91,8 @@ function complete(transaction: IDBTransaction): Promise<void> {
   });
 }
 
-export async function listHistory(): Promise<GenerationHistoryItem[]> {
-  const database = await openDatabase();
+export async function listHistory(userId: string): Promise<GenerationHistoryItem[]> {
+  const database = await openDatabase(userId);
   if (!database) return [];
   return new Promise<GenerationHistoryItem[]>((resolve, reject) => {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
@@ -101,8 +103,8 @@ export async function listHistory(): Promise<GenerationHistoryItem[]> {
   }).finally(() => database.close());
 }
 
-export async function saveHistoryItem(item: GenerationHistoryItem): Promise<void> {
-  const database = await openDatabase();
+export async function saveHistoryItem(item: GenerationHistoryItem, userId: string): Promise<void> {
+  const database = await openDatabase(userId);
   if (!database) return;
   const transaction = database.transaction(STORE_NAME, "readwrite");
   const store = transaction.objectStore(STORE_NAME);
@@ -116,8 +118,8 @@ export async function saveHistoryItem(item: GenerationHistoryItem): Promise<void
   database.close();
 }
 
-export async function deleteHistoryItem(id: string): Promise<void> {
-  const database = await openDatabase();
+export async function deleteHistoryItem(id: string, userId: string): Promise<void> {
+  const database = await openDatabase(userId);
   if (!database) return;
   const transaction = database.transaction(STORE_NAME, "readwrite");
   transaction.objectStore(STORE_NAME).delete(id);
@@ -128,8 +130,9 @@ export async function deleteHistoryItem(id: string): Promise<void> {
 export async function updateHistoryItem(
   id: string,
   patch: Partial<Omit<GenerationHistoryItem, "id" | "createdAt">>,
+  userId: string,
 ): Promise<void> {
-  const database = await openDatabase();
+  const database = await openDatabase(userId);
   if (!database) return;
   const transaction = database.transaction(STORE_NAME, "readwrite");
   const store = transaction.objectStore(STORE_NAME);
@@ -141,8 +144,8 @@ export async function updateHistoryItem(
   database.close();
 }
 
-export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction): Promise<void> {
-  const database = await openDatabase();
+export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction, userId: string): Promise<void> {
+  const database = await openDatabase(userId);
   if (!database) return;
   const transaction = database.transaction(STORE_NAME, "readwrite");
   const store = transaction.objectStore(STORE_NAME);
@@ -157,8 +160,8 @@ export async function appendHistoryInteraction(id: string, interaction: Generati
   database.close();
 }
 
-export async function clearHistory(): Promise<void> {
-  const database = await openDatabase();
+export async function clearHistory(userId: string): Promise<void> {
+  const database = await openDatabase(userId);
   if (!database) return;
   const transaction = database.transaction(STORE_NAME, "readwrite");
   transaction.objectStore(STORE_NAME).clear();

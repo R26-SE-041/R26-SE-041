@@ -1,0 +1,146 @@
+[
+  {
+    "structure_id": "auto.clavicle",
+    "label": "Clavicle",
+    "anchor_x": 0.25,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.166015625,
+      0.166015625,
+      0.333984375,
+      0.333984375
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R1",
+    "label_x": 0.02,
+    "label_y": 0.25
+  },
+  {
+    "structure_id": "auto.rectum",
+    "label": "Rectum",
+    "anchor_x": 0.25,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.166015625,
+      0.5,
+      0.333984375,
+      0.666015625
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R9",
+    "label_x": 0.02,
+    "label_y": 0.58203125
+  },
+  {
+    "structure_id": "auto.sternal_notch",
+    "label": "Sternal notch",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.333984375,
+      0.166015625,
+      0.5,
+      0.333984375
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R2",
+    "label_x": 0.02,
+    "label_y": 0.31700000000000006
+  },
+  {
+    "structure_id": "auto.sternum",
+    "label": "Sternum",
+    "anchor_x": 0.58203125,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.5,
+      0.166015625,
+      0.666015625,
+      0.333984375
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R3",
+    "label_x": 0.7,
+    "label_y": 0.25
+  },
+  {
+    "structure_id": "auto.pectoralis_major_muscle",
+    "label": "pectoralis major muscle",
+    "anchor_x": 0.25,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.166015625,
+      0.333984375,
+      0.333984375,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R5",
+    "label_x": 0.02,
+    "label_y": 0.416015625
+  },
+  {
+    "structure_id": "auto.small_intestine",
+    "label": "Small Intestine",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.333984375,
+      0.5,
+      0.5,
+      0.666015625
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R10",
+    "label_x": 0.02,
+    "label_y": 0.6490312500000001
+  },
+  {
+    "structure_id": "auto.anus",
+    "label": "Anus",
+    "anchor_x": 0.75,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.666015625,
+      0.5,
+      0.833984375,
+      0.666015625
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R12",
+    "label_x": 0.7,
+    "label_y": 0.58203125
+  },
+  {
+    "structure_id": "auto.abdominal_wall",
+    "label": "abdominal wall",
+    "anchor_x": 0.25,
+    "anchor_y": 0.75,
+    "bbox": [
+      0.166015625,
+      0.666015625,
+      0.333984375,
+      0.833984375
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R13",
+    "label_x": 0.02,
+    "label_y": 0.75
+  }
+]

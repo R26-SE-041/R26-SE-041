@@ -1,3 +1,4 @@
+import { api, authenticatedFetch as fetch } from "../../api";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,7 +18,7 @@ import { SketchStroke, SketchGenerationMetadata } from "./historyStorage";
 import InteractiveCanvas from "./components/InteractiveCanvas";
 import FeedbackControls, { createOutputId, FeedbackReason } from "./components/FeedbackControls";
 import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
-import ThreeDViewer from "./components/ThreeDViewer";
+const ThreeDViewer = React.lazy(() => import("./components/ThreeDViewer"));
 import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
 import { appendHistoryInteraction, GenerationHistoryItem, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
@@ -138,7 +139,7 @@ const THREED_POLL_INTERVAL_MS = 3_000;
 // The Modal worker allows 60 minutes. Stop polling slightly earlier so the UI
 // can report a controlled timeout instead of surfacing a platform task kill.
 const THREED_MAX_WAIT_MS = 55 * 60 * 1_000;
-const THREED_ACTIVE_JOB_KEY = "eduvision:active-3d-conversion";
+const THREED_ACTIVE_JOB_KEY = "biolearnx-common:active-3d-conversion";
 const ESTIMATED_WARM_WINDOW_MS = 5 * 60 * 1_000;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -152,30 +153,30 @@ function imageFingerprint(imageBase64: string): string {
   return `${imageBase64.length}:${imageBase64.slice(0, 24)}:${imageBase64.slice(-24)}`;
 }
 
-function readStoredThreeDJob(): StoredThreeDJob | null {
+function readStoredThreeDJob(userId: string): StoredThreeDJob | null {
   if (Platform.OS !== "web" || typeof window === "undefined") return null;
   try {
-    const value = window.localStorage.getItem(THREED_ACTIVE_JOB_KEY);
+    const value = window.localStorage.getItem(`${THREED_ACTIVE_JOB_KEY}:${userId}`);
     return value ? JSON.parse(value) as StoredThreeDJob : null;
   } catch {
     return null;
   }
 }
 
-function storeThreeDJob(job: StoredThreeDJob): void {
+function storeThreeDJob(job: StoredThreeDJob, userId: string): void {
   if (Platform.OS !== "web" || typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(THREED_ACTIVE_JOB_KEY, JSON.stringify(job));
+    window.localStorage.setItem(`${THREED_ACTIVE_JOB_KEY}:${userId}`, JSON.stringify(job));
   } catch {
     // Storage can be disabled in private/restricted browser contexts. The
     // synchronous in-memory guard still prevents duplicate clicks.
   }
 }
 
-function clearStoredThreeDJob(): void {
+function clearStoredThreeDJob(userId: string): void {
   if (Platform.OS !== "web" || typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(THREED_ACTIVE_JOB_KEY);
+    window.localStorage.removeItem(`${THREED_ACTIVE_JOB_KEY}:${userId}`);
   } catch {
     // Nothing else to clean up when browser storage is unavailable.
   }
@@ -250,13 +251,13 @@ function threeDApiError(response: Response, payload: unknown, raw: string, fallb
   return errorMessage(payload, fallback);
 }
 
-interface AppProps { accessToken?: string }
+interface AppProps { accessToken?: string; userId: string }
 
-export default function App({ accessToken }: AppProps) {
-  return <ThemeProvider><Home accessToken={accessToken} /></ThemeProvider>;
+export default function App({ accessToken, userId }: AppProps) {
+  return <ThemeProvider><Home accessToken={accessToken} userId={userId} /></ThemeProvider>;
 }
 
-function Home({ accessToken }: AppProps) {
+function Home({ accessToken, userId }: AppProps) {
   const { colors, mode: themeMode, toggleTheme } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -300,6 +301,8 @@ function Home({ accessToken }: AppProps) {
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const currentChatId = useRef<string | null>(null);
   const threedRequestInFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const workspaceSnapshots = useRef<Partial<Record<"general" | "anatomy" | "sketch", {
     sketchStrokes: SketchStroke[]; sketchStrength: number; sketchMetadata?: SketchGenerationMetadata;
     prompt: string; stage: Stage; speedMode: SpeedMode; enhancedPrompt: string | null;
@@ -310,6 +313,7 @@ function Home({ accessToken }: AppProps) {
   }>>>({});
 
   const isLoading = stage === "enhancing" || stage === "generating" || threedStage === "converting";
+  const workspaceBusy = isLoading;
   // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
   // must not incorrectly mark a healthy 3D service as offline.
   const displayedThreeDHealth: Health = threedHealth;
@@ -459,7 +463,7 @@ function Home({ accessToken }: AppProps) {
     try {
       const chatId = currentChatId.current ?? createOutputId("chat");
       currentChatId.current = chatId;
-      const version = (await listHistory()).filter((item) => (item.chatId ?? item.id) === chatId).length + 1;
+      const version = (await listHistory(userId)).filter((item) => (item.chatId ?? item.id) === chatId).length + 1;
       await saveHistoryItem({
         id,
         createdAt: new Date().toISOString(),
@@ -477,7 +481,7 @@ function Home({ accessToken }: AppProps) {
           pedagogicalScore: result.evaluation.pedagogicalScore,
           feedback: result.evaluation.feedback,
         } : null,
-      });
+      }, userId);
       setCurrentHistoryId(id);
       return id;
     } catch {
@@ -494,7 +498,7 @@ function Home({ accessToken }: AppProps) {
     setWorkspace(nextWorkspace);
     setPrompt(item.prompt);
     if (item.threeDJob?.status === "converting") {
-      storeThreeDJob({ requestId: item.threeDJob.requestId, imageFingerprint: imageFingerprint(item.imageBase64), speedMode: item.speedMode });
+      storeThreeDJob({ requestId: item.threeDJob.requestId, imageFingerprint: imageFingerprint(item.imageBase64), speedMode: item.speedMode }, userId);
     }
     setSketchStrokes(item.sketchStrokes ?? []); setSketchMetadata(item.sketchMetadata);
     setSketchStrength(item.sketchMetadata?.control_strength ?? 0.85);
@@ -915,7 +919,7 @@ function Home({ accessToken }: AppProps) {
       setStage("done");
       const historyId = await archiveResult(result);
       void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
-        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
+        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }, userId).catch(() => undefined) : undefined,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Image generation failed");
@@ -994,7 +998,7 @@ function Home({ accessToken }: AppProps) {
       setStage("done");
       const historyId = await archiveResult(result);
       void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
-        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
+        historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }, userId).catch(() => undefined) : undefined,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Image regeneration failed");
@@ -1007,18 +1011,18 @@ function Home({ accessToken }: AppProps) {
     threedRequestInFlight.current = true;
     const conversionHistoryId = currentHistoryId;
     const fingerprint = imageFingerprint(imageBase64);
-    const storedJob = readStoredThreeDJob();
+    const storedJob = readStoredThreeDJob(userId);
     const requestId = storedJob?.imageFingerprint === fingerprint && storedJob.speedMode === speedMode
       ? storedJob.requestId
       : createRequestId();
-    storeThreeDJob({ requestId, imageFingerprint: fingerprint, speedMode });
+    storeThreeDJob({ requestId, imageFingerprint: fingerprint, speedMode }, userId);
     const conversionStartedAt = Date.now();
     setActiveTimers((current) => ({ ...current, threed: conversionStartedAt }));
     setThreedStage("converting");
     setThreedError(null);
     setGlbBase64(null);
     try {
-      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "converting", requestId } });
+      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "converting", requestId } }, userId);
       let response: Response;
       try {
         response = await fetch(`${THREED_AGENT_URL}/convert/start`, {
@@ -1037,16 +1041,17 @@ function Home({ accessToken }: AppProps) {
       }
       const { payload: started, raw: startedRaw } = await readApiResponse(response);
       if (!response.ok) {
-        if (response.status >= 400 && response.status < 500) clearStoredThreeDJob();
+        if (response.status >= 400 && response.status < 500) clearStoredThreeDJob(userId);
         throw new Error(threeDApiError(response, started, startedRaw, `3D Convert HTTP ${response.status}`));
       }
       const callId = typeof started.call_id === "string" ? started.call_id : null;
       if (!callId) throw new Error("3D agent did not return a job ID");
-      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "converting", requestId, callId } });
+      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "converting", requestId, callId } }, userId);
 
       const deadline = Date.now() + THREED_MAX_WAIT_MS;
-      while (Date.now() < deadline) {
+      while (mounted.current && Date.now() < deadline) {
         await delay(THREED_POLL_INTERVAL_MS);
+        if (!mounted.current) return;
         let resultResponse: Response;
         try {
           resultResponse = await fetch(
@@ -1060,26 +1065,26 @@ function Home({ accessToken }: AppProps) {
         if (resultResponse.status === 202) continue;
         const { payload: data, raw: resultRaw } = await readApiResponse(resultResponse);
         if (!resultResponse.ok) {
-          clearStoredThreeDJob();
+          clearStoredThreeDJob(userId);
           throw new Error(threeDApiError(resultResponse, data, resultRaw, `3D Result HTTP ${resultResponse.status}`));
         }
         if (data.error) {
-          clearStoredThreeDJob();
+          clearStoredThreeDJob(userId);
           throw new Error(String(data.error));
         }
         const generatedGlb = typeof data.glb_base64 === "string" ? data.glb_base64 : null;
         const generatedSizeKb = typeof data.size_kb === "number" ? data.size_kb : undefined;
         if (!generatedGlb) {
-          clearStoredThreeDJob();
+          clearStoredThreeDJob(userId);
           throw new Error("Empty GLB response");
         }
         setGlbBase64(generatedGlb);
         setGlbSizeKb(generatedSizeKb);
         setThreedStage("done");
-        clearStoredThreeDJob();
+        clearStoredThreeDJob(userId);
         markWarm("threed");
         if (conversionHistoryId) {
-          await updateHistoryItem(conversionHistoryId, { glbBase64: generatedGlb, glbSizeKb: generatedSizeKb, threeDJob: { status: "done", requestId, callId } });
+          await updateHistoryItem(conversionHistoryId, { glbBase64: generatedGlb, glbSizeKb: generatedSizeKb, threeDJob: { status: "done", requestId, callId } }, userId);
         }
         return;
       }
@@ -1087,7 +1092,7 @@ function Home({ accessToken }: AppProps) {
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "3D conversion failed";
       setThreedError(message);
-      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "failed", requestId, error: message } }).catch(() => undefined);
+      if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "failed", requestId, error: message } }, userId).catch(() => undefined);
       setThreedStage("idle");
     } finally {
       threedRequestInFlight.current = false;
@@ -1106,8 +1111,24 @@ function Home({ accessToken }: AppProps) {
       ? `Sending your raw prompt directly to FLUX.1-dev on ${speed.imageGpu}...`
       : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
 
+  const generateGuided = async () => {
+    if (!prompt.trim() || workspaceBusy) return;
+    reset(); currentChatId.current = createOutputId("chat"); setStage("generating");
+    try {
+      const response = await api<{ image_base64: string | null; enhanced_prompt: string | null; anatomy_spec: AnatomySpec; retry_count: number; error: string | null; eval_scores: { clip_score: number | null; vlm_score: number | null; visual_score: number | null; pedagogical_score: number | null; vlm_feedback: string | null; anatomy_hard_failures: string[] } }>("visual", "/generate", { prompt: prompt.trim(), speed_mode: speedMode });
+      if (!response.image_base64) throw new Error(response.error || "The workflow did not return an image.");
+      const anatomy = response.anatomy_spec || { is_anatomy: false }, finalPrompt = response.enhanced_prompt || prompt.trim();
+      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: finalPrompt, anatomy_spec: anatomy, route: anatomy.is_anatomy ? "anatomy" : "generic" };
+      const scores = response.eval_scores;
+      const evaluated: EvaluationResult | null = scores.visual_score != null && scores.pedagogical_score != null ? { clipScore: scores.clip_score, vlmScore: scores.vlm_score, visualScore: scores.visual_score, pedagogicalScore: scores.pedagogical_score, feedback: scores.vlm_feedback || "", anatomyHardFailures: scores.anatomy_hard_failures || [] } : null;
+      setImageBase64(response.image_base64); setEnhancedPrompt(finalPrompt); setEnhancedPromptJson(payload); setAnatomySpec(anatomy); setEvaluation(evaluated); setEvaluationRetries(response.retry_count); setEvaluationWarning(response.error); setImageOutputId(createOutputId("image")); setPromptOutputId(createOutputId("prompt")); setStage("done");
+      const historyId = await archiveResult({ image: response.image_base64, prompt: finalPrompt, anatomy, payload, evaluation: evaluated, retryCount: response.retry_count, warning: response.error });
+      if (anatomy.is_anatomy) { const annotations = await localizeAnatomy(response.image_base64, anatomy); if (historyId) await updateHistoryItem(historyId, { anatomyAnnotations: annotations }, userId); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Guided generation failed."); setStage("idle"); }
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
       <View pointerEvents="none" style={styles.ambientTop} />
       <View pointerEvents="none" style={styles.ambientBottom} />
@@ -1122,20 +1143,14 @@ function Home({ accessToken }: AppProps) {
           <Text style={styles.floatingNewPromptText}>New chat</Text>
         </Pressable>
       )}
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+      <View>
+        <View style={styles.scrollContent}>
           <View style={styles.container}>
             <View style={styles.header}>
               <View style={styles.topBar}>
                 <View style={styles.brandRow}>
                   <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
-                  <Text style={styles.brand}>EduVision</Text>
+                  <Text style={styles.brand}>Visual studio</Text>
                 </View>
                 <Pressable
                   accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
@@ -1157,7 +1172,7 @@ function Home({ accessToken }: AppProps) {
                 <View style={styles.systemGlass}>
                   <View style={styles.systemHeader}>
                     <View><Text style={styles.systemKicker}>STUDIO STATUS</Text><Text style={styles.systemTitle}>Creative engine</Text></View>
-                    <View style={styles.liveBadge}><StatusDot color={colors.success} /><Text style={styles.liveBadgeText}>Live</Text></View>
+                    <View style={styles.liveBadge}><StatusDot color={[promptHealth, imageHealth, evalHealth, interactiveHealth, threedHealth].every(value => value === "ok") ? colors.success : colors.warning} /><Text style={styles.liveBadgeText}>{[promptHealth, imageHealth, evalHealth, interactiveHealth, threedHealth].every(value => value === "ok") ? "Ready" : "Check status"}</Text></View>
                   </View>
                   <View style={[shared.wrap, styles.healthWrap]}>
                     <HealthPill label="Prompt" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
@@ -1218,7 +1233,7 @@ function Home({ accessToken }: AppProps) {
               </Pressable>
             </View>
 
-            {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
+            {workspace === "history" ? <HistoryPanel onResume={restoreHistory} userId={userId} /> : <>
             {workspace !== "sketch" && <View style={styles.speedSection}>
               <Text style={[shared.label, styles.centerText]}>Speed Mode</Text>
               <View style={[shared.wrap, styles.speedPicker]}>
@@ -1296,6 +1311,7 @@ function Home({ accessToken }: AppProps) {
                     loading={isLoading}
                     onPress={handleSubmit}
                   />
+                  <ActionButton disabled={workspaceBusy || !prompt.trim()} icon="layers" label="Generate with full agent workflow" onPress={generateGuided} />
                 </View>
               </View>
             </View>
@@ -1372,6 +1388,7 @@ function Home({ accessToken }: AppProps) {
                     <Text style={styles.qualityScore}>Visual {evaluation.visualScore.toFixed(1)}/10 · Educational {evaluation.pedagogicalScore.toFixed(1)}/10 · Retries {evaluationRetries}/2</Text>
                     {!!evaluation.anatomyHardFailures.length && <Text style={styles.errorMessage}>Anatomy failures: {evaluation.anatomyHardFailures.join("; ")}</Text>}
                     {!!evaluation.feedback && <Text style={styles.hint}>{evaluation.feedback}</Text>}
+                    {imageOutputId && <FeedbackControls key={`eval-${imageOutputId}`} accessToken={accessToken} agentName="eval-agent" apiUrl={BACKEND_HEALTH_URL} inputContext={{ prompt: enhancedPrompt || prompt }} outputId={`eval-${imageOutputId}`} outputSnapshot={{ visual_score: evaluation.visualScore, pedagogical_score: evaluation.pedagogicalScore }} sessionId={sessionId} negativeReasons={[{code:"wrong_score",label:"Wrong score"},{code:"missed_error",label:"Missed error"},{code:"unhelpful_feedback",label:"Unhelpful feedback"}]} positiveReasons={[{code:"well_calibrated",label:"Well calibrated"},{code:"actionable",label:"Actionable"}]} />}
                   </View>
                 )}
                 {imageOutputId && workspace !== "sketch" && (
@@ -1404,7 +1421,7 @@ function Home({ accessToken }: AppProps) {
                   feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
                   onInteractionComplete={(interaction) => {
-                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction);
+                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction, userId).catch(() => setError("The interaction was completed, but could not be saved to your local history."));
                   }}
                   onOperationComplete={(duration) => {
                     setTimings((current) => ({ ...current, interactive: duration }));
@@ -1435,7 +1452,8 @@ function Home({ accessToken }: AppProps) {
                     </View>
                   )}
                   {threedError && <ErrorBanner title="3D conversion failed" message={threedError} />}
-                  {threedStage === "done" && glbBase64 && <ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} />}
+                  {threedStage === "done" && glbBase64 && <React.Suspense fallback={<Text style={styles.hint}>Opening the 3D viewer…</Text>}><ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} /></React.Suspense>}
+                  {threedStage === "done" && glbBase64 && imageOutputId && <FeedbackControls key={`3d-${imageOutputId}-${glbSizeKb}`} accessToken={accessToken} agentName="threed-agent" apiUrl={BACKEND_HEALTH_URL} inputContext={{ prompt: enhancedPrompt || prompt }} outputId={`3d-${imageOutputId}`} outputSnapshot={{ size_kb: glbSizeKb }} sessionId={sessionId} negativeReasons={[{code:"bad_geometry",label:"Bad geometry"},{code:"bad_texture",label:"Bad texture"},{code:"wrong_subject",label:"Wrong subject"}]} positiveReasons={[{code:"good_geometry",label:"Good geometry"},{code:"good_texture",label:"Good texture"},{code:"matches_source",label:"Matches source"}]} />}
                   {threedStage === "done" && (
                     <Pressable onPress={() => { setThreedStage("idle"); setGlbBase64(null); setThreedError(null); }} style={styles.ghostButton}>
                       <Icon color={colors.textMuted} name="refresh" size={16} /><Text style={styles.ghostText}>Convert again</Text>
@@ -1447,9 +1465,9 @@ function Home({ accessToken }: AppProps) {
 
             </>}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -1543,7 +1561,7 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
+  safeArea: { backgroundColor: colors.background, overflow: "hidden", borderRadius: 22 },
   floatingNewPrompt: { position: "absolute", zIndex: 100, top: 18, right: 22, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 50, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
   floatingNewPromptText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },

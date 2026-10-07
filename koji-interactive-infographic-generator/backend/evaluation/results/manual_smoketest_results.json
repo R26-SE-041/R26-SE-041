@@ -1,0 +1,404 @@
+[
+  {
+    "organ": "heart",
+    "condition": "raw_base",
+    "raw_prompt": "heart",
+    "enhanced_prompt": "heart",
+    "generate_latency_s": 134.94,
+    "generate_error": null,
+    "image_file": "heart_raw_base.png",
+    "eval_latency_s": 37.92,
+    "eval_raw": {
+      "clip_score": 28.05921745300293,
+      "vlm_score": 5.0,
+      "visual_score": 8.0,
+      "pedagogical_score": 2.0,
+      "vlm_feedback": "The image aligns well with the 'heart' prompt but lacks educational utility.",
+      "anatomy_metrics": {},
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "heart",
+    "condition": "agentic_pipeline",
+    "enhance_latency_s": 54.68,
+    "prompt_agent_raw_response_keys": [
+      "enhanced_prompt",
+      "enhanced_prompt_json",
+      "anatomy_spec",
+      "model_variant",
+      "prompt_parse_error",
+      "routing",
+      "structured_generation",
+      "safety",
+      "error"
+    ],
+    "raw_prompt": "Show me the human heart anatomy for a biology student",
+    "enhanced_prompt": "Show me the human heart anatomy for a biology student",
+    "generate_latency_s": 101.43,
+    "generate_error": null,
+    "image_file": "heart_agentic_pipeline.png",
+    "eval_latency_s": 11.09,
+    "eval_raw": {
+      "clip_score": 29.163843154907227,
+      "vlm_score": 8.5,
+      "visual_score": 9.0,
+      "pedagogical_score": 8.0,
+      "vlm_feedback": "The image effectively aligns with the prompt and provides a clear anterior cutaway view of the human heart, which is useful for undergraduate students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "detected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "left_atrium"
+        ],
+        "missing_structures": [
+          "pulmonary_veins"
+        ],
+        "hallucinated_structures": [],
+        "structure_recall": 0.875,
+        "orientation_correct": true,
+        "relation_accuracy": 1.0,
+        "clean_image_compliance": 1.0
+      },
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "brain",
+    "condition": "raw_base",
+    "raw_prompt": "brain",
+    "enhanced_prompt": "brain",
+    "generate_latency_s": 101.05,
+    "generate_error": null,
+    "image_file": "brain_raw_base.png",
+    "eval_latency_s": 18.93,
+    "eval_raw": {
+      "clip_score": 26.772218704223633,
+      "vlm_score": 8.5,
+      "visual_score": 8.0,
+      "pedagogical_score": 9.0,
+      "vlm_feedback": "The image effectively aligns with the 'brain' prompt and provides a clear, detailed view of brain structures, making it highly useful for educational purposes.",
+      "anatomy_metrics": {},
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "brain",
+    "condition": "agentic_pipeline",
+    "enhance_latency_s": 20.53,
+    "prompt_agent_raw_response_keys": [
+      "enhanced_prompt",
+      "enhanced_prompt_json",
+      "anatomy_spec",
+      "model_variant",
+      "prompt_parse_error",
+      "routing",
+      "structured_generation",
+      "safety",
+      "error"
+    ],
+    "raw_prompt": "Show me the human brain anatomy for a biology student",
+    "enhanced_prompt": "Show me the human brain anatomy for a biology student",
+    "generate_latency_s": 93.99,
+    "generate_error": null,
+    "image_file": "brain_agentic_pipeline.png",
+    "eval_latency_s": 11.99,
+    "eval_raw": {
+      "clip_score": 29.715150833129883,
+      "vlm_score": 8.5,
+      "visual_score": 9.0,
+      "pedagogical_score": 8.0,
+      "vlm_feedback": "The image closely aligns with the prompt and provides a clear anatomical representation suitable for undergraduate students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "detected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1.0,
+        "orientation_correct": true,
+        "relation_accuracy": 1.0,
+        "clean_image_compliance": 1.0
+      },
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "kidneys",
+    "condition": "raw_base",
+    "raw_prompt": "kidneys",
+    "enhanced_prompt": "kidneys",
+    "generate_latency_s": 132.99,
+    "generate_error": null,
+    "image_file": "kidneys_raw_base.png",
+    "eval_latency_s": 44.39,
+    "eval_raw": {
+      "clip_score": 30.403003692626953,
+      "vlm_score": 8.5,
+      "visual_score": 9.0,
+      "pedagogical_score": 8.0,
+      "vlm_feedback": "The image effectively aligns with the prompt and provides a clear visual representation of kidneys, which is useful for educational purposes.",
+      "anatomy_metrics": {},
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "kidneys",
+    "condition": "agentic_pipeline",
+    "enhance_latency_s": 50.84,
+    "prompt_agent_raw_response_keys": [
+      "enhanced_prompt",
+      "enhanced_prompt_json",
+      "anatomy_spec",
+      "model_variant",
+      "prompt_parse_error",
+      "routing",
+      "structured_generation",
+      "safety",
+      "error"
+    ],
+    "raw_prompt": "Show me the human kidneys anatomy for a biology student",
+    "enhanced_prompt": "Show me the human kidneys anatomy for a biology student",
+    "generate_latency_s": 101.79,
+    "generate_error": null,
+    "image_file": "kidneys_agentic_pipeline.png",
+    "eval_latency_s": 11.02,
+    "eval_raw": {
+      "clip_score": 29.360639572143555,
+      "vlm_score": 7.5,
+      "visual_score": 8.0,
+      "pedagogical_score": 7.0,
+      "vlm_feedback": "The image effectively represents the kidneys' anatomy but lacks detailed structures like renal cortex, medulla, pyramids, pelvis, artery, and ureter.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "detected_structures": [
+          "right_kidney",
+          "left_kidney"
+        ],
+        "missing_structures": [
+          "renal_artery",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pelvis",
+          "renal_pyramids",
+          "ureter"
+        ],
+        "hallucinated_structures": [],
+        "structure_recall": 0.25,
+        "orientation_correct": true,
+        "relation_accuracy": null,
+        "clean_image_compliance": 1.0
+      },
+      "anatomy_hard_failures": [
+        "Missing required structures: renal_artery, renal_cortex, renal_medulla, renal_pelvis, renal_pyramids, ureter"
+      ],
+      "error": null
+    }
+  },
+  {
+    "organ": "liver",
+    "condition": "raw_base",
+    "raw_prompt": "liver",
+    "enhanced_prompt": "liver",
+    "generate_latency_s": 106.46,
+    "generate_error": null,
+    "image_file": "liver_raw_base.png",
+    "eval_latency_s": 9.23,
+    "eval_raw": {
+      "clip_score": 26.739566802978516,
+      "vlm_score": 7.5,
+      "visual_score": 8.0,
+      "pedagogical_score": 7.0,
+      "vlm_feedback": "The image closely aligns with the 'liver' prompt but lacks educational context.",
+      "anatomy_metrics": {},
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "liver",
+    "condition": "agentic_pipeline",
+    "enhance_latency_s": 22.54,
+    "prompt_agent_raw_response_keys": [
+      "enhanced_prompt",
+      "enhanced_prompt_json",
+      "anatomy_spec",
+      "model_variant",
+      "prompt_parse_error",
+      "routing",
+      "structured_generation",
+      "safety",
+      "error"
+    ],
+    "raw_prompt": "Show me the human liver anatomy for a biology student",
+    "enhanced_prompt": "Show me the human liver anatomy for a biology student",
+    "generate_latency_s": 98.7,
+    "generate_error": null,
+    "image_file": "liver_agentic_pipeline.png",
+    "eval_latency_s": 14.82,
+    "eval_raw": {
+      "clip_score": 25.42790985107422,
+      "vlm_score": 7.5,
+      "visual_score": 8.0,
+      "pedagogical_score": 7.0,
+      "vlm_feedback": "The image accurately represents the human liver anatomy for an undergraduate student, but it lacks the gallbladder and hepatic veins which are required structures.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "detected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct"
+        ],
+        "missing_structures": [
+          "gallbladder",
+          "hepatic_veins"
+        ],
+        "hallucinated_structures": [],
+        "structure_recall": 0.75,
+        "orientation_correct": true,
+        "relation_accuracy": 0.8,
+        "clean_image_compliance": 1.0
+      },
+      "anatomy_hard_failures": [
+        "Missing required structures: gallbladder, hepatic_veins"
+      ],
+      "error": null
+    }
+  },
+  {
+    "organ": "lungs",
+    "condition": "raw_base",
+    "raw_prompt": "lungs",
+    "enhanced_prompt": "lungs",
+    "generate_latency_s": 96.8,
+    "generate_error": null,
+    "image_file": "lungs_raw_base.png",
+    "eval_latency_s": 14.82,
+    "eval_raw": {
+      "clip_score": 29.071062088012695,
+      "vlm_score": 8.5,
+      "visual_score": 9.0,
+      "pedagogical_score": 8.0,
+      "vlm_feedback": "The image closely aligns with the lungs prompt and is highly useful for educational purposes.",
+      "anatomy_metrics": {},
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  },
+  {
+    "organ": "lungs",
+    "condition": "agentic_pipeline",
+    "enhance_latency_s": 26.75,
+    "prompt_agent_raw_response_keys": [
+      "enhanced_prompt",
+      "enhanced_prompt_json",
+      "anatomy_spec",
+      "model_variant",
+      "prompt_parse_error",
+      "routing",
+      "structured_generation",
+      "safety",
+      "error"
+    ],
+    "raw_prompt": "Show me the human lungs anatomy for a biology student",
+    "enhanced_prompt": "Show me the human lungs anatomy for a biology student",
+    "generate_latency_s": 100.89,
+    "generate_error": null,
+    "image_file": "lungs_agentic_pipeline.png",
+    "eval_latency_s": 11.75,
+    "eval_raw": {
+      "clip_score": 28.212871551513672,
+      "vlm_score": 9.0,
+      "visual_score": 9.0,
+      "pedagogical_score": 9.0,
+      "vlm_feedback": "The image accurately represents the human lungs' anatomy for an undergraduate biology student, aligning well with the prompt.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "detected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1.0,
+        "orientation_correct": true,
+        "relation_accuracy": 1.0,
+        "clean_image_compliance": 1.0
+      },
+      "anatomy_hard_failures": [],
+      "error": null
+    }
+  }
+]

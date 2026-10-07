@@ -1,0 +1,124 @@
+{
+  "protocol": {
+    "id": "warm-state-modal-latency-v1",
+    "prompts": [
+      "eye",
+      "heart",
+      "skin"
+    ],
+    "seed": 260902,
+    "reps": 3,
+    "speed_mode": "normal",
+    "cold_start_policy": "one discarded warm-up pass per prompt; measured calls issued back-to-back",
+    "excludes": "client-side SVG label rendering (frontend, not Modal)",
+    "image_config": {
+      "width": 512,
+      "height": 512,
+      "inference_steps": 25,
+      "guidance_scale": 3.5
+    },
+    "endpoints": {
+      "prompt": "https://agal-koji--prompt-agent-api.modal.run",
+      "image": "https://agal-koji--image-agent-api.modal.run",
+      "eval": "https://agal-koji--eval-agent-api.modal.run",
+      "interactive": "https://agal-koji--interactive-agent-api.modal.run"
+    }
+  },
+  "summary": {
+    "stages": {
+      "raw_generation_ms": {
+        "n": 1,
+        "mean": 96967.96,
+        "sd": 0,
+        "p50": 96967.96,
+        "p95": 96967.96,
+        "min": 96967.96,
+        "max": 96967.96
+      },
+      "enhancement_ms": {
+        "n": 1,
+        "mean": 38912.51,
+        "sd": 0,
+        "p50": 38912.51,
+        "p95": 38912.51,
+        "min": 38912.51,
+        "max": 38912.51
+      },
+      "generation_ms": {
+        "n": 1,
+        "mean": 87936.95,
+        "sd": 0,
+        "p50": 87936.95,
+        "p95": 87936.95,
+        "min": 87936.95,
+        "max": 87936.95
+      },
+      "critic_ms": {
+        "n": 1,
+        "mean": 13296.53,
+        "sd": 0,
+        "p50": 13296.53,
+        "p95": 13296.53,
+        "min": 13296.53,
+        "max": 13296.53
+      },
+      "labeling_ms": {
+        "n": 1,
+        "mean": 44516.44,
+        "sd": 0,
+        "p50": 44516.44,
+        "p95": 44516.44,
+        "min": 44516.44,
+        "max": 44516.44
+      }
+    },
+    "totals": {
+      "raw_flux1_dev": {
+        "n": 1,
+        "mean": 96967.96,
+        "sd": 0,
+        "p50": 96967.96,
+        "p95": 96967.96,
+        "min": 96967.96,
+        "max": 96967.96
+      },
+      "our_full_pipeline": {
+        "n": 1,
+        "mean": 184662.43,
+        "sd": 0,
+        "p50": 184662.43,
+        "p95": 184662.43,
+        "min": 184662.43,
+        "max": 184662.43
+      }
+    },
+    "pipeline_overhead_ratio": 1.9043654213206092,
+    "pipeline_overhead_ms": 87694.46999999999
+  },
+  "rows": [
+    {
+      "prompt": "eye",
+      "seed": 260902,
+      "raw_generation_ms": 119574.85,
+      "enhancement_ms": 38780.86,
+      "generation_ms": 97294.42,
+      "critic_ms": 12620.15,
+      "labeling_ms": 69823.32,
+      "retried_calls": 0,
+      "labels_rendered": 8,
+      "warmup": true
+    },
+    {
+      "prompt": "eye",
+      "seed": 260902,
+      "raw_generation_ms": 96967.96,
+      "enhancement_ms": 38912.51,
+      "generation_ms": 87936.95,
+      "critic_ms": 13296.53,
+      "labeling_ms": 44516.44,
+      "retried_calls": 0,
+      "labels_rendered": 8,
+      "rep": 1
+    }
+  ]
+}

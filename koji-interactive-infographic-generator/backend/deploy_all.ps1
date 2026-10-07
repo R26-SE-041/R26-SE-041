@@ -13,6 +13,7 @@ $env:PYTHONIOENCODING = "utf-8"
 $targets = @(
     "agents/prompt-agent/modal_app.py",
     "agents/image-agent/modal_app.py",
+    "agents/sketch-agent/modal_app.py",
     "agents/interactive-agent/modal_app.py",
     "agents/threed-agent/modal_app.py",
     "agents/eval-agent/modal_app.py"
