@@ -29,6 +29,8 @@ The platform uses specialized AI agents instead of a single monolithic model. It
 - [Safety, Privacy, and Responsible Memory](#safety-privacy-and-responsible-memory)
 - [Research Scope and Roadmap](#research-scope-and-roadmap)
 - [Project Leadership](#project-leadership)
+- [Contributing and Community](#contributing-and-community)
+- [License](#license)
 
 ## Research Motivation
 
@@ -484,6 +486,22 @@ Production deployments should also replace permissive development CORS settings,
 | Supervisor | **Prof. Nuwan Kodagoda** |
 | Co-Supervisor | **Ms. Malithi Nawarathne** |
 
----
+## Contributing and Community
 
-BioLearnX is an academic research project. A repository-level license has not yet been specified; all rights remain with the respective project contributors until a license is added.
+The four components share [contribution guidelines](CONTRIBUTING.md), a
+[code of conduct](CODE_OF_CONDUCT.md) and a [security reporting policy](SECURITY.md).
+Component setup and validation instructions remain in their own folders.
+
+Use the repository's bug-report and feature-request templates to name the affected
+component. Pull requests should describe the resulting behavior, validation and
+required deployment steps.
+
+## License
+
+BioLearnX's original project code and associated documentation are licensed under
+the [MIT License](LICENSE). Preserve its copyright and license notice when reusing
+or distributing substantial portions of this code.
+
+Third-party libraries, model weights and datasets retain their own licenses and
+usage restrictions. This repository's MIT license does not grant additional
+permissions for those materials.

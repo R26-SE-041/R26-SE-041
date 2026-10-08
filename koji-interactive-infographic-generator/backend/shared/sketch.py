@@ -51,4 +51,7 @@ def render_sketch(strokes: list[Stroke], *, control: bool = False):
     return (ImageOps.invert(canvas) if control else canvas).convert("RGB")
 
 def generation_prompt(instruction: str) -> str:
-    return instruction.strip() or DEFAULT_PROMPT
+    subject = instruction.strip()
+    if not subject:
+        return DEFAULT_PROMPT
+    return subject + "\n\nFinal output: isolated subject on a plain white background, no text, no watermark."

@@ -248,7 +248,7 @@ def health() -> dict:
         "status": "ok",
         "model": FLUX_MODEL_ID,
         "variants": ["base"],
-        "prompt_policies": ["generic-preserve-intent-v1", "anatomy-clean-base-v1"],
+        "prompt_policies": ["generic-white-background-v2", "anatomy-clean-base-v2"],
     }
 
 

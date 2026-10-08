@@ -25,7 +25,8 @@ class SketchTests(unittest.TestCase):
 
     def test_prompt_is_optional_and_user_instruction_is_preserved(self):
         self.assertEqual(generation_prompt("  "), DEFAULT_PROMPT)
-        self.assertEqual(generation_prompt("  cartoon fish  "), "cartoon fish")
+        self.assertTrue(generation_prompt("  cartoon fish  ").startswith("cartoon fish"))
+        self.assertIn("plain white background", generation_prompt("cartoon fish"))
 
     def test_complexity_limit(self):
         with self.assertRaisesRegex(ValidationError, "complex"):

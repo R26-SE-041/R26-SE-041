@@ -1,16 +1,18 @@
+import ConversationHistory from "./ConversationHistory";
+import { cloudEnabled } from "../studioClient";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import SketchCanvas from "./SketchCanvas";
 import Icon from "./Icon";
 import ThreeDViewer from "./ThreeDViewer";
-import { clearHistory, deleteHistoryItem, GenerationHistoryItem, listHistory } from "../historyStorage";
+import { clearHistory, deleteHistoryItem, GenerationHistoryItem, listHistory, loadHistoryItem, syncLocalHistory } from "../historyStorage";
 import { makeSharedStyles, useAppTheme } from "../theme";
 
 function download(item: GenerationHistoryItem) {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
   const anchor = document.createElement("a");
-  anchor.href = `data:image/png;base64,${item.imageBase64}`;
-  anchor.download = `eduvision-${item.mode}-${item.createdAt.slice(0, 10)}.png`;
+  anchor.href = item.imageBase64 ? `data:image/png;base64,${item.imageBase64}` : item.imageUrl || "";
+  anchor.download = `learnX-${item.mode}-${item.createdAt.slice(0, 10)}.png`;
   anchor.click();
 }
 
@@ -21,7 +23,9 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
   const shared = makeSharedStyles(colors);
   const styles = makeStyles(colors);
   const [items, setItems] = useState<GenerationHistoryItem[]>([]);
+  const [error,setError] = useState<string|null>(null);
   const [loading, setLoading] = useState(true);
+  const [canLoadOlder, setCanLoadOlder] = useState(true);
   const [selected, setSelected] = useState<GenerationHistoryItem | null>(null);
   const chats = React.useMemo(() => {
     const grouped = new Map<string, GenerationHistoryItem[]>();
@@ -33,31 +37,55 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
   }, [items]);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    try { setItems(await listHistory()); } finally { setLoading(false); }
+    setLoading(true); setCanLoadOlder(true);
+    try { setError(null); setItems(await listHistory()); } catch(e) { setError(e instanceof Error?e.message:"Unable to load history"); } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { if (!cloudEnabled()) void refresh(); }, [refresh]);
+
+  const loadOlder = async () => {
+    const cloudItems = items.filter(item => /^[0-9a-f-]{36}$/i.test(item.id));
+    const before = cloudItems.map(item => item.createdAt).sort()[0];
+    if (!before) { setCanLoadOlder(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const older = await listHistory(before);
+      setItems(current => [...new Map([...current, ...older].map(item => [item.id, item])).values()]);
+      setCanLoadOlder(older.length === 50);
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to load older history"); }
+    finally { setLoading(false); }
+  };
+
+  const selectItem = async (item: GenerationHistoryItem) => {
+    setLoading(true); setError(null);
+    try { setSelected(await loadHistoryItem(item)); } catch(e) { setError(e instanceof Error?e.message:"Unable to open history"); } finally { setLoading(false); }
+  };
 
   const remove = async (id: string) => {
-    await deleteHistoryItem(id);
+    try { await deleteHistoryItem(id); } catch(e) { setError(e instanceof Error?e.message:"Unable to delete"); return; }
     setItems((current) => current.filter((item) => item.id !== id));
     if (selected?.id === id) setSelected(null);
   };
 
   const clear = async () => {
-    await clearHistory();
+    try { await clearHistory(); } catch(e) { setError(e instanceof Error?e.message:"Unable to clear history"); await refresh(); return; }
     setItems([]);
     setSelected(null);
   };
 
+  if (cloudEnabled()) return <ConversationHistory onResume={onResume} />;
+
   return (
     <View style={styles.section}>
       <View style={styles.header}>
-        <View><Text style={styles.eyebrow}>LOCAL ARCHIVE</Text><Text style={styles.title}>Generation history</Text><Text style={styles.subtitle}>Stored only in this browser. Up to 50 creations.</Text></View>
+        <View><Text style={styles.eyebrow}>{cloudEnabled()?"CLOUD ARCHIVE":"LOCAL ARCHIVE"}</Text><Text style={styles.title}>Generation history</Text><Text style={styles.subtitle}>{cloudEnabled()?"Your latest cloud creations, with local copies in this browser.":"Stored in this browser until you delete it or browser storage fills."}</Text></View>
         {!!items.length && <Pressable onPress={() => void clear()} style={styles.clearButton}><Text style={styles.clearText}>Clear all</Text></Pressable>}
       </View>
-      {loading && <View style={[shared.card, styles.empty]}><ActivityIndicator color={colors.primary} /><Text style={styles.subtitle}>Opening your local archive…</Text></View>}
+      {cloudEnabled() && <Pressable disabled={loading} onPress={async()=>{setLoading(true);try{await syncLocalHistory();await refresh()}catch(e){setError(e instanceof Error?e.message:"Sync failed")}finally{setLoading(false)}}}><Text style={{color:colors.primaryBright}}>Sync local creations to my cloud history</Text></Pressable>}
+      {error && <Text style={{color:colors.danger}}>{error}</Text>}
+      {cloudEnabled() && canLoadOlder && !!items.length && <Pressable disabled={loading} onPress={() => void loadOlder()}><Text style={{ color: colors.primaryBright }}>Load older creations</Text></Pressable>}
+      <Pressable onPress={()=>void refresh()}><Text style={{color:colors.primaryBright}}>Refresh history</Text></Pressable>
+      {loading && <View style={[shared.card, styles.empty]}><ActivityIndicator color={colors.primary} /><Text style={styles.subtitle}>Opening your archive…</Text></View>}
       {!loading && !items.length && <View style={[shared.card, styles.empty]}><Icon color={colors.primary} name="layers" size={28} /><Text style={styles.emptyTitle}>No saved generations yet</Text><Text style={styles.subtitle}>Your next successful image will appear here automatically.</Text></View>}
       {selected && (
         <View style={[shared.card, styles.detail]}>
@@ -68,7 +96,7 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
               <Pressable onPress={() => setSelected(null)} style={styles.clearButton}><Text style={styles.clearText}>Close</Text></Pressable>
             </View>
           </View>
-          <View style={styles.versions}>{items.filter((item) => (item.chatId ?? item.id) === (selected.chatId ?? selected.id)).sort((a, b) => (a.version ?? 1) - (b.version ?? 1)).map((item) => <Pressable key={item.id} onPress={() => setSelected(item)} style={[styles.versionChip, item.id === selected.id && styles.versionChipActive]}><Text style={styles.versionText}>Version {item.version ?? 1}</Text></Pressable>)}</View>
+          <View style={styles.versions}>{items.filter((item) => (item.chatId ?? item.id) === (selected.chatId ?? selected.id)).sort((a, b) => (a.version ?? 1) - (b.version ?? 1)).map((item) => <Pressable key={item.id} onPress={() => void selectItem(item)} style={[styles.versionChip, item.id === selected.id && styles.versionChipActive]}><Text style={styles.versionText}>Version {item.version ?? 1}</Text></Pressable>)}</View>
           {selected.mode === "sketch" && selected.sketchStrokes && <View style={styles.detailCopy}>
             <Text style={styles.detailLabel}>Original drawing</Text>
             <SketchCanvas key={selected.id} strokes={selected.sketchStrokes} onChange={() => undefined} disabled previewOnly />
@@ -77,7 +105,7 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
           <Image resizeMode="contain" source={{ uri: `data:image/png;base64,${selected.imageBase64}` }} style={styles.detailImage} />
           <View style={styles.detailCopy}><Text style={styles.detailLabel}>Original prompt</Text><Text style={styles.detailText}>{selected.prompt || (selected.mode === "sketch" ? "No additional instruction" : "")}</Text></View>
           <View style={styles.detailCopy}><Text style={styles.detailLabel}>Model prompt</Text><Text style={styles.detailText}>{selected.enhancedPrompt}</Text></View>
-          {!!selected.anatomyAnnotations?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Verified anatomy labels</Text><View style={styles.labels}>{selected.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View></View>}
+          {!!selected.anatomyAnnotations?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Saved labels</Text><View style={styles.labels}>{selected.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View></View>}
           {selected.evaluation && <Text style={styles.score}>Visual {selected.evaluation.visualScore.toFixed(1)} · Educational {selected.evaluation.pedagogicalScore.toFixed(1)}</Text>}
           {!!selected.interactions?.length && <View style={styles.detailCopy}><Text style={styles.detailLabel}>Questions &amp; answers</Text>{selected.interactions.map((interaction) => <View key={interaction.id} style={styles.qaTurn}><Text style={styles.prompt}>{interaction.question || (interaction.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text><Text style={styles.detailText}>{interaction.answer}</Text></View>)}</View>}
           {selected.glbBase64 ? <View style={styles.modelSection}><Text style={styles.detailLabel}>Interactive 3D model</Text><ThreeDViewer glbBase64={selected.glbBase64} sizeKb={selected.glbSizeKb} /></View> : <Text style={styles.subtitle}>{selected.threeDJob?.status === "converting" ? "3D conversion was started. Continue chat to retrieve or retry it." : selected.threeDJob?.status === "failed" ? `3D conversion failed: ${selected.threeDJob.error ?? "Please retry"}` : "No 3D model was created for this image."}</Text>}
@@ -86,8 +114,8 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
       <View style={styles.grid}>
         {chats.map((versions) => {
           const item = versions[versions.length - 1];
-          return <Pressable key={item.chatId ?? item.id} onPress={() => setSelected(item)} style={({ pressed }) => [shared.card, styles.card, pressed && styles.cardPressed]}>
-            <Image resizeMode="cover" source={{ uri: `data:image/png;base64,${item.imageBase64}` }} style={styles.image} />
+          return <Pressable key={item.chatId ?? item.id} onPress={() => void selectItem(item)} style={({ pressed }) => [shared.card, styles.card, pressed && styles.cardPressed]}>
+            <Image resizeMode="cover" source={{ uri: item.imageBase64 ? `data:image/png;base64,${item.imageBase64}` : item.imageUrl || "" }} style={styles.image} />
             <View style={styles.cardBody}>
               <View style={styles.metaRow}><Text style={styles.mode}>{item.mode === "sketch" ? "Drawing" : item.mode === "anatomy" ? "Human anatomy" : "General image"}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString()}</Text></View>
               <Text numberOfLines={2} style={styles.prompt}>{item.prompt || (item.mode === "sketch" ? "Drawing without additional instruction" : "")}</Text>
@@ -95,7 +123,7 @@ export default function HistoryPanel({ onResume }: HistoryPanelProps) {
               <Text numberOfLines={2} style={styles.enhanced}>{item.enhancedPrompt}</Text>
               {item.evaluation && <Text style={styles.score}>Visual {item.evaluation.visualScore.toFixed(1)} · Educational {item.evaluation.pedagogicalScore.toFixed(1)}</Text>}
               {!!item.anatomyAnnotations?.length && <View style={styles.labels}>{item.anatomyAnnotations.map((annotation) => <Text key={annotation.structure_id} style={styles.labelChip}>{annotation.label}</Text>)}</View>}
-              {item.glbBase64 && <Text style={styles.score}>Interactive 3D model saved</Text>}
+              {(item.glbBase64 || item.hasThreeD) && <Text style={styles.score}>Interactive 3D model saved</Text>}
               <View style={styles.actions}>
                 <Pressable onPress={(event) => { event.stopPropagation(); download(item); }} style={styles.download}><Icon color="#fff" name="download" size={15} /><Text style={styles.downloadText}>Download</Text></Pressable>
                 <Pressable onPress={(event) => { event.stopPropagation(); void remove(item.id); }} style={styles.delete}><Text style={styles.deleteText}>Delete</Text></Pressable>

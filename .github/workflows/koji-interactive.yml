@@ -1,0 +1,124 @@
+name: Koji interactive CI/CD
+on:
+  pull_request:
+    paths:
+      - 'koji-interactive-infographic-generator/**'
+      - '.github/workflows/koji-interactive.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'koji-interactive-infographic-generator/**'
+      - '.github/workflows/koji-interactive.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_models:
+        description: Redeploy all Koji model endpoints
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: koji-interactive-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: koji-interactive-infographic-generator/frontend
+    env:
+      EXPO_PUBLIC_STUDIO_API_URL: ${{ vars.KOJI_STUDIO_API_URL }}
+      EXPO_PUBLIC_STUDIO_PROXY_PATH: ${{ vars.KOJI_STUDIO_PROXY_PATH || '/studio-api' }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.KOJI_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.KOJI_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: koji-interactive-infographic-generator/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build:web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: koji-web
+          path: koji-interactive-infographic-generator/frontend/dist
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: koji_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: koji-interactive-infographic-generator/backend
+    env:
+      PYTHONPATH: .
+      STUDIO_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/koji_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r studio/requirements-dev.txt
+      - run: python ../ci/check.py
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      vars.KOJI_DEPLOY_ENABLED == 'true'
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    environment: koji-production
+    env:
+      RENDER_API_KEY: ${{ secrets.KOJI_RENDER_API_KEY }}
+      RENDER_API_SERVICE_ID: ${{ vars.KOJI_RENDER_API_SERVICE_ID }}
+      RENDER_WORKER_SERVICE_ID: ${{ vars.KOJI_RENDER_WORKER_SERVICE_ID }}
+      VERCEL_TOKEN: ${{ secrets.KOJI_VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.KOJI_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.KOJI_VERCEL_PROJECT_ID }}
+      MODAL_TOKEN_ID: ${{ secrets.KOJI_MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.KOJI_MODAL_TOKEN_SECRET }}
+      KOJI_EC2_HOST: ${{ vars.KOJI_EC2_HOST }}
+      KOJI_EC2_SSH_KEY: ${{ secrets.KOJI_EC2_SSH_KEY }}
+      KOJI_EC2_KNOWN_HOSTS: ${{ secrets.KOJI_EC2_KNOWN_HOSTS }}
+      BEFORE_SHA: ${{ github.event.before }}
+      FORCE_MODEL_DEPLOY: ${{ inputs.deploy_models }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r koji-interactive-infographic-generator/backend/studio/requirements.txt modal
+      - name: Deploy affected Modal model endpoints
+        if: vars.KOJI_MODEL_DEPLOY_ENABLED == 'true' || inputs.deploy_models
+        run: python koji-interactive-infographic-generator/ci/deploy_models.py
+      - name: Deploy API and worker to Render
+        if: vars.KOJI_BACKEND_HOST != 'aws'
+        run: python koji-interactive-infographic-generator/ci/deploy_render.py
+      - name: Deploy API and worker to AWS EC2
+        if: vars.KOJI_BACKEND_HOST == 'aws'
+        run: python koji-interactive-infographic-generator/ci/deploy_ec2.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: koji-web
+          path: koji-interactive-infographic-generator/frontend/dist
+      - run: python koji-interactive-infographic-generator/ci/pack_vercel.py
+      - name: Deploy tested frontend output
+        working-directory: koji-interactive-infographic-generator/frontend
+        run: npx --yes vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"

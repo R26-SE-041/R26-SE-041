@@ -1,3 +1,6 @@
+import { modelRequest, cloudEnabled, runJob, getCloudHistory } from "../studioClient";
+import type { GenerationInteraction } from "../historyStorage";
+import AnnotationEditor from "./AnnotationEditor";
 import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,13 +33,16 @@ interface InteractionCoords {
 interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
+  generationId?: string;
+  interactions?: GenerationInteraction[];
+  onAnnotationsChange?: (items: AnatomyAnnotation[]) => void;
   accessToken?: string;
   anatomyAnnotations?: AnatomyAnnotation[];
   anatomyOrgan?: string;
   feedbackApiUrl: string;
   imageBase64: string;
   onOperationComplete?: (durationMs: number) => void;
-  onInteractionComplete?: (interaction: { id: string; createdAt: string; mode: AnalysisMode; question?: string; answer: string }) => void;
+  onInteractionComplete?: (interaction: GenerationInteraction) => void;
   speedMode?: SpeedMode;
   sessionId: string;
 }
@@ -61,7 +67,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -82,6 +88,8 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
   const dragStartRef = useRef<Point | null>(null);
   const [outputId, setOutputId] = useState<string | null>(null);
   const [retryLink, setRetryLink] = useState<{ feedbackId: string; outputId: string } | null>(null);
+  const [editingLabels, setEditingLabels] = useState(false);
+  const commitLabelEdits = useRef<(() => void) | null>(null);
   const [showAnatomyLabels, setShowAnatomyLabels] = useState(true);
   const [selectedStructureId, setSelectedStructureId] = useState<string | null>(null);
 
@@ -161,6 +169,9 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
   const runAnalysis = async (regenerationFeedback?: string) => {
     if (!currentSelection || isLoading) return;
     const startedAt = Date.now();
+    const turnId = createOutputId("question");
+    const turnQuestion = analysisMode === "ask" ? customQuestion.trim() : analysisMode === "identify" ? "Identify selected object" : "Explain selected region";
+    const selection = { ...currentSelection, coords: [...currentSelection.coords] };
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
@@ -185,7 +196,19 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
       } catch {
         memoryContext = "";
       }
-      const response = await fetch(`${INTERACTIVE_AGENT_URL}/analyze`, {
+      let data: { response_text?: string; highlighted_base64?: string; error?: string };
+      if (cloudEnabled() && generationId && /^[0-9a-f-]{36}$/i.test(generationId)) {
+        await runJob({kind:"analysis",generation_id:generationId,speed_mode:speedMode,analysis:{
+          id:turnId,mode:analysisMode,question:turnQuestion,interaction:selection,
+          organ:anatomyOrgan,structure_id:selectedStructureId ?? undefined,
+          regeneration_feedback:regenerationFeedback,memory_context:memoryContext
+        }});
+        const saved = await getCloudHistory(generationId);
+        const turn = saved.interactions?.find(item => item.id === turnId);
+        if (!turn?.answer) throw new Error("Saved answer is not available. Reopen this conversation from History.");
+        data = { response_text: turn.answer };
+      } else {
+      const response = await modelRequest("interactive", INTERACTIVE_AGENT_URL, "/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,18 +223,19 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
           structure_id: selectedStructureId,
         }),
       });
-      const data = await response.json().catch(() => ({}));
+      data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiError(data, `HTTP ${response.status}`));
       if (data.error) throw new Error(String(data.error));
+      }
       if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
       const answer = data.response_text || "No analysis provided.";
       setAnalysisResult(answer);
       onInteractionComplete?.({
-        id: createOutputId("question"),
+        id: turnId,
         createdAt: new Date().toISOString(),
         mode: analysisMode,
-        question: analysisMode === "ask" ? customQuestion.trim() : undefined,
-        answer,
+        question: turnQuestion,
+        answer, selection, structureId: selectedStructureId, status: "completed",
       });
       setOutputId(createOutputId("interactive"));
       const duration = Date.now() - startedAt;
@@ -251,9 +275,12 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
         )}
       </View>
 
+      {onAnnotationsChange && <Pressable onPress={() => { if (editingLabels) commitLabelEdits.current?.(); setEditingLabels(value => !value); }} style={styles.labelToggle}><Text style={styles.labelToggleText}>{editingLabels ? "Finish editing labels" : "Edit labels and arrows"}</Text></Pressable>}
+      {editingLabels && onAnnotationsChange && <AnnotationEditor imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
+
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
 
-      <View
+      {!editingLabels && <View
         {...panResponder.panHandlers}
         onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
         style={[styles.canvas, { aspectRatio }]}
@@ -278,7 +305,9 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
         {selectionType === "box" && currentSelection?.type === "box" && !isDrawingBox && <SelectionBox coords={currentSelection.coords} />}
       </View>
 
-      {currentSelection && (
+      }
+
+      {!editingLabels && currentSelection && (
         <View style={[shared.card, styles.actionPanel]}>
           <View style={styles.modeSelector}>
             <ModeButton active={analysisMode === "identify"} icon="tag" label="Identify Object" onPress={() => setAnalysisMode("identify")} />
@@ -311,6 +340,16 @@ export default function InteractiveCanvas({ accessToken, anatomyAnnotations = []
           </Pressable>
         </View>
       )}
+
+      {!!interactions.length && <View style={[shared.card, { gap: 12 }]}>
+        <Text style={styles.badge}>Conversation about this image</Text>
+        {interactions.map(turn => <View key={turn.id} style={{ gap: 8, paddingVertical: 10 }}>
+          <Text style={{ color: colors.textDim, fontSize: 11 }}>{new Date(turn.createdAt).toLocaleString()} · {turn.selection?.type === "box" ? "Selected region" : "Selected point"}</Text>
+          <Text style={{ color: colors.primaryBright, fontWeight: "700" }}>You: {turn.question || (turn.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text>
+          <Text style={styles.resultText}>{turn.status === "failed" ? turn.error : turn.answer || "Answer pending — reopen History to retrieve it."}</Text>
+          {!!turn.selection && <Pressable onPress={() => { setCurrentSelection(turn.selection!); setSelectionType(turn.selection!.type); setAnalysisMode(turn.mode); setSelectedStructureId(turn.structureId ?? null); setCustomQuestion(turn.question || ""); }}><Text style={{ color: colors.primaryBright }}>Show selected region</Text></Pressable>}
+        </View>)}
+      </View>}
 
       {error && <View style={shared.error}><Text style={styles.errorTitle}>Interactive analysis failed</Text><Text style={styles.errorText}>{error}</Text></View>}
       {error && analysisDuration !== null && <Text style={styles.durationText}>Attempt duration: {formatDuration(analysisDuration)}</Text>}

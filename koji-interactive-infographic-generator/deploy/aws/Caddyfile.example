@@ -1,0 +1,4 @@
+# Replace with the API domain pointing to this EC2 instance.
+api.example.com {
+    reverse_proxy 127.0.0.1:8000
+}

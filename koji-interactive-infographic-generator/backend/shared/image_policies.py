@@ -12,7 +12,7 @@ from typing import Literal
 
 ImageDomain = Literal["generic", "anatomy"]
 
-POLICY_VERSION = "image-runtime-v2"
+POLICY_VERSION = "image-runtime-v3"
 IMAGE_HEIGHT = 512
 IMAGE_WIDTH = 512
 NUM_INFERENCE_STEPS = 25
@@ -58,15 +58,16 @@ class ImagePromptPolicy:
 
 GENERIC_POLICY = ImagePromptPolicy(
     domain="generic",
-    policy_id="generic-preserve-intent-v1",
+    policy_id="generic-white-background-v2",
+    mandatory_suffix="Final output: preserve the requested subject and style, on a plain white background.",
 )
 
 ANATOMY_POLICY = ImagePromptPolicy(
     domain="anatomy",
-    policy_id="anatomy-clean-base-v1",
+    policy_id="anatomy-clean-base-v2",
     mandatory_suffix=(
         "FINAL ANATOMY OUTPUT RULES: preserve the requested anatomical view and subject; show one "
-        "isolated human anatomical subject on a white or very light neutral background; do not render "
+        "isolated human anatomical subject on a plain white background; do not render "
         "text, labels, letters, numbers, arrows, legends, captions, callouts, borders, watermarks, "
         "decorative objects, an unrequested torso, or unrelated anatomy. These rules override conflicting correction "
         "notes or recalled preferences."

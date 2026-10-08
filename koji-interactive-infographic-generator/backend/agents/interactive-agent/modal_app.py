@@ -390,6 +390,7 @@ class _VLMAgentBase:
         region_ids: list[str],
         organ: str,
         view: str,
+        domain: str = "anatomy",
     ) -> dict[str, Any]:
         """Name marker-grounded anatomy points in one constrained multi-image call."""
         import json
@@ -441,6 +442,14 @@ class _VLMAgentBase:
                 "Return JSON only matching: "
                 + json.dumps(output_schema, separators=(",", ":"))
             )
+            if domain == "generic":
+                instruction = instruction.replace(
+                    f"The original image shows human {organ or 'anatomy'}",
+                    "The original image is a generated educational illustration",
+                ).replace("specific human anatomical structure", "specific visible object or object part")\
+                 .replace("not anatomy", "not part of the subject")\
+                 .replace("each anatomical", "each object")\
+                 .replace("concise anatomical names", "concise object or part names")
             content: list[dict[str, Any]] = []
             for image_value in images:
                 content.append({"type": "image", "image": image_value})
@@ -1214,7 +1223,7 @@ class AutoLabelsRequest(BaseModel):
     """Automatic anatomy labels without segmentation."""
 
     image_base64: str
-    domain: Literal["anatomy"]
+    domain: Literal["anatomy", "generic"] = "anatomy"
     organ: str = Field(default="anatomy", max_length=80)
     view: str = Field(default="", max_length=160)
     speed_mode: Literal["normal", "pro", "promax"] = "pro"
@@ -1247,6 +1256,7 @@ def auto_labels(req: AutoLabelsRequest) -> dict:
                 region_ids=[region["region_id"] for region in batch_regions],
                 organ=req.organ,
                 view=req.view,
+                domain=req.domain,
             )
             if result.get("error"):
                 batch_errors.append(str(result["error"]))

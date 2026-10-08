@@ -1,3 +1,8 @@
+import { cloudEnabled, configureStudio, studioOwner, runJob, waitJob, getCloudHistory, modelRequest, appendChatEvent } from "./studioClient";
+import { useStudioSession } from "./studioAuth";
+import StudioSessionPanel from "./components/StudioSessionPanel";
+import AuthScreen from "./components/AuthScreen";
+import JobsPanel from "./components/JobsPanel";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,6 +15,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import SketchCanvas from "./components/SketchCanvas";
@@ -20,9 +26,10 @@ import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
 import ThreeDViewer from "./components/ThreeDViewer";
 import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
-import { appendHistoryInteraction, GenerationHistoryItem, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
+import { appendHistoryInteraction, GenerationHistoryItem, GenerationInteraction, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
 import { ColorPalette, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
 import {
+  STUDIO_API_URL,
   PROMPT_AGENT_URL,
   IMAGE_AGENT_URL,
   SKETCH_AGENT_URL,
@@ -32,7 +39,7 @@ import {
   EVAL_AGENT_URL,
 } from "./config";
 
-const BACKEND_HEALTH_URL = BACKEND_URL;
+const BACKEND_HEALTH_URL = STUDIO_API_URL || BACKEND_URL;
 
 type Stage = "idle" | "enhancing" | "preview" | "generating" | "done";
 type GenerationWorkspace = "general" | "anatomy" | "sketch" | "history";
@@ -66,6 +73,8 @@ export interface AnatomyAnnotation {
   label_y: number;
   confidence: number;
   verified: boolean;
+  user_edited?: boolean;
+  source?: "automatic" | "manual";
 }
 interface RetryLink { feedbackId: string; outputId: string }
 interface EvaluationResult {
@@ -77,6 +86,7 @@ interface EvaluationResult {
   anatomyHardFailures: string[];
 }
 interface QualityControlledImage {
+  historyId?: string;
   sketchMetadata?: SketchGenerationMetadata;
   image: string;
   prompt: string;
@@ -250,16 +260,31 @@ function threeDApiError(response: Response, payload: unknown, raw: string, fallb
   return errorMessage(payload, fallback);
 }
 
-interface AppProps { accessToken?: string }
+interface AppProps { accessToken?: string; studioSession?: ReturnType<typeof useStudioSession> }
 
 export default function App({ accessToken }: AppProps) {
-  return <ThemeProvider><Home accessToken={accessToken} /></ThemeProvider>;
+  const session = useStudioSession(accessToken);
+  configureStudio(session.token);
+  useEffect(() => {
+    if (typeof window !== "undefined" && session.token && !session.recovering && !session.loading) {
+      if (["/signin", "/signup", "/auth/callback", "/forgot-password", "/verify-email", "/reset-password"].includes(window.location.pathname)) window.history.replaceState({}, "", "/");
+      document.title = "learnX";
+    }
+  }, [session.token, session.recovering, session.loading]);
+  const needsAccount = Boolean(STUDIO_API_URL && !accessToken && (!session.token || session.recovering || session.loading));
+  return <ThemeProvider>{needsAccount ? <AuthScreen session={session} /> : <Home key={studioOwner()} accessToken={session.token} studioSession={accessToken ? undefined : session} />}</ThemeProvider>;
 }
 
-function Home({ accessToken }: AppProps) {
+function Home({ accessToken, studioSession }: AppProps) {
+  const screenWidth = useWindowDimensions().width;
+  const workspaceGridStyle = Platform.OS === "web" ? { display: "grid", gridTemplateColumns: screenWidth >= 1000 ? "repeat(4, minmax(0, 1fr))" : screenWidth >= 560 ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)" } as any : undefined;
   const { colors, mode: themeMode, toggleTheme } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
+  const [jobPhase, setJobPhase] = useState<string | null>(null);
+  const [labelBusy, setLabelBusy] = useState(false);
+  const visibleImage = useRef<string | null>(null);
+  const cloudGeneration = useRef<{ item: GenerationHistoryItem; labelJobId?: string | null } | null>(null);
   const [workspace, setWorkspace] = useState<GenerationWorkspace>("general");
   const [prompt, setPrompt] = useState("");
   const [sketchStrokes, setSketchStrokes] = useState<SketchStroke[]>([]);
@@ -271,6 +296,7 @@ function Home({ accessToken }: AppProps) {
   const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
   const [enhancedPromptJson, setEnhancedPromptJson] = useState<EnhancedPromptPayload | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  visibleImage.current = imageBase64;
   const [anatomySpec, setAnatomySpec] = useState<AnatomySpec>({ is_anatomy: false });
   const [anatomyAnnotations, setAnatomyAnnotations] = useState<AnatomyAnnotation[]>([]);
   const [localizationError, setLocalizationError] = useState<string | null>(null);
@@ -299,8 +325,10 @@ function Home({ accessToken }: AppProps) {
   const [evaluationWarning, setEvaluationWarning] = useState<string | null>(null);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const currentChatId = useRef<string | null>(null);
+  const [historyInteractions, setHistoryInteractions] = useState<GenerationInteraction[]>([]);
   const threedRequestInFlight = useRef(false);
   const workspaceSnapshots = useRef<Partial<Record<"general" | "anatomy" | "sketch", {
+    historyInteractions: GenerationInteraction[];
     sketchStrokes: SketchStroke[]; sketchStrength: number; sketchMetadata?: SketchGenerationMetadata;
     prompt: string; stage: Stage; speedMode: SpeedMode; enhancedPrompt: string | null;
     enhancedPromptJson: EnhancedPromptPayload | null; imageBase64: string | null;
@@ -414,7 +442,7 @@ function Home({ accessToken }: AppProps) {
     setEvaluation(null);
     setEvaluationRetries(0);
     setEvaluationWarning(null);
-    setCurrentHistoryId(null);
+    setCurrentHistoryId(null); setHistoryInteractions([]);
     currentChatId.current = null;
   };
 
@@ -427,7 +455,7 @@ function Home({ accessToken }: AppProps) {
     if (next === workspace || isLoading || threedRequestInFlight.current) return;
     if (workspace !== "history") {
       workspaceSnapshots.current[workspace] = {
-        sketchStrokes, sketchStrength, sketchMetadata,
+        historyInteractions, sketchStrokes, sketchStrength, sketchMetadata,
         prompt, stage, speedMode, enhancedPrompt, enhancedPromptJson, imageBase64, anatomySpec,
         anatomyAnnotations, evaluation, evaluationRetries, evaluationWarning, glbBase64, glbSizeKb,
         threedStage, historyId: currentHistoryId, chatId: currentChatId.current,
@@ -437,6 +465,7 @@ function Home({ accessToken }: AppProps) {
       const saved = workspaceSnapshots.current[next];
       reset();
       if (saved) {
+        setHistoryInteractions(saved.historyInteractions);
         setSketchStrokes(saved.sketchStrokes); setSketchStrength(saved.sketchStrength); setSketchMetadata(saved.sketchMetadata);
         setPrompt(saved.prompt); setStage(saved.stage); setSpeedMode(saved.speedMode);
         setEnhancedPrompt(saved.enhancedPrompt); setEnhancedPromptJson(saved.enhancedPromptJson);
@@ -454,6 +483,12 @@ function Home({ accessToken }: AppProps) {
   };
 
   const archiveResult = async (result: QualityControlledImage): Promise<string | null> => {
+    const cloud = cloudGeneration.current;
+    if (cloudEnabled() && cloud?.item.imageBase64 === result.image) {
+      setCurrentHistoryId(cloud.item.id); currentChatId.current = cloud.item.chatId ?? cloud.item.id;
+      await saveHistoryItem(cloud.item).catch(() => setError("Cloud history saved, but local cache is unavailable."));
+      return cloud.item.id;
+    }
     const id = createOutputId("history");
     const mode = workspace === "sketch" ? "sketch" : result.anatomy.is_anatomy ? "anatomy" : "general";
     try {
@@ -471,6 +506,7 @@ function Home({ accessToken }: AppProps) {
         ...(mode === "sketch" ? { sketchStrokes, sketchMetadata: result.sketchMetadata } : {}),
         chatId,
         version,
+        enhancedPayload: result.payload,
         anatomy: result.anatomy,
         evaluation: result.evaluation ? {
           visualScore: result.evaluation.visualScore,
@@ -493,31 +529,34 @@ function Home({ accessToken }: AppProps) {
     reset();
     setWorkspace(nextWorkspace);
     setPrompt(item.prompt);
-    if (item.threeDJob?.status === "converting") {
+    if (!cloudEnabled() && item.threeDJob?.status === "converting") {
       storeThreeDJob({ requestId: item.threeDJob.requestId, imageFingerprint: imageFingerprint(item.imageBase64), speedMode: item.speedMode });
     }
     setSketchStrokes(item.sketchStrokes ?? []); setSketchMetadata(item.sketchMetadata);
-    setSketchStrength(item.sketchMetadata?.control_strength ?? 0.85);
+    setSketchStrength(item.sketchStrength ?? item.sketchMetadata?.control_strength ?? 0.85);
     setSpeedMode(item.speedMode);
     setEnhancedPrompt(item.enhancedPrompt);
-    setEnhancedPromptJson(item.mode === "anatomy" ? {
+    setEnhancedPromptJson((item.enhancedPayload as EnhancedPromptPayload) ?? (item.mode === "anatomy" ? {
       schema_version: "1.0", final_prompt: item.enhancedPrompt, anatomy_spec: restoredAnatomy,
       route: "anatomy", anatomy_mode: "verified",
-    } : null);
-    setImageBase64(item.imageBase64);
+    } : null));
+    setImageBase64(item.imageBase64 || null);
     setAnatomySpec(restoredAnatomy);
     setAnatomyAnnotations(item.anatomyAnnotations ?? []);
+    setHistoryInteractions(item.interactions ?? []);
     setEvaluation(item.evaluation ? { clipScore: null, vlmScore: null, visualScore: item.evaluation.visualScore, pedagogicalScore: item.evaluation.pedagogicalScore, feedback: item.evaluation.feedback, anatomyHardFailures: [] } : null);
     setGlbBase64(item.glbBase64 ?? null); setGlbSizeKb(item.glbSizeKb);
     setThreedStage(item.glbBase64 ? "done" : "idle");
-    setCurrentHistoryId(item.id); currentChatId.current = item.chatId ?? item.id;
-    setImageOutputId(createOutputId("image")); setStage("done");
+    setCurrentHistoryId(item.imageBase64 ? item.id : null); currentChatId.current = item.chatId ?? item.id;
+    setImageOutputId(createOutputId("image")); setStage(item.imageBase64 ? "done" : "preview");
   };
 
   const callEnhance = async (
     raw: string,
     retryFeedback?: string,
   ): Promise<{ prompt: string; anatomy: AnatomySpec; payload: EnhancedPromptPayload }> => {
+    if (!currentChatId.current) currentChatId.current = createOutputId("chat");
+    const promptEventId = await appendChatEvent(currentChatId.current,"prompt",{prompt:raw,mode:workspace,status:"enhancing"});
     const routedRaw = workspace === "anatomy"
       ? `Human anatomy educational illustration: ${raw}`
       : raw;
@@ -525,7 +564,15 @@ function Home({ accessToken }: AppProps) {
       recallMemory("prompt-anatomy", routedRaw),
       recallMemory("prompt-generic", routedRaw),
     ]);
-    const response = await fetch(`${PROMPT_AGENT_URL}/enhance`, {
+    let data: Record<string, any>;
+    if (cloudEnabled()) {
+      const job = await runJob({kind:"enhance",chat_id:currentChatId.current,prompt_event_id:promptEventId,
+        prompt:routedRaw,raw_prompt:raw,mode:workspace==="anatomy"?"anatomy":"general",speed_mode:speedMode,
+        enhancement_context:{retry_feedback:retryFeedback,anatomy_memory:anatomyMemory,generic_memory:genericMemory}
+      },setJobPhase);
+      data=job.result?.enhancement || {};
+    } else {
+    const response = await modelRequest("prompt", PROMPT_AGENT_URL, "/enhance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -536,8 +583,9 @@ function Home({ accessToken }: AppProps) {
         generic_memory: genericMemory,
       }),
     });
-    const data = await response.json().catch(() => ({}));
+    data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(errorMessage(data, `Enhance HTTP ${response.status}`));
+    }
     if (data.error && !data.enhanced_prompt) throw new Error(String(data.error));
     const returnedPrompt = typeof data.enhanced_prompt === "string" ? data.enhanced_prompt.trim() : "";
     const receivedPayload = data.enhanced_prompt_json;
@@ -570,11 +618,26 @@ function Home({ accessToken }: AppProps) {
         reason_code: "legacy_contract_compatibility",
       },
     };
+
     return {
       prompt: payload.final_prompt,
       anatomy,
       payload,
     };
+  };
+
+  const cloudGenerate = async (request: Record<string, unknown>): Promise<QualityControlledImage> => {
+    setJobPhase("queued");
+    const job = await runJob({ raw_prompt:prompt.trim(),mode:workspace,speed_mode:speedMode,
+      chat_id:currentChatId.current,...request },setJobPhase);
+    if (!job.result?.history_id) throw new Error("Job returned no history record");
+    const item = await getCloudHistory(job.result.history_id);
+    cloudGeneration.current = {item,labelJobId:job.result.label_job_id};
+    const anatomy = item.anatomy as AnatomySpec || {is_anatomy:false};
+    return {image:item.imageBase64,prompt:item.enhancedPrompt,anatomy,
+      payload:(item.enhancedPayload as EnhancedPromptPayload) || {schema_version:"1.0",final_prompt:item.enhancedPrompt,anatomy_spec:anatomy,route:anatomy.is_anatomy?"anatomy":"generic"},
+      evaluation:item.evaluation ? {...item.evaluation,clipScore:null,vlmScore:null,anatomyHardFailures:(item.evaluation as EvaluationResult).anatomyHardFailures || []}:null,
+      retryCount:item.evaluationRetries ?? 0,warning:item.evaluationWarning ?? null,sketchMetadata:item.sketchMetadata,historyId:item.id};
   };
 
   const callGenerate = async (
@@ -584,6 +647,10 @@ function Home({ accessToken }: AppProps) {
     enhancement?: EnhancedPromptPayload,
     useRuntimeContext = true,
   ): Promise<string> => {
+    if (cloudEnabled()) {
+      const result = await cloudGenerate({kind:"generate",prompt:finalPrompt,anatomy,enhanced_payload:enhancement,feedback:regenerationFeedback || "",mode:workspace === "general" ? "general" : "anatomy"});
+      return result.image;
+    }
     const memoryContext = useRuntimeContext ? await recallMemory("image-agent", finalPrompt) : "";
     const response = await fetch(`${IMAGE_AGENT_URL}/generate`, {
       method: "POST",
@@ -674,6 +741,7 @@ function Home({ accessToken }: AppProps) {
     initialPayload: EnhancedPromptPayload,
     initialFeedback?: string,
   ): Promise<QualityControlledImage> => {
+    if (cloudEnabled()) return cloudGenerate({kind:"generate",prompt:initialPrompt,anatomy:initialAnatomy,enhanced_payload:initialPayload,feedback:initialFeedback || "",mode:"anatomy"});
     let currentPrompt = initialPrompt;
     let currentAnatomy = initialAnatomy;
     let currentPayload = initialPayload;
@@ -749,45 +817,56 @@ function Home({ accessToken }: AppProps) {
     return { ...best!, retryCount: 2, warning: "Quality threshold was not reached; showing the best of three attempts." };
   };
 
-  const localizeAnatomy = async (image: string, anatomy: AnatomySpec): Promise<AnatomyAnnotation[]> => {
-    setAnatomyAnnotations([]);
+  const localizeAnatomy = async (image: string, anatomy: AnatomySpec, allowGeneric = false): Promise<AnatomyAnnotation[]> => {
+    const priorAnnotations = visibleImage.current === image ? anatomyAnnotations : [];
     setLocalizationError(null);
-    if (!anatomy.is_anatomy || !anatomy.organ) return [];
+    if (!allowGeneric && (!anatomy.is_anatomy || !anatomy.organ)) return [];
+    setLabelBusy(true);
     try {
-      const response = await fetch(`${INTERACTIVE_AGENT_URL}/auto-labels`, {
+      let data: Record<string, any>;
+      const cloud = cloudGeneration.current;
+      const sourceId = cloud?.item.imageBase64 === image ? cloud.item.id : currentHistoryId;
+      if (cloudEnabled() && sourceId) {
+        if (cloud?.labelJobId) { await waitJob(cloud.labelJobId); cloud.labelJobId = null; }
+        else await runJob({kind:"labels",generation_id:sourceId,speed_mode:speedMode});
+        const item = await getCloudHistory(sourceId);
+        data = { annotations:item.anatomyAnnotations || [] };
+      } else {
+      const response = await modelRequest("interactive", INTERACTIVE_AGENT_URL, "/auto-labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image_base64: image,
-          domain: "anatomy",
-          organ: anatomy.organ,
+          domain: anatomy.is_anatomy ? "anatomy" : "generic",
+          organ: anatomy.organ || "subject",
           view: anatomy.view_description || anatomy.view || "",
           speed_mode: speedMode,
         }),
       });
-      const data = await response.json().catch(() => ({}));
+      data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorMessage(data, `Auto-label HTTP ${response.status}`));
       if (data.error) throw new Error(String(data.error));
+      }
       const annotations: AnatomyAnnotation[] = (Array.isArray(data.annotations) ? data.annotations : [])
         .map((item: Partial<AnatomyAnnotation>) => {
           const label = extractAnatomyLabel(typeof item.label === "string" ? item.label : "");
           if (
-            !label || item.verified !== true ||
+            !label || (item.verified !== true && !item.user_edited) ||
             typeof item.anchor_x !== "number" || typeof item.anchor_y !== "number" ||
             typeof item.label_x !== "number" || typeof item.label_y !== "number" ||
-            typeof item.confidence !== "number" || item.confidence < 0.75 ||
+            typeof item.confidence !== "number" || (!item.user_edited && item.confidence < 0.75) ||
             item.anchor_x < 0 || item.anchor_x > 1 || item.anchor_y < 0 || item.anchor_y > 1
           ) return null;
           return { ...item, label } as AnatomyAnnotation;
         })
         .filter((item: AnatomyAnnotation | null): item is AnatomyAnnotation => item !== null);
-      setAnatomyAnnotations(annotations);
+      if (visibleImage.current === image) setAnatomyAnnotations(annotations);
       markWarm("interactive");
       return annotations;
     } catch (caught) {
-      setLocalizationError(caught instanceof Error ? caught.message : "Anatomy localization failed");
-      return [];
-    }
+      if (visibleImage.current === image) setLocalizationError(caught instanceof Error ? caught.message : "Automatic labeling failed");
+      return priorAnnotations;
+    } finally { setLabelBusy(false); }
   };
 
   const generateSketch = async (feedback = "") => {
@@ -797,6 +876,10 @@ function Home({ accessToken }: AppProps) {
     setThreedStage("idle"); setGlbBase64(null); setGlbSizeKb(undefined); setThreedError(null);
     try {
       const data = await runTimed("image", async () => {
+        if (cloudEnabled()) {
+          const result = await cloudGenerate({kind:"sketch",prompt:prompt.trim(),mode:"sketch",sketch:{strokes:sketchStrokes,instruction:[prompt.trim(),feedback].filter(Boolean).join(". "),control_strength:sketchStrength}});
+          return {image_base64:result.image,prompt:result.prompt,generation_metadata:result.sketchMetadata};
+        }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 600_000);
         try {
@@ -825,8 +908,10 @@ function Home({ accessToken }: AppProps) {
       setSketchMetadata(data.generation_metadata); setEnhancedPrompt(data.prompt); setEnhancedPromptJson(null);
       setAnatomySpec(anatomy); setAnatomyAnnotations([]); setEvaluation(null); setEvaluationWarning(null);
       setImageBase64(data.image_base64); setImageOutputId(createOutputId("image"));
-      await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: 0, warning: null, sketchMetadata: data.generation_metadata });
+      const historyId = await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: 0, warning: null, sketchMetadata: data.generation_metadata });
       setStage("done");
+      void runTimed("interactive", () => localizeAnatomy(data.image_base64, anatomy, true)).then(annotations =>
+        historyId ? updateHistoryItem(historyId,{anatomyAnnotations:annotations}).catch(() => undefined) : undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sketch generation failed");
       setStage(imageBase64 ? "done" : "idle");
@@ -1002,7 +1087,22 @@ function Home({ accessToken }: AppProps) {
     }
   };
 
+  const handleCloud3D = async () => {
+    if (!currentHistoryId || threedRequestInFlight.current) return;
+    threedRequestInFlight.current = true; setThreedStage("converting"); setThreedError(null);
+    try {
+      const job = await runTimed("threed", () => runJob({kind:"threed",generation_id:currentHistoryId,speed_mode:speedMode},setJobPhase));
+      if (!job.result?.history_id) throw new Error("3D job returned no saved history");
+      const item = await getCloudHistory(job.result.history_id);
+      if (!item.glbBase64) throw new Error("3D job returned no model");
+      setGlbBase64(item.glbBase64); setGlbSizeKb(item.glbSizeKb); setThreedStage("done");
+      await saveHistoryItem(item);
+    } catch(e) { setThreedError(e instanceof Error?e.message:"3D conversion failed"); setThreedStage("idle"); }
+    finally { threedRequestInFlight.current = false; }
+  };
+
   const handleConvertTo3D = async () => {
+    if (cloudEnabled() && currentHistoryId && /^[0-9a-f-]{36}$/i.test(currentHistoryId)) { await handleCloud3D(); return; }
     if (!imageBase64 || threedStage === "converting" || threedRequestInFlight.current) return;
     threedRequestInFlight.current = true;
     const conversionHistoryId = currentHistoryId;
@@ -1113,13 +1213,13 @@ function Home({ accessToken }: AppProps) {
       <View pointerEvents="none" style={styles.ambientBottom} />
       {workspace !== "history" && (
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Start a new chat"
           disabled={isLoading}
           onPress={() => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey((value) => value + 1); }}
           style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}
         >
-          <Icon color="#fff" name="wand" size={16} />
-          <Text style={styles.floatingNewPromptText}>New chat</Text>
+          <Icon color="#fff" name="message-plus" size={24} />
         </Pressable>
       )}
       <KeyboardAvoidingView
@@ -1134,17 +1234,20 @@ function Home({ accessToken }: AppProps) {
             <View style={styles.header}>
               <View style={styles.topBar}>
                 <View style={styles.brandRow}>
-                  <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
-                  <Text style={styles.brand}>EduVision</Text>
+                  <View style={styles.brandMark}><Text style={styles.brandMarkText}>L</Text></View>
+                  <Text style={styles.brand}>learnX</Text>
                 </View>
+                <View style={styles.headerActions}>
                 <Pressable
+                  accessibilityRole="button"
                   accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
                   onPress={toggleTheme}
                   style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}
                 >
-                  <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={15} />
-                  <Text style={styles.themeToggleText}>{themeMode === "dark" ? "Light mode" : "Dark mode"}</Text>
+                  <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={20} />
                 </Pressable>
+                {STUDIO_API_URL && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} />}
+                </View>
               </View>
               <View style={styles.heroGrid}>
                 <View style={styles.heroCopy}>
@@ -1171,11 +1274,11 @@ function Home({ accessToken }: AppProps) {
               </View>
             </View>
 
-            <View accessibilityRole="tablist" style={styles.workspaceTabs}>
+            <View accessibilityRole="tablist" style={[styles.workspaceTabs, workspaceGridStyle]}>
               <Pressable accessibilityRole="tab" accessibilityState={{ selected: workspace === "sketch", disabled: isLoading }} disabled={isLoading}
                 onPress={() => selectWorkspace("sketch")} style={[styles.workspaceTab, workspace === "sketch" && styles.workspaceTabActive]}>
-                <Icon name="wand" color={colors.primaryBright} size={20} />
-                <View style={styles.workspaceTabCopy}><Text style={styles.workspaceTabTitle}>Draw to Image</Text><Text style={styles.workspaceTabDescription}>Sketch + optional instruction</Text></View>
+                <Icon name="pencil" color={workspace === "sketch" ? colors.primaryBright : colors.textMuted} size={20} />
+                <View style={styles.workspaceTabCopy}><Text style={[styles.workspaceTabTitle, workspace === "sketch" && styles.workspaceTabTitleActive]}>Draw to Image</Text><Text style={styles.workspaceTabDescription}>Sketch + optional instruction</Text></View>
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
@@ -1213,11 +1316,12 @@ function Home({ accessToken }: AppProps) {
                 <Icon color={workspace === "history" ? colors.primaryBright : colors.textMuted} name="layers" size={20} />
                 <View style={styles.workspaceTabCopy}>
                   <Text style={[styles.workspaceTabTitle, workspace === "history" && styles.workspaceTabTitleActive]}>History</Text>
-                  <Text style={styles.workspaceTabDescription}>Your last 50 local creations</Text>
+                  <Text style={styles.workspaceTabDescription}>{cloudEnabled() ? "Your cloud and local creations" : "Your saved local conversations"}</Text>
                 </View>
               </Pressable>
             </View>
 
+            {cloudEnabled() && <JobsPanel onResume={restoreHistory} />}
             {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
             {workspace !== "sketch" && <View style={styles.speedSection}>
               <Text style={[shared.label, styles.centerText]}>Speed Mode</Text>
@@ -1303,7 +1407,7 @@ function Home({ accessToken }: AppProps) {
             {(stage === "enhancing" || stage === "generating") && (
               <View style={[shared.card, styles.loadingCard]} accessibilityLiveRegion="polite">
                 <ActivityIndicator color={colors.primaryBright} size="large" />
-                <Text style={styles.loadingText}>{loadingLabel}</Text>
+                <Text style={styles.loadingText}>{cloudEnabled() && jobPhase ? jobPhase : loadingLabel}</Text>
                 <View style={styles.stageRow}>
                   {workspace === "anatomy" && <StagePill active={stage === "enhancing"} done={stage === "generating"} label="Enhance" />}
                   <StagePill active={stage === "generating"} label="Generate" />
@@ -1397,14 +1501,21 @@ function Home({ accessToken }: AppProps) {
                 {workspace === "sketch" && <ActionButton icon="refresh" label="Regenerate from Drawing" disabled={isLoading} onPress={() => generateSketch()} />}
                 <SectionTitle title="Interactive Image Analysis" subtitle="Tap any object or drag a box to segment with SAM 2 and explain with Qwen2.5-VL" />
                 {localizationError && <ErrorBanner title="Labels unavailable; clean image preserved" message={localizationError} />}
+                <View style={styles.actionButtons}>
+                  <ActionButton icon="tag" label={labelBusy ? "Labeling…" : "Label image automatically"} disabled={labelBusy || isLoading} onPress={() => { const sourceImage=imageBase64,sourceId=currentHistoryId; void localizeAnatomy(sourceImage,anatomySpec,true).then(items => sourceId ? updateHistoryItem(sourceId,{anatomyAnnotations:items}).catch(e=>setLocalizationError(e.message)) : undefined); }} />
+                </View>
                 <InteractiveCanvas
                   accessToken={accessToken}
                   anatomyAnnotations={anatomyAnnotations}
+                  generationId={currentHistoryId ?? undefined}
+                  interactions={historyInteractions}
+                  onAnnotationsChange={labelBusy ? undefined : (items) => { setAnatomyAnnotations(items); if(currentHistoryId) void updateHistoryItem(currentHistoryId,{anatomyAnnotations:items}).catch(e=>setLocalizationError("Label edits could not be saved: "+e.message)); }}
                   anatomyOrgan={anatomySpec.organ}
                   feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
                   onInteractionComplete={(interaction) => {
-                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction);
+                    if (visibleImage.current === imageBase64) setHistoryInteractions(current => [...current.filter(turn => turn.id !== interaction.id), interaction]);
+                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction).catch(e=>setError("Interaction could not be saved: "+e.message));
                   }}
                   onOperationComplete={(duration) => {
                     setTimings((current) => ({ ...current, interactive: duration }));
@@ -1544,16 +1655,15 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
-  floatingNewPrompt: { position: "absolute", zIndex: 100, top: 18, right: 22, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 50, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
-  floatingNewPromptText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  floatingNewPrompt: { position: "absolute", zIndex: 100, bottom: 24, right: 24, width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: 28, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
   ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },
   ambientBottom: { position: "absolute", width: 520, height: 520, borderRadius: 260, left: -230, bottom: -170, backgroundColor: "rgba(175, 125, 73, 0.16)" },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 44 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 100 },
   container: { width: "100%", maxWidth: 1040, alignSelf: "center", gap: 20 },
   header: { paddingVertical: 8, gap: 40 },
   topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
-  themeToggle: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, ...Platform.select({ web: { boxShadow: `0 12px 35px ${colors.shadow}`, backdropFilter: "blur(20px)" } as object }) },
-  themeToggleText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  themeToggle: { alignItems: "center", justifyContent: "center", width: 42, height: 42, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 50,  ...Platform.select({ web: { boxShadow: `0 12px 35px ${colors.shadow}`, backdropFilter: "blur(20px)" } as object }) },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
   brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
@@ -1578,7 +1688,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   healthState: { color: colors.textDim, fontSize: 12 },
   warmNote: { color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
   workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 6, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 22px 65px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.88)`, backdropFilter: "blur(26px) saturate(125%)" } as object }) },
-  workspaceTab: { flex: 1, minWidth: 260, minHeight: 74, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: "transparent" },
+  workspaceTab: { flexGrow: 1, flexBasis: 220, minWidth: 0, minHeight: 94, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 16, borderWidth: 1, borderColor: "transparent" },
   workspaceTabActive: { borderColor: "rgba(185,79,39,0.38)", backgroundColor: "rgba(201,95,50,0.13)" },
   workspaceTabCopy: { flex: 1, gap: 3 },
   workspaceTabTitle: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },

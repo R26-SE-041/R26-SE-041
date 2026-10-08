@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "framework": null,
+  "rewrites": [{ "source": "/((?!_expo/|assets/).*)", "destination": "/index.html" }]
+}

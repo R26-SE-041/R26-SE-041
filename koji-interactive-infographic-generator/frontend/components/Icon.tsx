@@ -8,9 +8,15 @@ export type IconName =
   | "book"
   | "box-select"
   | "check"
+  | "close"
+  | "log-out"
+  | "message-plus"
+  | "pencil"
   | "clock"
   | "cube"
   | "download"
+  | "eye"
+  | "eye-off"
   | "help"
   | "layers"
   | "minus"
@@ -43,9 +49,14 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "book" && <><Path {...common} d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><Path {...common} d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>}
       {name === "box-select" && <><Rect {...common} height="14" rx="1" width="14" x="5" y="5" /><Path {...common} d="M9 2H2v7M15 22h7v-7" /></>}
       {name === "check" && <Polyline {...common} points="20 6 9 17 4 12" />}
+      {name === "close" && <Path {...common} d="m6 6 12 12M18 6 6 18" />}
+      {name === "log-out" && <><Path {...common} d="M9 4H4v16h5M9 12h12m-4-4 4 4-4 4" /></>}
+      {name === "message-plus" && <><Path {...common} d="M21 11v6a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h8M19 2v6m-3-3h6" /></>}
+      {name === "pencil" && <><Path {...common} d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>}
       {name === "clock" && <><Circle {...common} cx="12" cy="12" r="9" /><Polyline {...common} points="12 7 12 12 15 14" /></>}
       {name === "cube" && <><Path {...common} d="m12 2 9 5-9 5-9-5 9-5Z" /><Path {...common} d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10" /></>}
       {name === "download" && <><Path {...common} d="M12 3v12" /><Polyline {...common} points="7 10 12 15 17 10" /><Path {...common} d="M5 21h14" /></>}
+      {(name === "eye" || name === "eye-off") && <><Path {...common} d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><Circle {...common} cx="12" cy="12" r="3" />{name === "eye-off" && <Line {...common} x1="3" y1="3" x2="21" y2="21" />}</>}
       {name === "help" && <><Circle {...common} cx="12" cy="12" r="9" /><Path {...common} d="M9.5 9a2.7 2.7 0 1 1 4.2 2.3c-1 .6-1.7 1.1-1.7 2.2" /><Circle cx="12" cy="17" fill={color} r="1" /></>}
       {name === "layers" && <><Path {...common} d="m12 2 9 5-9 5-9-5 9-5Z" /><Path {...common} d="m3 12 9 5 9-5M3 17l9 5 9-5" /></>}
       {name === "minus" && <Line {...common} x1="5" x2="19" y1="12" y2="12" />}

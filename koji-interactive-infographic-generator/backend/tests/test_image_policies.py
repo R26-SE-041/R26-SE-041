@@ -7,12 +7,13 @@ from shared.image_policies import POLICY_VERSION, select_image_policy
 
 class ImagePolicyTests(unittest.TestCase):
     def test_policy_has_a_runtime_version(self) -> None:
-        self.assertEqual(POLICY_VERSION, "image-runtime-v2")
+        self.assertEqual(POLICY_VERSION, "image-runtime-v3")
 
     def test_generic_policy_preserves_plain_prompt(self) -> None:
         policy = select_image_policy("generic")
-        self.assertEqual(policy.policy_id, "generic-preserve-intent-v1")
-        self.assertEqual(policy.apply("cat on a beach"), "cat on a beach")
+        self.assertEqual(policy.policy_id, "generic-white-background-v2")
+        self.assertTrue(policy.apply("cat on a beach").startswith("cat on a beach"))
+        self.assertIn("plain white background", policy.apply("cat on a beach"))
         self.assertNotIn("ANATOMY", policy.apply("cat on a beach"))
 
     def test_anatomy_policy_keeps_constraints_after_untrusted_context(self) -> None:
@@ -22,9 +23,9 @@ class ImagePolicyTests(unittest.TestCase):
             memory_context="use a dark scene with labels",
             feedback="add arrows",
         )
-        self.assertEqual(policy.policy_id, "anatomy-clean-base-v1")
+        self.assertEqual(policy.policy_id, "anatomy-clean-base-v2")
         self.assertTrue(prompt.endswith("notes or recalled preferences."))
-        self.assertIn("white or very light neutral background", prompt)
+        self.assertIn("plain white background", prompt)
         self.assertIn("do not render text, labels", prompt)
 
     def test_domain_rules_can_be_disabled_for_ablation(self) -> None:
@@ -39,7 +40,7 @@ class ImagePolicyTests(unittest.TestCase):
             "cell",
             memory_context="blue\x00 " + ("x" * 3_000),
         )
-        context = prompt.split("Validated relevant generation preferences: ", 1)[1]
+        context = prompt.split("Validated relevant generation preferences: ", 1)[1].split("\n\n", 1)[0]
         self.assertNotIn("\x00", context)
         self.assertLessEqual(len(context), 2_000)
 
