@@ -31,7 +31,7 @@ Commit and push website changes to main to trigger a production deployment. Chan
 - public/styles.css: shared responsive theme
 - public/assets/documents: nine original PDFs with consistent filenames
 - public/assets/images: portraits extracted from PP2 page 2 and favicon
-- public/view: browser PDF readers
+- public/view: legacy reader pages retained for existing bookmarks
 - vercel.json: static hosting configuration
 
 ## Course submission
@@ -44,4 +44,4 @@ Research content comes from the supplied research paper and Topic Assessment For
 
 Milestone dates and allocated marks are omitted by explicit user instruction. Final presentation and final/viva assessment materials have not been supplied; future entries remain available. Individual reports are not relabeled as final reports. No additional files have been requested.
 
-PDF readers use native browser rendering, with a direct Open PDF fallback and optional download. The site has no frontend JavaScript or package dependencies.
+Each document and presentation offers a direct PDF link that opens in a new browser tab and a separate Download link. Browser PDF settings control inline viewing. Legacy reader pages remain available for existing bookmarks. The site has no frontend JavaScript or package dependencies.
