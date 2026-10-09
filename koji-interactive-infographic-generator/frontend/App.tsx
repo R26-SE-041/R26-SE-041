@@ -1219,7 +1219,7 @@ function Home({ accessToken, studioSession }: AppProps) {
           onPress={() => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey((value) => value + 1); }}
           style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}
         >
-          <Icon color="#fff" name="message-plus" size={24} />
+          <Icon color="#fff" name="wand" size={24} />
         </Pressable>
       )}
       <KeyboardAvoidingView
@@ -1287,7 +1287,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 onPress={() => selectWorkspace("general")}
                 style={({ pressed }) => [styles.workspaceTab, workspace === "general" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
               >
-                <Icon color={workspace === "general" ? colors.primaryBright : colors.textMuted} name="wand" size={20} />
+                <Icon color={workspace === "general" ? colors.primaryBright : colors.textMuted} name="image" size={20} />
                 <View style={styles.workspaceTabCopy}>
                   <Text style={[styles.workspaceTabTitle, workspace === "general" && styles.workspaceTabTitleActive]}>Image Generation</Text>
                   <Text style={styles.workspaceTabDescription}>General educational visuals and diagrams</Text>
@@ -1300,7 +1300,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 onPress={() => selectWorkspace("anatomy")}
                 style={({ pressed }) => [styles.workspaceTab, workspace === "anatomy" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
               >
-                <Icon color={workspace === "anatomy" ? colors.primaryBright : colors.textMuted} name="target" size={20} />
+                <Icon color={workspace === "anatomy" ? colors.primaryBright : colors.textMuted} name="heart" size={20} />
                 <View style={styles.workspaceTabCopy}>
                   <Text style={[styles.workspaceTabTitle, workspace === "anatomy" && styles.workspaceTabTitleActive]}>Human Anatomy Generation</Text>
                   <Text style={styles.workspaceTabDescription}>Validated organs, views, labels, and 3D</Text>
@@ -1395,7 +1395,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 <View style={styles.actionButtons}>
                   <ActionButton
                     disabled={isLoading || (workspace === "sketch" ? !sketchStrokes.some((stroke) => stroke.tool === "pen") : !prompt.trim())}
-                    icon="wand"
+                    icon={workspace === "anatomy" ? "sparkles" : "image"}
                     label={workspace === "sketch" ? (stage === "generating" ? "Generating..." : "Generate from Drawing") : workspace === "general" ? (stage === "generating" ? "Generating..." : "Generate Image") : (stage === "enhancing" ? "Enhancing..." : "Enhance Prompt")}
                     loading={isLoading}
                     onPress={handleSubmit}
@@ -1425,7 +1425,7 @@ function Home({ accessToken, studioSession }: AppProps) {
             {enhancedPromptJson && stage !== "enhancing" && (
               <View style={shared.card}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="wand" size={15} /><Text style={styles.badge}>Enhanced Prompt JSON</Text></View>
+                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="sparkles" size={15} /><Text style={styles.badge}>Enhanced Prompt JSON</Text></View>
                   <Text style={styles.modelTag}>
                     {enhancedPromptJson.route === "anatomy"
                       ? `Anatomy · ${enhancedPromptJson.anatomy_mode === "verified" ? "verified catalog" : "general"}`
@@ -1441,7 +1441,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 )}
                 {stage === "preview" && (
                   <View style={styles.actionButtons}>
-                    <ActionButton icon="wand" label="Generate Image" onPress={generateEnhancedPreview} />
+                    <ActionButton icon="image" label="Generate Image" onPress={generateEnhancedPreview} />
                   </View>
                 )}
                 {promptOutputId && (stage === "preview" || stage === "done") && (
@@ -1569,7 +1569,7 @@ function ActionButton({ disabled = false, icon, label, loading = false, onPress,
   const styles = makeStyles(colors);
   const shared = makeSharedStyles(colors);
   return (
-    <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
       {loading && <ActivityIndicator color={secondary ? colors.primary : "#fff"} size="small" style={styles.buttonSpinner} />}
       {!loading && icon && <Icon color={secondary ? colors.text : "#ffffff"} name={icon} size={17} />}
       <Text style={secondary ? shared.secondaryButtonText : shared.buttonText}>{label}</Text>
@@ -1667,7 +1667,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
   brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
-  brand: { color: colors.primaryBright, fontSize: 17, fontWeight: "900", letterSpacing: 2.4, textTransform: "uppercase" },
+  brand: { color: colors.primaryBright, fontSize: 20, fontWeight: "900", letterSpacing: 0.2 },
   heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 34 },
   heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 500, minWidth: 280, maxWidth: "100%" as unknown as number },
   eyebrow: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 2.6, marginBottom: 12 },

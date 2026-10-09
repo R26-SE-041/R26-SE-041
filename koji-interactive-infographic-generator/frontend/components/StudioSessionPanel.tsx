@@ -4,7 +4,7 @@ import Icon from "./Icon";
 import { useAppTheme } from "../theme";
 interface Props { email?: string; name?: string; signOut: () => Promise<void> }
 export default function StudioSessionPanel({ email, name, signOut }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,8 +16,8 @@ export default function StudioSessionPanel({ email, name, signOut }: Props) {
     </Pressable>
     <Modal transparent visible={open} animationType="fade" onRequestClose={() => { if (!busy) setOpen(false); }}>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,.25)", justifyContent: "flex-start", alignItems: "flex-end", padding: 20 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close account menu" disabled={busy} onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }} />
-        <View style={{ width: 300, maxWidth: "100%", backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, padding: 20, borderRadius: 20, gap: 12 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss account menu" focusable={false} disabled={busy} onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }} />
+        <View style={{ width: 300, maxWidth: "100%", backgroundColor: mode === "dark" ? "#352920" : "#fffaf3", borderColor: colors.border, borderWidth: 1, padding: 20, borderRadius: 20, gap: 12, boxShadow: `0 16px 48px ${colors.shadow}` }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ color: colors.textDim, fontSize: 11, fontWeight: "700", letterSpacing: 1 }}>YOUR ACCOUNT</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Close account menu" disabled={busy} onPress={() => setOpen(false)} style={{ padding: 10 }}><Icon name="close" color={colors.textMuted} /></Pressable>

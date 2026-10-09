@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
 import { Platform, StyleSheet } from "react-native";
+import WebInteractionStyles from "./components/WebInteractionStyles";
 
 export type ThemeMode = "dark" | "light";
 
@@ -60,7 +61,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mode,
     toggleTheme: () => setMode((current) => current === "dark" ? "light" : "dark"),
   }), [mode]);
-  return React.createElement(ThemeContext.Provider, { value }, children);
+  return React.createElement(ThemeContext.Provider, { value }, React.createElement(WebInteractionStyles, { colors: value.colors, mode }), children);
 }
 
 export const useAppTheme = () => useContext(ThemeContext);

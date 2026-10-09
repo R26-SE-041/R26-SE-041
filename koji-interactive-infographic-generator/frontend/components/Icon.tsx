@@ -12,6 +12,10 @@ export type IconName =
   | "log-out"
   | "message-plus"
   | "pencil"
+  | "eraser"
+  | "heart"
+  | "image"
+  | "sparkles"
   | "clock"
   | "cube"
   | "download"
@@ -53,6 +57,10 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "log-out" && <><Path {...common} d="M9 4H4v16h5M9 12h12m-4-4 4 4-4 4" /></>}
       {name === "message-plus" && <><Path {...common} d="M21 11v6a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h8M19 2v6m-3-3h6" /></>}
       {name === "pencil" && <><Path {...common} d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>}
+      {name === "eraser" && <><Path {...common} d="m14 3 7 7-10 10H6l-4-4L14 3Zm-7 8 7 7M11 20h11" /></>}
+      {name === "heart" && <><Path {...common} d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z" /><Path {...common} d="M4 12h4l2-4 3 8 2-4h5" /></>}
+      {name === "image" && <><Rect {...common} x="3" y="3" width="18" height="18" rx="3" /><Circle {...common} cx="8" cy="8" r="1.5" /><Path {...common} d="m3 17 5-5 4 4 4-7 5 8" /></>}
+      {name === "sparkles" && <><Path {...common} d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4m-2-2h4M3 18v4m-2-2h4" /></>}
       {name === "clock" && <><Circle {...common} cx="12" cy="12" r="9" /><Polyline {...common} points="12 7 12 12 15 14" /></>}
       {name === "cube" && <><Path {...common} d="m12 2 9 5-9 5-9-5 9-5Z" /><Path {...common} d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10" /></>}
       {name === "download" && <><Path {...common} d="M12 3v12" /><Polyline {...common} points="7 10 12 15 17 10" /><Path {...common} d="M5 21h14" /></>}
@@ -70,7 +78,7 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "target" && <><Circle {...common} cx="12" cy="12" r="9" /><Circle {...common} cx="12" cy="12" r="4" /><Circle cx="12" cy="12" fill={color} r="1.5" /></>}
       {name === "thumb-up" && <><Path {...common} d="M7 10v11H3V10h4ZM7 19h10.2a2 2 0 0 0 2-1.6l1.4-7A2 2 0 0 0 18.6 8H14l.7-3.2A2.3 2.3 0 0 0 10.4 3L7 10Z" /></>}
       {name === "thumb-down" && <><Path {...common} d="M7 14V3H3v11h4ZM7 5h10.2a2 2 0 0 1 2 1.6l1.4 7a2 2 0 0 1-2 2.4H14l.7 3.2a2.3 2.3 0 0 1-4.3 1.8L7 14Z" /></>}
-      {name === "wand" && <><Path {...common} d="m4 20 10-10" /><Path {...common} d="m13 4 1-2 1 2 2 1-2 1-1 2-1-2-2-1 2-1ZM18 13l1-2 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" /></>}
+      {name === "wand" && <><Path {...common} d="m3 18 13-13 3 3L6 21l-3-3Zm10-10 3 3M6 2v4M4 4h4M20 14v4m-2-2h4" /></>}
     </Svg>
   );
 }
