@@ -45,3 +45,5 @@ Research content comes from the supplied research paper and Topic Assessment For
 Milestone dates and allocated marks are omitted by explicit user instruction. Final presentation and final/viva assessment materials have not been supplied; future entries remain available. Individual reports are not relabeled as final reports. No additional files have been requested.
 
 Each document and presentation offers a direct PDF link that opens in a new browser tab and a separate Download link. Browser PDF settings control inline viewing. Legacy reader pages remain available for existing bookmarks. The site has no frontend JavaScript or package dependencies.
+
+Models by research component: the Technologies section maps configured frontends, Python backends, databases and GPU serving from this repository. Published base-model/checkpoint parameter sizes link to source model cards; rounded figures and unavailable custom counts are labeled. LoRA trainable counts are separate. The static website hosting is described separately from the research application stack.
