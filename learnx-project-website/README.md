@@ -10,7 +10,11 @@ Run `node tools/preview.mjs` from this folder, then open http://127.0.0.1:4173.
 
 Repository: https://github.com/R26-SE-041/R26-SE-041
 
-Import this GitHub repository into Vercel using:
+Live website: https://learnx-research.vercel.app
+
+Vercel project: https://vercel.com/kojithan-ys-projects/learnx-research
+
+The GitHub repository is connected to Vercel with:
 
 - Project name: learnx-research
 - Root Directory: learnx-project-website
