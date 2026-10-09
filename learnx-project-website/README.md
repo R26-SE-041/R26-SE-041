@@ -30,7 +30,7 @@ Commit and push website changes to main to trigger a production deployment. Chan
 - public/index.html: all seven required sections and document links
 - public/styles.css: shared responsive theme
 - public/assets/documents: nine original PDFs with consistent filenames
-- public/assets/images: portraits extracted from PP2 page 2 and favicon
+- public/assets/images: restored team portraits, updated co-supervisor portrait and favicon
 - public/view: legacy reader pages retained for existing bookmarks
 - vercel.json: static hosting configuration
 
@@ -40,7 +40,7 @@ Upload the public directory contents or the standalone ZIP, with index.html at t
 
 ## Source content
 
-Research content comes from the supplied research paper and Topic Assessment Form. Team names/photos come from PP2 page 2; team contact details and responsibilities come from existing project documentation. Four individual component reports are supplied separately and retained unchanged. The library contains all nine PDFs supplied for the website.
+Research content comes from the supplied research paper and Topic Assessment Form. Team names and original member portraits come from PP2 page 2; the co-supervisor portrait uses the replacement photograph supplied by the user. Member portraits were restored with the built-in image editing tool, with originals retained locally in source/portraits; team contact details and responsibilities come from existing project documentation. Four individual component reports are supplied separately and retained unchanged. The library contains all nine PDFs supplied for the website.
 
 Milestone dates and allocated marks are omitted by explicit user instruction. Final presentation and final/viva assessment materials have not been supplied; future entries remain available. Individual reports are not relabeled as final reports. No additional files have been requested.
 
