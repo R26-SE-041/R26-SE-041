@@ -1,0 +1,2 @@
+# Optional MCP adapter. Install separately; existing backend requirements stay unchanged.
+mcp==1.30.0

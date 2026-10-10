@@ -1,0 +1,148 @@
+{
+  "_scope": "DRAFT — 20 cases (12 en→ta, 8 en→si). Runs today and exercises every metric, but the reference translations are machine-drafted and MUST be reviewed by a fluent speaker before any number from this file appears in the paper. A chrF score is only as good as its references, and a wrong reference penalises a correct system.",
+  "_review_priority": "Sinhala first: the drafts there are the least confident. Ask the reviewer to fix wording freely but to keep the must_preserve terms in Latin script, since that is the convention this system is being measured against.",
+  "_metrics_note": "chrF leads and BLEU is reported only for comparability — whitespace tokenisation handles agglutinative Tamil and Sinhala badly. term_preservation checks that the anatomical nomenclature survived; native_script_ratio catches the silent failure where call_localizer returns the untranslated English after an error.",
+  "cases": [
+    {
+      "id": "l01",
+      "source": "The pectoralis major adducts and medially rotates the humerus.",
+      "target_language": "tamil",
+      "reference": "பெக்டோரலிஸ் மேஜர் தசை ஹியூமரஸ் எலும்பை உள்நோக்கி இழுத்து உள்ளே சுழற்றுகிறது.",
+      "must_preserve": ["pectoralis major"]
+    },
+    {
+      "id": "l02",
+      "source": "The deltoid muscle abducts the arm at the shoulder joint.",
+      "target_language": "tamil",
+      "reference": "டெல்டாய்டு தசை தோள்பட்டை மூட்டில் கையை வெளிநோக்கி உயர்த்துகிறது.",
+      "must_preserve": ["deltoid"]
+    },
+    {
+      "id": "l03",
+      "source": "The biceps brachii is the most powerful supinator of the forearm.",
+      "target_language": "tamil",
+      "reference": "பைசெப்ஸ் பிராக்கி தசையே முன்கையை வெளிப்புறமாகத் திருப்பும் மிக வலிமையான தசை ஆகும்.",
+      "must_preserve": ["biceps brachii"]
+    },
+    {
+      "id": "l04",
+      "source": "The triceps brachii inserts on the olecranon process of the ulna.",
+      "target_language": "tamil",
+      "reference": "டிரைசெப்ஸ் பிராக்கி தசை அல்னா எலும்பின் ஒலிக்ரானான் பகுதியில் இணைகிறது.",
+      "must_preserve": ["triceps brachii"]
+    },
+    {
+      "id": "l05",
+      "source": "The quadriceps femoris has four parts that extend the knee.",
+      "target_language": "tamil",
+      "reference": "குவாட்ரிசெப்ஸ் ஃபெமோரிஸ் தசையில் முழங்காலை நீட்டும் நான்கு பகுதிகள் உள்ளன.",
+      "must_preserve": ["quadriceps femoris"]
+    },
+    {
+      "id": "l06",
+      "source": "The axillary nerve supplies the deltoid, with root values C5 and C6.",
+      "target_language": "tamil",
+      "reference": "ஆக்சில்லரி நரம்பு டெல்டாய்டு தசைக்கு நரம்பு வழங்கலைத் தருகிறது; அதன் வேர் மதிப்புகள் C5 மற்றும் C6 ஆகும்.",
+      "must_preserve": ["deltoid", "C5", "C6"]
+    },
+    {
+      "id": "l07",
+      "source": "Both heads converge into a bilaminar tendon.",
+      "target_language": "tamil",
+      "reference": "இரண்டு தலைகளும் இணைந்து இரட்டை அடுக்கு தசைநாராக மாறுகின்றன.",
+      "must_preserve": []
+    },
+    {
+      "id": "l08",
+      "source": "Regular veterinary check-ups and vaccination against rabies are essential.",
+      "target_language": "tamil",
+      "reference": "வழக்கமான கால்நடை மருத்துவ பரிசோதனைகளும் ரேபிஸ் நோய்க்கான தடுப்பூசியும் அவசியமானவை.",
+      "must_preserve": []
+    },
+    {
+      "id": "l09",
+      "source": "Chocolate contains theobromine, which is toxic to dogs.",
+      "target_language": "tamil",
+      "reference": "சாக்லேட்டில் தியோப்ரோமின் உள்ளது, அது நாய்களுக்கு நச்சுத்தன்மை வாய்ந்தது.",
+      "must_preserve": ["theobromine"]
+    },
+    {
+      "id": "l10",
+      "source": "The middle fibres abduct the arm from about 15 to 90 degrees.",
+      "target_language": "tamil",
+      "reference": "நடுப்பகுதி இழைகள் கையை சுமார் 15 முதல் 90 டிகிரி வரை வெளிநோக்கி உயர்த்துகின்றன.",
+      "must_preserve": ["15", "90"]
+    },
+    {
+      "id": "l11",
+      "source": "Injury to this nerve causes weakness of shoulder abduction and sensory loss over the upper lateral arm.",
+      "target_language": "tamil",
+      "reference": "இந்த நரம்புக்கு ஏற்படும் காயம் தோள்பட்டை உயர்த்தலில் பலவீனத்தையும், மேல் பக்கவாட்டு கையில் உணர்வு இழப்பையும் ஏற்படுத்தும்.",
+      "must_preserve": []
+    },
+    {
+      "id": "l12",
+      "source": "The system shall require multi-factor authentication for all administrator logins.",
+      "target_language": "tamil",
+      "reference": "நிர்வாகி உள்நுழைவுகள் அனைத்திற்கும் அமைப்பு பல-காரணி அங்கீகாரத்தை கட்டாயமாக்க வேண்டும்.",
+      "must_preserve": []
+    },
+
+    {
+      "id": "l13",
+      "source": "The pectoralis major adducts and medially rotates the humerus.",
+      "target_language": "sinhala",
+      "reference": "පෙක්ටෝරාලිස් මේජර් මාංශ පේශිය හියුමරස් අස්ථිය ඇතුළතට ඇද එය ඇතුළතට කරකවයි.",
+      "must_preserve": ["pectoralis major"]
+    },
+    {
+      "id": "l14",
+      "source": "The deltoid muscle abducts the arm at the shoulder joint.",
+      "target_language": "sinhala",
+      "reference": "ඩෙල්ටොයිඩ් මාංශ පේශිය උරහිස් සන්ධියේදී අත පිටතට ගෙන යයි.",
+      "must_preserve": ["deltoid"]
+    },
+    {
+      "id": "l15",
+      "source": "The biceps brachii is the most powerful supinator of the forearm.",
+      "target_language": "sinhala",
+      "reference": "බයිසෙප්ස් බ්‍රැකයි යනු නළල් අත පිටතට කරකැවීමේ ප්‍රබලතම මාංශ පේශිය වේ.",
+      "must_preserve": ["biceps brachii"]
+    },
+    {
+      "id": "l16",
+      "source": "The triceps brachii inserts on the olecranon process of the ulna.",
+      "target_language": "sinhala",
+      "reference": "ට්‍රයිසෙප්ස් බ්‍රැකයි මාංශ පේශිය අල්නා අස්ථියේ ඔලෙක්‍රැනොන් කොටසට සම්බන්ධ වේ.",
+      "must_preserve": ["triceps brachii"]
+    },
+    {
+      "id": "l17",
+      "source": "The quadriceps femoris has four parts that extend the knee.",
+      "target_language": "sinhala",
+      "reference": "ක්වඩ්‍රිසෙප්ස් ෆෙමොරිස් මාංශ පේශියේ දණහිස දිගු කරන කොටස් හතරක් ඇත.",
+      "must_preserve": ["quadriceps femoris"]
+    },
+    {
+      "id": "l18",
+      "source": "Chocolate contains theobromine, which is toxic to dogs.",
+      "target_language": "sinhala",
+      "reference": "චොකලට් තුළ තියෝබ්‍රොමින් අඩංගු වන අතර, එය බල්ලන්ට විෂ සහිත වේ.",
+      "must_preserve": ["theobromine"]
+    },
+    {
+      "id": "l19",
+      "source": "Puppies are born deaf, blind, and without teeth.",
+      "target_language": "sinhala",
+      "reference": "බලු පැටවුන් උපදින්නේ බිහිරි, අන්ධ සහ දත් නොමැතිවය.",
+      "must_preserve": []
+    },
+    {
+      "id": "l20",
+      "source": "The axillary nerve supplies the deltoid, with root values C5 and C6.",
+      "target_language": "sinhala",
+      "reference": "අක්සිලරි ස්නායුව ඩෙල්ටොයිඩ් මාංශ පේශියට ස්නායු සැපයුම ලබා දෙන අතර, එහි මූල අගයන් C5 සහ C6 වේ.",
+      "must_preserve": ["deltoid", "C5", "C6"]
+    }
+  ]
+}

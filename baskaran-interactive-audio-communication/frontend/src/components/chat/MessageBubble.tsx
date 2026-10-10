@@ -6,6 +6,7 @@ import { MarkdownContent } from '@/components/ui/MarkdownContent'
 
 interface MessageBubbleProps {
   message: SessionMessage
+  onAcceptAudio?: (message: SessionMessage) => void
 }
 
 // ─── Audio Player ─────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ function AudioPlayer({ src }: { src: string }) {
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, onAcceptAudio }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const [showExcerpts, setShowExcerpts] = useState(false)
 
@@ -91,6 +92,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         }
 
         {/* Audio player */}
+        {!isUser && message.audio_approval_pending && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <p className="text-xs" style={{ color: 'var(--c-ink-faint)' }}>
+              Review the Sinhala answer before generating speech.
+            </p>
+            <button
+              type="button"
+              onClick={() => onAcceptAudio?.(message)}
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+              style={{ background: 'var(--c-blue)', color: 'white' }}
+            >
+              Accept &amp; Generate Speech
+            </button>
+          </div>
+        )}
         {message.audio_url && <AudioPlayer src={message.audio_url} />}
         {!isUser && message.audio_pending && (
           <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: 'var(--c-ink-faint)' }}>
@@ -155,4 +171,3 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     </div>
   )
 }
-

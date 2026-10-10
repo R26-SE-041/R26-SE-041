@@ -168,6 +168,45 @@ class BaseGemmaAnswer(_GemmaAnswerBase):
             "adapter_active=false; peft_wrapper=false; local_files_only=true"
         )
 
+    # -- benchmark introspection (warm-latency + GPU table for the paper) ------
+    @modal.fastapi_endpoint(method="GET")
+    def gpu_info(self):
+        """Report the physical accelerator serving this warm container.
+
+        The `gpu=` argument in @app.cls names the requested class, not the
+        device string a paper has to cite. Call this straight after a warm
+        latency batch: it lands on the already-running container, so it adds
+        no cold start and no measurable GPU time.
+        """
+        try:
+            import torch
+        except Exception as exc:            # torch absent (CPU-only image)
+            return {
+                "endpoint": "base_gemma_answer",
+                "model_id": "google/gemma-4-12B-it",
+                "requested_gpu": "A100-80GB",
+                "gpu_name": "CPU",
+                "device": "cpu",
+                "vram_total_gb": None,
+                "torch_version": None,
+                "note": f"torch unavailable: {type(exc).__name__}",
+            }
+
+        cuda = torch.cuda.is_available()
+        return {
+            "endpoint": "base_gemma_answer",
+            "model_id": "google/gemma-4-12B-it",
+            "requested_gpu": "A100-80GB",
+            "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
+            "device": "cuda" if cuda else "cpu",
+            "vram_total_gb": (
+                round(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, 1)
+                if cuda
+                else None
+            ),
+            "torch_version": torch.__version__,
+        }
+
     @modal.fastapi_endpoint(method="GET")
     def health(self):
         return {
@@ -227,6 +266,45 @@ class FineTunedGemmaV2Answer(_GemmaAnswerBase):
             f"base={_BASE_MODEL_PATH}; adapter={_ADAPTER_PATH}; PEFT=LORA; "
             f"adapters={list(self.model.peft_config)}; local_files_only=true"
         )
+
+    # -- benchmark introspection (warm-latency + GPU table for the paper) ------
+    @modal.fastapi_endpoint(method="GET")
+    def gpu_info(self):
+        """Report the physical accelerator serving this warm container.
+
+        The `gpu=` argument in @app.cls names the requested class, not the
+        device string a paper has to cite. Call this straight after a warm
+        latency batch: it lands on the already-running container, so it adds
+        no cold start and no measurable GPU time.
+        """
+        try:
+            import torch
+        except Exception as exc:            # torch absent (CPU-only image)
+            return {
+                "endpoint": "finetuned_gemma_v2",
+                "model_id": "google/gemma-4-12B-it + LoRA v2",
+                "requested_gpu": "A100-80GB",
+                "gpu_name": "CPU",
+                "device": "cpu",
+                "vram_total_gb": None,
+                "torch_version": None,
+                "note": f"torch unavailable: {type(exc).__name__}",
+            }
+
+        cuda = torch.cuda.is_available()
+        return {
+            "endpoint": "finetuned_gemma_v2",
+            "model_id": "google/gemma-4-12B-it + LoRA v2",
+            "requested_gpu": "A100-80GB",
+            "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
+            "device": "cuda" if cuda else "cpu",
+            "vram_total_gb": (
+                round(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, 1)
+                if cuda
+                else None
+            ),
+            "torch_version": torch.__version__,
+        }
 
     @modal.fastapi_endpoint(method="GET")
     def health(self):

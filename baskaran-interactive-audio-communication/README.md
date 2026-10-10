@@ -5,6 +5,12 @@
 
 ## Architecture
 
+English summary/save voice actions are documented in [backend/ACTIONS.md](backend/ACTIONS.md).
+The feature supports a direct backend fallback and an optional OpenClaw MCP path.
+English/Tamil/Sinhala document-to-audio revision reuses the existing language-specific TTS endpoints,
+with a spoken transcript, WAV download and playback-speed controls.
+See ACTIONS.md for scope, live validation and remaining manual checks.
+
 ```
 Next.js Frontend  →  FastAPI Backend  →  LangGraph Agents  →  Modal.com AI Models
                   ↕                  ↕
@@ -146,3 +152,8 @@ create policy "Users see own sessions" on sessions for all using (auth.uid() = u
 - **No hardcoded secrets** — all via environment variables  
 - **Graceful degradation** — optional endpoints return fallbacks when not deployed  
 - **User-scoped data** — ChromaDB and Supabase queries always filter by `user_id`
+
+Sectioned audio revision adds up to three source-linked paragraph groups, browser navigation,
+active-section highlighting and authenticated source inspection. The existing single-audio
+mode remains available as a baseline. See backend/ACTIONS.md and
+backend/benchmarks/SECTIONED_REVISION_EVALUATION.md for validation and evaluation limits.

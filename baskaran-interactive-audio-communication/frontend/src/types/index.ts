@@ -59,6 +59,7 @@ export interface SessionMessage {
   content: string
   audio_url?: string | null
   audio_pending?: boolean
+  audio_approval_pending?: boolean
   audio_error?: string | null
   references?: ChunkReference[]
   created_at: string

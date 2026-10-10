@@ -1,0 +1,40 @@
+{
+  "_scope": "30 items: 8 English, 8 Tamil, 6 Sinhala, 8 code-switch. Sized for the MOS study rather than for the objective pass — 20 clips per system across 15 raters is already 600 judgements, and a longer set buys less than more raters would.",
+  "_design": "Content is deliberately mixed rather than uniform tutoring prose, because the failure modes differ by input type and a set of only well-formed sentences hides most of them:\n  - numbers, units and abbreviations (C5-T1, 15 to 90 degrees) — the classic TTS normalisation failure;\n  - long multi-clause sentences — where prosody and breath placement break down;\n  - short fragments — where models trained on full sentences clip or rush;\n  - anatomical Latin inside Tamil and Sinhala — the actual code-switch case this system exists to handle, and the one no single-language TTS is trained for.",
+  "_roundtrip_note": "Keep every item short enough to stay well inside Whisper's 30-second window, or the round-trip CER measures chunking rather than synthesis.",
+  "items": [
+    {"id": "t01", "language": "english", "text": "The pectoralis major adducts and medially rotates the humerus.", "category": "plain"},
+    {"id": "t02", "language": "english", "text": "The deltoid is innervated by the axillary nerve, root values C5 and C6.", "category": "alphanumeric"},
+    {"id": "t03", "language": "english", "text": "The middle fibres abduct the arm from about 15 to 90 degrees.", "category": "numbers"},
+    {"id": "t04", "language": "english", "text": "Biceps brachii is the most powerful supinator of the forearm, particularly when the elbow is flexed to a right angle, and it also contributes to elbow flexion and weak shoulder flexion.", "category": "long"},
+    {"id": "t05", "language": "english", "text": "Name the four parts.", "category": "fragment"},
+    {"id": "t06", "language": "english", "text": "The triceps brachii inserts on the olecranon process of the ulna.", "category": "plain"},
+    {"id": "t07", "language": "english", "text": "Quadriceps femoris: rectus femoris, vastus lateralis, vastus medialis, vastus intermedius.", "category": "list"},
+    {"id": "t08", "language": "english", "text": "A dog's sense of smell is 10,000 to 100,000 times more sensitive than a human's.", "category": "numbers"},
+
+    {"id": "t09", "language": "tamil", "text": "பெக்டோரலிஸ் மேஜர் தசை மார்பின் மேற்பகுதியில் அமைந்துள்ளது.", "category": "plain"},
+    {"id": "t10", "language": "tamil", "text": "இந்த தசை கையை உள்நோக்கி இழுத்து சுழற்றுகிறது.", "category": "plain"},
+    {"id": "t11", "language": "tamil", "text": "டெல்டாய்டு தசைக்கு ஆக்சில்லரி நரம்பு மூலம் நரம்பு வழங்கல் கிடைக்கிறது.", "category": "transliterated-terms"},
+    {"id": "t12", "language": "tamil", "text": "குவாட்ரிசெப்ஸ் தசையில் நான்கு பகுதிகள் உள்ளன, அவை அனைத்தும் முழங்கால் மூட்டை நீட்டுவதற்கு உதவுகின்றன.", "category": "long"},
+    {"id": "t13", "language": "tamil", "text": "விளக்குங்கள்.", "category": "fragment"},
+    {"id": "t14", "language": "tamil", "text": "நாயின் நுகரும் திறன் மனிதனை விட மிகவும் கூர்மையானது.", "category": "plain"},
+    {"id": "t15", "language": "tamil", "text": "சாக்லேட் நாய்களுக்கு நச்சுத்தன்மை வாய்ந்தது.", "category": "plain"},
+    {"id": "t16", "language": "tamil", "text": "இரண்டு தலைகளும் இணைந்து ஹியூமரஸ் எலும்பில் பொருந்துகின்றன.", "category": "transliterated-terms"},
+
+    {"id": "t17", "language": "sinhala", "text": "පෙක්ටෝරාලිස් මේජර් යනු පපුවේ ඉහළ කොටසේ පිහිටි මාංශ පේශියකි.", "category": "plain"},
+    {"id": "t18", "language": "sinhala", "text": "මෙම මාංශ පේශිය අත ඇතුළතට ඇද කරකවයි.", "category": "plain"},
+    {"id": "t19", "language": "sinhala", "text": "ඩෙල්ටොයිඩ් මාංශ පේශිය උරහිස් සන්ධියේදී අත පිටතට ගෙන යයි.", "category": "transliterated-terms"},
+    {"id": "t20", "language": "sinhala", "text": "පැහැදිලි කරන්න.", "category": "fragment"},
+    {"id": "t21", "language": "sinhala", "text": "බල්ලන්ගේ ඝ්‍රාණ ශක්තිය මිනිසුන්ට වඩා බෙහෙවින් තියුණු වන අතර, ඔවුන්ට දුර සිට සුවඳ හඳුනාගත හැකිය.", "category": "long"},
+    {"id": "t22", "language": "sinhala", "text": "චොකලට් බල්ලන්ට විෂ සහිත වේ.", "category": "plain"},
+
+    {"id": "t23", "language": "mixed", "text": "Pectoralis major முக்கியமான ஒரு chest muscle ஆகும்.", "category": "code-switch-ta"},
+    {"id": "t24", "language": "mixed", "text": "இந்த muscle-க்கு nerve supply என்பது lateral மற்றும் medial pectoral nerves.", "category": "code-switch-ta"},
+    {"id": "t25", "language": "mixed", "text": "Deltoid muscle பத்தி சொல்லுங்க, அதோட origin என்ன?", "category": "code-switch-ta"},
+    {"id": "t26", "language": "mixed", "text": "Quadriceps femoris ல நாலு parts இருக்கு.", "category": "code-switch-ta"},
+    {"id": "t27", "language": "mixed", "text": "Biceps brachii එකේ main function මොකක්ද?", "category": "code-switch-si"},
+    {"id": "t28", "language": "mixed", "text": "මේ muscle එක shoulder joint එකේ abduction සඳහා උපකාරී වේ.", "category": "code-switch-si"},
+    {"id": "t29", "language": "mixed", "text": "Triceps brachii ගැන කියන්න.", "category": "code-switch-si"},
+    {"id": "t30", "language": "mixed", "text": "The axillary nerve, அதாவது C5 மற்றும் C6, deltoid-ஐ innervate பண்ணுது.", "category": "code-switch-ta"}
+  ]
+}

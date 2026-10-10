@@ -304,6 +304,45 @@ class IndicParlerMixedTTS:
             f"sample_rate={self._model.config.sampling_rate})"
         )
 
+    # -- benchmark introspection (warm-latency + GPU table for the paper) ------
+    @modal.fastapi_endpoint(method="GET")
+    def gpu_info(self):
+        """Report the physical accelerator serving this warm container.
+
+        The `gpu=` argument in @app.cls names the requested class, not the
+        device string a paper has to cite. Call this straight after a warm
+        latency batch: it lands on the already-running container, so it adds
+        no cold start and no measurable GPU time.
+        """
+        try:
+            import torch
+        except Exception as exc:            # torch absent (CPU-only image)
+            return {
+                "endpoint": "indic_parler_mixed_tts",
+                "model_id": "ai4bharat/indic-parler-tts",
+                "requested_gpu": "A10G",
+                "gpu_name": "CPU",
+                "device": "cpu",
+                "vram_total_gb": None,
+                "torch_version": None,
+                "note": f"torch unavailable: {type(exc).__name__}",
+            }
+
+        cuda = torch.cuda.is_available()
+        return {
+            "endpoint": "indic_parler_mixed_tts",
+            "model_id": "ai4bharat/indic-parler-tts",
+            "requested_gpu": "A10G",
+            "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
+            "device": "cuda" if cuda else "cpu",
+            "vram_total_gb": (
+                round(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, 1)
+                if cuda
+                else None
+            ),
+            "torch_version": torch.__version__,
+        }
+
     @modal.fastapi_endpoint(method="POST")
     def synthesize(self, req: IndicParlerMixedTTSRequest) -> Response:
         """Synthesize the complete answer as multilingual text chunks."""

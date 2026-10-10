@@ -1,0 +1,41 @@
+{
+  "_scope": "PILOT SET — 26 queries over the 18 distinct passages currently in backend/chroma_data. Every relevant_chunk_ids value was read off the actual indexed text, so this runs today and is a real smoke test of the four retrieval arms. It is NOT the set for the paper: the indexed corpus is a dogs guide plus a STRIDE assignment, not lecture material, and 18 passages cannot support the 80-120 queries a retrieval table needs. Ingest the real lecture PDFs, run --corpus-stats to confirm the duplication is gone, then rebuild this file with --dump-chunks.",
+  "_corpus_at_annotation": {
+    "embeddings": 298,
+    "distinct_passages": 18,
+    "duplication_factor": 16.6,
+    "files": ["All About Dogs_ A Complete Guide.pdf", "IT22172600.pdf"],
+    "note": "chunk ids are content-addressed (sha:<md5 of first 200 normalised chars>), so the 16.6x duplication collapses to one id per passage."
+  },
+  "_chunking_note": "The ingestion pipeline uses a sliding window, so consecutive passages overlap. Where an answer straddles a boundary both chunks are listed as relevant — marking only one would penalise a retriever that returned the equally-valid neighbour.",
+  "queries": [
+    {"id": "q01", "query": "How sensitive is a dog's sense of smell compared to a human's?", "relevant_chunk_ids": ["sha:5f32bc6818fd84ac"], "language": "english"},
+    {"id": "q02", "query": "What animal are dogs descended from?", "relevant_chunk_ids": ["sha:72e56f498eeac164", "sha:4942517b407c2e9a"], "language": "english"},
+    {"id": "q03", "query": "What is the scientific name of the domestic dog?", "relevant_chunk_ids": ["sha:4942517b407c2e9a"], "language": "english"},
+    {"id": "q04", "query": "Which foods are toxic to dogs?", "relevant_chunk_ids": ["sha:b1a527a8ced3e364", "sha:4221a5864f1f14ca"], "language": "english"},
+    {"id": "q05", "query": "Why is chocolate dangerous for dogs?", "relevant_chunk_ids": ["sha:b1a527a8ced3e364"], "language": "english"},
+    {"id": "q06", "query": "What can grapes and raisins cause in a dog?", "relevant_chunk_ids": ["sha:b1a527a8ced3e364"], "language": "english"},
+    {"id": "q07", "query": "Which dog breed is commonly used as a police dog?", "relevant_chunk_ids": ["sha:a76be75ad950b0ef"], "language": "english"},
+    {"id": "q08", "query": "What roles does the Labrador Retriever serve?", "relevant_chunk_ids": ["sha:a76be75ad950b0ef"], "language": "english"},
+    {"id": "q09", "query": "Which breed comes in Toy, Miniature and Standard sizes?", "relevant_chunk_ids": ["sha:4221a5864f1f14ca"], "language": "english"},
+    {"id": "q10", "query": "What basic commands should a dog be taught?", "relevant_chunk_ids": ["sha:878de38d1e3d1d9d"], "language": "english"},
+    {"id": "q11", "query": "Which disease should dogs be vaccinated against?", "relevant_chunk_ids": ["sha:878de38d1e3d1d9d"], "language": "english"},
+    {"id": "q12", "query": "Can puppies see when they are born?", "relevant_chunk_ids": ["sha:95b5ab1eb2044b6f"], "language": "english"},
+    {"id": "q13", "query": "What is unique about a dog's nose print?", "relevant_chunk_ids": ["sha:95b5ab1eb2044b6f"], "language": "english"},
+    {"id": "q14", "query": "How far can dogs hear compared with humans?", "relevant_chunk_ids": ["sha:5f32bc6818fd84ac"], "language": "english"},
+    {"id": "q15", "query": "How do dogs express their emotions?", "relevant_chunk_ids": ["sha:5f32bc6818fd84ac", "sha:ff607d8d46433f50"], "language": "english"},
+    {"id": "q16", "query": "What grooming and hygiene does a dog need?", "relevant_chunk_ids": ["sha:95b5ab1eb2044b6f"], "language": "english"},
+    {"id": "q17", "query": "What should a balanced dog diet contain?", "relevant_chunk_ids": ["sha:4221a5864f1f14ca"], "language": "english"},
+    {"id": "q18", "query": "What were dogs first used for by early humans?", "relevant_chunk_ids": ["sha:4942517b407c2e9a"], "language": "english"},
+
+    {"id": "q19", "query": "Which STRIDE threat should receive the highest priority and why?", "relevant_chunk_ids": ["sha:716dcbee9ddd4b02"], "language": "english"},
+    {"id": "q20", "query": "What mitigation is required for credential theft?", "relevant_chunk_ids": ["sha:d02ba0711c93d4ae", "sha:71f6647ae5896333"], "language": "english"},
+    {"id": "q21", "query": "How should SQL injection be prevented in the system?", "relevant_chunk_ids": ["sha:c13671609b3bb20f"], "language": "english"},
+    {"id": "q22", "query": "What minimum TLS version is required for portal communications?", "relevant_chunk_ids": ["sha:71f6647ae5896333"], "language": "english"},
+    {"id": "q23", "query": "What are the user roles in the examination system?", "relevant_chunk_ids": ["sha:7c2ce7cd6839def6"], "language": "english"},
+    {"id": "q24", "query": "What is the impact of marks being modified in transit?", "relevant_chunk_ids": ["sha:3c08e3822a6932bc"], "language": "english"},
+
+    {"id": "q25", "query": "நாயின் நுகரும் திறன் மனிதனை விட எவ்வளவு கூர்மையானது?", "relevant_chunk_ids": ["sha:5f32bc6818fd84ac"], "language": "tamil", "note": "cross-language: Tamil query, English source document — the reason BGE-M3 was chosen over an English-only embedder"},
+    {"id": "q26", "query": "බල්ලන්ට විෂ සහිත ආහාර මොනවාද?", "relevant_chunk_ids": ["sha:b1a527a8ced3e364"], "language": "sinhala", "note": "cross-language: Sinhala query, English source document"}
+  ]
+}

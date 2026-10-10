@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  async redirects() {
+    return [
+      {
+        source: '/test',
+        destination: '/study-assistant',
+        permanent: true,
+      },
+    ]
+  },
   // Security headers
   async headers() {
     return [

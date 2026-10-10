@@ -1,0 +1,9 @@
+# Raw endpoint responses and computed metrics. Regenerating these costs Modal
+# credits, so keep them out of git but never delete them casually — every
+# eval_* script can rescore from them offline for free.
+results/
+tables/
+
+# Benchmark audio. Licensing on Common Voice / FLEURS clips varies; keep the
+# manifest in git and distribute the audio separately.
+fixtures/

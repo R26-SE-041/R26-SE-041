@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useSessionStore } from '@/store/sessionStore'
 import { useSession } from '@/hooks/useSession'
 import { LanguageSelector } from '@/components/voice/LanguageSelector'
@@ -8,7 +8,7 @@ import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import type { TranscribeResponse } from '@/types'
+import type { SessionMessage, TranscribeResponse } from '@/types'
 import { askDocument, saveHistory, saveHistoryAudio, synthesizeSpeech } from '@/lib/api'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -28,6 +28,36 @@ export default function DashboardPage() {
 
   const [error, setError] = useState<string | null>(null)
   const [isQuerying, setIsQuerying] = useState(false)
+  const historyItemsRef = useRef(new Map<
+    string,
+    Promise<Awaited<ReturnType<typeof saveHistory>> | null>
+  >())
+
+  const generateAnswerAudio = useCallback((message: SessionMessage) => {
+    updateMessage(message.created_at, {
+      audio_approval_pending: false,
+      audio_pending: true,
+      audio_error: null,
+    })
+    void synthesizeSpeech(message.content, 'sinhala')
+      .then((audioBlob) => {
+        updateMessage(message.created_at, {
+          audio_url: URL.createObjectURL(audioBlob),
+          audio_pending: false,
+          audio_error: null,
+        })
+        const historyItem = historyItemsRef.current.get(message.created_at)
+        void historyItem?.then((item) => item
+          ? saveHistoryAudio(item.id, audioBlob).catch(() => undefined)
+          : undefined)
+      })
+      .catch(() => {
+        updateMessage(message.created_at, {
+          audio_pending: false,
+          audio_error: 'Answer audio is unavailable. The text answer is complete.',
+        })
+      })
+  }, [updateMessage])
 
   const handleTranscript = useCallback(async (result: TranscribeResponse) => {
     setLastTranscript(result.transcript)
@@ -54,15 +84,17 @@ export default function DashboardPage() {
         content: queryResult.answer,
         references: queryResult.references ?? [],
         audio_url: null,
-        audio_pending: true,
+        audio_pending: language !== 'sinhala',
+        audio_approval_pending: language === 'sinhala',
         created_at: answerCreatedAt,
       })
 
       // Persist the text immediately; attach the WAV when slower TTS completes.
       const historyItem = saveHistory(result.transcript, queryResult.answer, language,
         queryResult.references ?? []).catch(() => null)
+      historyItemsRef.current.set(answerCreatedAt, historyItem)
 
-      void synthesizeSpeech(queryResult.answer, language)
+      if (language !== 'sinhala') void synthesizeSpeech(queryResult.answer, language)
         .then((audioBlob) => {
           updateMessage(answerCreatedAt, {
             audio_url: URL.createObjectURL(audioBlob),
@@ -283,7 +315,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col">
-            <ChatWindow messages={messages} />
+            <ChatWindow messages={messages} onAcceptAudio={generateAnswerAudio} />
           </div>
         </main>
       </div>

@@ -1,0 +1,2 @@
+{"id":"synthetic_en_001","audio_path":"fixtures/bench_english.wav","reference":"The pectoralis major is a thick fan-shaped muscle of the upper chest that adducts and medially rotates the humerus.","language":"english","source":"Kokoro-82M synthetic fixture; pilot only"}
+{"id":"synthetic_si_001","audio_path":"fixtures/bench_sinhala.wav","reference":"පෙක්ටෝරාලිස් මේජර් යනු පපුවේ ඉහළ කොටසේ පිහිටි ඝන පංකා හැඩැති මාංශ පේශියකි.","language":"sinhala","source":"SinhalaVITS-M2 synthetic fixture; pilot only"}

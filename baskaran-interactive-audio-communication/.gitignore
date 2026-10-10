@@ -41,3 +41,5 @@ Thumbs.db
 chroma_data/
 local_documents/
 local_history/
+local_actions/
+.actions-runtime/

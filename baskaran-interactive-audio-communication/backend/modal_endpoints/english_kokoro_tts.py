@@ -94,6 +94,45 @@ class EnglishKokoroTTS:
         elapsed = time.perf_counter() - started
         print(f"[EnglishKokoroTTS] Ready in {elapsed:.2f}s (model: {MODEL_ID})")
 
+    # -- benchmark introspection (warm-latency + GPU table for the paper) ------
+    @modal.fastapi_endpoint(method="GET")
+    def gpu_info(self):
+        """Report the physical accelerator serving this warm container.
+
+        The `gpu=` argument in @app.cls names the requested class, not the
+        device string a paper has to cite. Call this straight after a warm
+        latency batch: it lands on the already-running container, so it adds
+        no cold start and no measurable GPU time.
+        """
+        try:
+            import torch
+        except Exception as exc:            # torch absent (CPU-only image)
+            return {
+                "endpoint": "english_kokoro_tts",
+                "model_id": "hexgrad/Kokoro-82M",
+                "requested_gpu": "CPU (4 vCPU)",
+                "gpu_name": "CPU",
+                "device": "cpu",
+                "vram_total_gb": None,
+                "torch_version": None,
+                "note": f"torch unavailable: {type(exc).__name__}",
+            }
+
+        cuda = torch.cuda.is_available()
+        return {
+            "endpoint": "english_kokoro_tts",
+            "model_id": "hexgrad/Kokoro-82M",
+            "requested_gpu": "CPU (4 vCPU)",
+            "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
+            "device": "cuda" if cuda else "cpu",
+            "vram_total_gb": (
+                round(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, 1)
+                if cuda
+                else None
+            ),
+            "torch_version": torch.__version__,
+        }
+
     @modal.fastapi_endpoint(method="POST")
     def synthesize(self, req: EnglishKokoroTTSRequest) -> Response:
         import traceback

@@ -3,9 +3,10 @@ import { MessageBubble } from './MessageBubble'
 
 interface ChatWindowProps {
   messages: SessionMessage[]
+  onAcceptAudio?: (message: SessionMessage) => void
 }
 
-export function ChatWindow({ messages }: ChatWindowProps) {
+export function ChatWindow({ messages, onAcceptAudio }: ChatWindowProps) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4 py-12 animate-fade-in">
@@ -27,7 +28,7 @@ export function ChatWindow({ messages }: ChatWindowProps) {
   return (
     <div className="flex flex-col gap-4 pb-4">
       {messages.map((msg, i) => (
-        <MessageBubble key={`${msg.created_at}-${i}`} message={msg} />
+        <MessageBubble key={`${msg.created_at}-${i}`} message={msg} onAcceptAudio={onAcceptAudio} />
       ))}
     </div>
   )

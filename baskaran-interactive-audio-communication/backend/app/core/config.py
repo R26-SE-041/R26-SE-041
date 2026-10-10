@@ -92,6 +92,20 @@ class Settings(BaseSettings):
     local_document_store_path: str = "local_documents"
     local_history_store_path: str = "local_history"
 
+    # Isolated English document actions; disabled until explicitly configured.
+    actions_enabled: bool = False
+    actions_allow_local_guest: bool = False
+    actions_provider: str = "direct"  # direct or openclaw_mcp; never silently fallback
+    actions_store_path: str = "local_actions"
+    actions_max_document_chars: int = 12000
+    actions_timeout_seconds: int = 600
+    actions_sectioned_enabled: bool = True
+    actions_sectioned_timeout_seconds: int = 1800
+    openclaw_gateway_url: str = "http://127.0.0.1:18789"
+    openclaw_gateway_token: str = ""
+    openclaw_agent_id: str = "voicelearn-actions"
+    actions_bridge_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LanguageSelector } from '@/components/voice/LanguageSelector'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
+import { DocumentActions } from '@/components/documents/DocumentActions'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { StudyModeSelector, type StudyMode } from '@/components/ui/StudyModeSelector'
@@ -22,6 +23,7 @@ import {
   clearLocalHistory,
   deleteLocalHistoryEntry,
   listLocalHistory,
+  updateLocalHistoryAnswer,
   updateLocalHistoryAudio,
   type LocalHistoryEntry,
 } from '@/lib/historyDb'
@@ -78,6 +80,9 @@ export default function StudyAssistantPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioLoading, setAudioLoading] = useState(false)
   const [audioError, setAudioError] = useState<string | null>(null)
+  const [audioApprovalPending, setAudioApprovalPending] = useState(false)
+  const [editingAnswer, setEditingAnswer] = useState(false)
+  const [answerDraft, setAnswerDraft] = useState('')
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioRequestRef = useRef(0)
 
@@ -133,14 +138,22 @@ export default function StudyAssistantPage() {
     })
     setAudioLoading(false)
     setAudioError(null)
+    setAudioApprovalPending(false)
+    setEditingAnswer(false)
+    setAnswerDraft('')
   }, [])
 
-  /** Switch study mode — preserves indexed documents, clears stale answers. */
+  /**
+   * Switch study mode without clearing the current conversation.
+   *
+   * Question/answer state belongs to this browser page, not to either panel.
+   * It must survive mode changes (and an independently restarted backend) and
+   * is intentionally reset only by clearAnswer or a real browser refresh.
+   */
   const handleStudyModeChange = useCallback((nextMode: StudyMode) => {
     if (nextMode === studyMode) return
     setStudyMode(nextMode)
-    clearAnswer()
-  }, [studyMode, clearAnswer])
+  }, [studyMode])
 
   const selectLanguage = useCallback((nextLanguage: Language) => {
     setLanguage(nextLanguage)
@@ -176,6 +189,7 @@ export default function StudyAssistantPage() {
     const requestId = ++audioRequestRef.current
     setAudioLoading(true)
     setAudioError(null)
+    setAudioApprovalPending(false)
     setAudioUrl((current) => {
       if (current) URL.revokeObjectURL(current)
       return null
@@ -308,6 +322,8 @@ export default function StudyAssistantPage() {
         references: answer.references,
         documentGrounded: isDocumentGrounded,
       })
+      setEditingAnswer(false)
+      setAnswerDraft(answer.answer)
       setPhase('answered')
       // Only synthesize if we have a real answer — skip TTS for backend error
       // messages (e.g. "Answer generation is not available right now.") which
@@ -319,7 +335,11 @@ export default function StudyAssistantPage() {
         answer.answer.startsWith("I couldn't find relevant content")
       await persistHistoryEntry(question, answer.answer, answer.references, isDocumentGrounded)
       if (!isErrorAnswer) {
-        void synthesizeAnswer(answer.answer, language)
+        if (language === 'sinhala') {
+          setAudioApprovalPending(true)
+        } else {
+          void synthesizeAnswer(answer.answer, language)
+        }
       }
     } catch (error) {
       setPhase('rag-error')
@@ -332,6 +352,22 @@ export default function StudyAssistantPage() {
       ragRequestActiveRef.current = false
     }
   }, [detectedLanguage, language, studyMode, synthesizeAnswer, persistHistoryEntry, transcript])
+
+  const saveEditedAnswer = useCallback(() => {
+    const editedAnswer = answerDraft.trim()
+    if (!result || !editedAnswer) return
+
+    setResult({ ...result, answer: editedAnswer })
+    setEditingAnswer(false)
+
+    const historyId = currentHistoryEntryIdRef.current
+    if (historyId) {
+      setHistoryEntries((current) => current.map((item) => (
+        item.id === historyId ? { ...item, answer: editedAnswer } : item
+      )))
+      void updateLocalHistoryAnswer(historyId, editedAnswer).catch(() => undefined)
+    }
+  }, [answerDraft, result])
 
   // ─── Fix Transcript ────────────────────────────────────────────────────────
   const handleFixTranscript = useCallback(async () => {
@@ -578,6 +614,8 @@ export default function StudyAssistantPage() {
         </SectionWide>
 
         {/* ── Transcript / Fix / Ask (shared by both modes) ── */}
+        {studyMode === 'document' && <DocumentActions documents={documents} />}
+
         {transcript && (
           <SectionWide title={loc.ui.yourQuestion}>
             <textarea
@@ -654,10 +692,75 @@ export default function StudyAssistantPage() {
                 )}
               </div>
 
-              <MarkdownContent content={result.answer} className="text-base" />
+              {editingAnswer ? (
+                <div>
+                  <textarea
+                    value={answerDraft}
+                    onChange={(event) => setAnswerDraft(event.target.value)}
+                    rows={7}
+                    autoFocus
+                    aria-label="Edit Sinhala answer"
+                    className="nb-input w-full resize-y"
+                    style={{ minHeight: 180, fontSize: 16, lineHeight: 1.75 }}
+                  />
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={saveEditedAnswer}
+                      disabled={!answerDraft.trim()}
+                      className="vl-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAnswerDraft(result.answer)
+                        setEditingAnswer(false)
+                      }}
+                      className="vl-btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <MarkdownContent content={result.answer} className="text-base" />
+                  {audioApprovalPending && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAnswerDraft(result.answer)
+                        setEditingAnswer(true)
+                      }}
+                      className="vl-btn-secondary mt-5"
+                    >
+                      Edit Answer
+                    </button>
+                  )}
+                </>
+              )}
 
               {/* TTS controls */}
               <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border)' }}>
+                {audioApprovalPending && !editingAnswer && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
+                      Review the Sinhala answer above. Speech will only be generated after you accept it.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAudioApprovalPending(false)
+                        void synthesizeAnswer(result.answer, 'sinhala')
+                      }}
+                      className="vl-btn-primary"
+                    >
+                      Accept &amp; Generate Speech
+                    </button>
+                  </div>
+                )}
                 {audioLoading && (
                   <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-dim)' }}><Spinner /> {loc.ui.preparingAudio}</div>
                 )}

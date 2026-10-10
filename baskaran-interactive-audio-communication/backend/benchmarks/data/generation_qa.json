@@ -1,0 +1,195 @@
+{
+  "_scope": "STARTER SET — 26 questions, 13 inside the LoRA's five-muscle domain and 13 outside it as controls. Enough to smoke-test all four generation arms and to see the direction of the in-domain/out-of-domain interaction. Expand toward ~200 (roughly balanced) before quoting the numbers in the paper: at n=13 per split, a 5-point ROUGE-L difference will sit inside the bootstrap CI.",
+  "_design": "The headline claim is an interaction, not an average: the fine-tune should beat the base model on the five trained muscles WITHOUT regressing outside them. in_finetune_domain drives that split in eval_generation.py. The out-of-domain questions are deliberately adjacent anatomy — muscles a student would ask about in the same session — because a regression there is what over-specialisation actually looks like.",
+  "_context_note": "context holds the evidence a document-grounded arm is expected to ground on; the closed-book and LoRA arms ignore it. Reference answers follow standard anatomical descriptions (Gray's/Moore) and should be spot-checked by the module lecturer before publication.",
+  "_five_trained_muscles": ["pectoralis major", "deltoid", "biceps brachii", "triceps brachii", "quadriceps femoris"],
+  "questions": [
+    {
+      "id": "g01",
+      "question": "What is the origin of the pectoralis major?",
+      "reference_answer": "The pectoralis major arises by two heads: a clavicular head from the medial half of the anterior surface of the clavicle, and a sternocostal head from the anterior surface of the sternum, the upper six costal cartilages, and the aponeurosis of the external oblique.",
+      "context": ["The pectoralis major has a clavicular head arising from the medial half of the clavicle and a sternocostal head arising from the sternum, the upper six costal cartilages and the aponeurosis of the external oblique."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g02",
+      "question": "Where does the pectoralis major insert?",
+      "reference_answer": "Both heads converge into a bilaminar tendon that inserts into the lateral lip of the intertubercular sulcus (bicipital groove) of the humerus.",
+      "context": ["The two heads of pectoralis major converge and insert via a bilaminar tendon into the lateral lip of the intertubercular sulcus of the humerus."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g03",
+      "question": "Which nerves innervate the pectoralis major?",
+      "reference_answer": "The lateral and medial pectoral nerves, arising from the brachial plexus (C5-T1). The lateral pectoral nerve supplies mainly the clavicular head and the medial pectoral nerve the sternocostal head.",
+      "context": ["Innervation of pectoralis major is by the lateral and medial pectoral nerves, derived from the brachial plexus, root values C5 to T1."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g04",
+      "question": "What are the main actions of the pectoralis major at the shoulder?",
+      "reference_answer": "Adduction and medial rotation of the humerus. The clavicular head flexes the extended arm, while the sternocostal head extends the flexed arm.",
+      "context": ["Pectoralis major adducts and medially rotates the humerus. Its clavicular head flexes the extended arm; the sternocostal head extends the flexed arm."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g05",
+      "question": "What is the origin of the deltoid muscle?",
+      "reference_answer": "The deltoid arises from the lateral third of the clavicle, the acromion, and the spine of the scapula.",
+      "context": ["The deltoid originates from the lateral third of the clavicle, the acromion and the spine of the scapula."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g06",
+      "question": "Which nerve supplies the deltoid, and what happens if it is injured?",
+      "reference_answer": "The axillary nerve (C5, C6). Injury causes weakness of shoulder abduction and loss of sensation over the regimental badge area of the upper lateral arm; the deltoid may atrophy, flattening the shoulder contour.",
+      "context": ["The deltoid is supplied by the axillary nerve (C5, C6). Axillary nerve injury produces deltoid paralysis with impaired abduction and sensory loss over the upper lateral arm."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g07",
+      "question": "Which part of the deltoid abducts the arm, and over what range?",
+      "reference_answer": "The middle (acromial) fibres are the main abductors, acting mainly between about 15 and 90 degrees; supraspinatus initiates the first 15 degrees and the scapula contributes beyond 90.",
+      "context": ["The middle fibres of deltoid are the principal abductors of the arm, most effective from roughly 15 to 90 degrees. Supraspinatus initiates abduction and scapular rotation continues it beyond 90 degrees."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g08",
+      "question": "Describe the two heads of origin of the biceps brachii.",
+      "reference_answer": "The long head arises from the supraglenoid tubercle of the scapula and its tendon runs through the intertubercular sulcus; the short head arises from the tip of the coracoid process of the scapula.",
+      "context": ["Biceps brachii has a long head from the supraglenoid tubercle of the scapula and a short head from the coracoid process."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g09",
+      "question": "What is the primary action of the biceps brachii?",
+      "reference_answer": "It is the most powerful supinator of the forearm, particularly with the elbow flexed to 90 degrees. It also flexes the elbow and weakly flexes the shoulder.",
+      "context": ["Biceps brachii is the most powerful supinator of the forearm, especially when the elbow is flexed. It also flexes the elbow joint and weakly flexes the shoulder."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g10",
+      "question": "Which nerve innervates the biceps brachii?",
+      "reference_answer": "The musculocutaneous nerve, root values C5 and C6.",
+      "context": ["The musculocutaneous nerve (C5, C6) innervates biceps brachii, together with coracobrachialis and brachialis."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g11",
+      "question": "Name the three heads of the triceps brachii and where each arises.",
+      "reference_answer": "The long head from the infraglenoid tubercle of the scapula; the lateral head from the posterior humerus above the radial (spiral) groove; and the medial head from the posterior humerus below the radial groove.",
+      "context": ["Triceps brachii has a long head from the infraglenoid tubercle of the scapula, a lateral head from the posterior surface of the humerus above the radial groove, and a medial head from the posterior humerus below the radial groove."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g12",
+      "question": "Where does the triceps brachii insert and which nerve supplies it?",
+      "reference_answer": "It inserts into the olecranon process of the ulna and is supplied by the radial nerve (C6-C8).",
+      "context": ["Triceps brachii inserts on the olecranon process of the ulna and is innervated by the radial nerve, root values C6 to C8."],
+      "in_finetune_domain": true
+    },
+    {
+      "id": "g13",
+      "question": "What are the four components of the quadriceps femoris and what is its innervation?",
+      "reference_answer": "Rectus femoris, vastus lateralis, vastus medialis and vastus intermedius, all supplied by the femoral nerve (L2, L3, L4). They insert via the quadriceps tendon into the patella and thence the tibial tuberosity through the patellar ligament.",
+      "context": ["The quadriceps femoris comprises rectus femoris, vastus lateralis, vastus medialis and vastus intermedius. All four are innervated by the femoral nerve (L2-L4) and insert into the patella via the quadriceps tendon, continuing to the tibial tuberosity as the patellar ligament."],
+      "in_finetune_domain": true
+    },
+
+    {
+      "id": "g14",
+      "question": "What is the origin and insertion of the latissimus dorsi?",
+      "reference_answer": "It originates from the spinous processes of T7 to L5, the thoracolumbar fascia, the posterior iliac crest and the lower three or four ribs, and inserts into the floor of the intertubercular sulcus of the humerus.",
+      "context": ["Latissimus dorsi arises from the spinous processes of T7-L5, the thoracolumbar fascia, the iliac crest and the lower three or four ribs, inserting into the floor of the intertubercular sulcus of the humerus."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g15",
+      "question": "Which muscles make up the rotator cuff?",
+      "reference_answer": "Supraspinatus, infraspinatus, teres minor and subscapularis.",
+      "context": ["The rotator cuff consists of supraspinatus, infraspinatus, teres minor and subscapularis, which stabilise the glenohumeral joint."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g16",
+      "question": "What is the action of the pectoralis minor?",
+      "reference_answer": "It depresses the tip of the shoulder and protracts the scapula, and assists in elevating the ribs during forced inspiration when the scapula is fixed.",
+      "context": ["Pectoralis minor draws the scapula forward and downward and can elevate the ribs in forced inspiration when the scapula is fixed."],
+      "in_finetune_domain": false,
+      "note": "adjacent to a trained muscle by name only — a good probe for over-generalisation by the adapter"
+    },
+    {
+      "id": "g17",
+      "question": "Describe the biceps femoris and its role in the hamstring group.",
+      "reference_answer": "It has a long head from the ischial tuberosity and a short head from the linea aspera of the femur, inserting on the head of the fibula. It flexes the knee and laterally rotates the flexed leg; the long head also extends the hip.",
+      "context": ["Biceps femoris has a long head from the ischial tuberosity and a short head from the linea aspera, inserting on the head of the fibula. It flexes the knee and laterally rotates the flexed leg."],
+      "in_finetune_domain": false,
+      "note": "shares the name stem 'biceps' with a trained muscle — the router defect this set also exposed"
+    },
+    {
+      "id": "g18",
+      "question": "What forms the triceps surae and what does it do?",
+      "reference_answer": "The two heads of gastrocnemius together with soleus. They insert via the calcaneal (Achilles) tendon and plantarflex the ankle; gastrocnemius also assists knee flexion.",
+      "context": ["The triceps surae comprises the two heads of gastrocnemius and the soleus, inserting through the calcaneal tendon and plantarflexing the ankle."],
+      "in_finetune_domain": false,
+      "note": "shares the name stem 'triceps' with a trained muscle"
+    },
+    {
+      "id": "g19",
+      "question": "What are the parts and actions of the trapezius?",
+      "reference_answer": "Upper fibres elevate the scapula, middle fibres retract it, and lower fibres depress it; acting together they rotate the glenoid cavity upward. It is supplied by the spinal accessory nerve (CN XI).",
+      "context": ["Trapezius has upper, middle and lower fibres which respectively elevate, retract and depress the scapula, and together rotate the scapula upward. Its motor supply is the spinal accessory nerve."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g20",
+      "question": "Which muscle initiates abduction of the arm?",
+      "reference_answer": "Supraspinatus initiates the first approximately 15 degrees of abduction, after which the deltoid takes over as the principal abductor.",
+      "context": ["Supraspinatus initiates abduction of the arm through roughly the first 15 degrees before the deltoid becomes the principal abductor."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g21",
+      "question": "What is the function of the brachialis?",
+      "reference_answer": "It is the main flexor of the elbow regardless of forearm position, arising from the distal anterior humerus and inserting on the coronoid process and tuberosity of the ulna. It is supplied mainly by the musculocutaneous nerve.",
+      "context": ["Brachialis arises from the distal half of the anterior humerus and inserts on the ulnar tuberosity and coronoid process. It is the principal flexor of the elbow in all forearm positions."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g22",
+      "question": "Describe the origin, insertion and action of the sartorius.",
+      "reference_answer": "It arises from the anterior superior iliac spine and inserts on the medial surface of the proximal tibia as part of the pes anserinus. It flexes, abducts and laterally rotates the hip and flexes the knee. Supplied by the femoral nerve.",
+      "context": ["Sartorius runs from the anterior superior iliac spine to the medial proximal tibia, forming part of the pes anserinus. It flexes, abducts and laterally rotates the thigh and flexes the leg."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g23",
+      "question": "What is the deltoid ligament of the ankle?",
+      "reference_answer": "The medial collateral ligament complex of the ankle, a strong triangular ligament running from the medial malleolus to the talus, calcaneus and navicular. It resists eversion and is not a muscle.",
+      "context": ["The deltoid ligament is the medial collateral ligament of the ankle, attaching the medial malleolus to the talus, calcaneus and navicular, and resisting eversion."],
+      "in_finetune_domain": false,
+      "note": "shares the name 'deltoid' with a trained muscle but is a ligament — probes whether the adapter answers by name association"
+    },
+    {
+      "id": "g24",
+      "question": "What is the blood supply of the gluteus maximus?",
+      "reference_answer": "Mainly the inferior gluteal artery, with a contribution from the superior gluteal artery. It is innervated by the inferior gluteal nerve (L5, S1, S2).",
+      "context": ["Gluteus maximus is supplied chiefly by the inferior gluteal artery with some contribution from the superior gluteal artery, and is innervated by the inferior gluteal nerve."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g25",
+      "question": "Explain the difference between a tendon and a ligament.",
+      "reference_answer": "A tendon attaches muscle to bone and transmits contractile force; a ligament attaches bone to bone and stabilises a joint. Both are dense regular connective tissue, but ligaments generally contain more elastic fibres and are less strictly parallel in arrangement.",
+      "context": ["Tendons connect muscle to bone and transmit the force of contraction, while ligaments connect bone to bone and stabilise joints."],
+      "in_finetune_domain": false
+    },
+    {
+      "id": "g26",
+      "question": "What is the sliding filament theory of muscle contraction?",
+      "reference_answer": "Contraction occurs as actin thin filaments slide over myosin thick filaments through cyclical cross-bridge formation, powered by ATP and triggered by calcium binding to troponin. The filaments themselves do not shorten; the sarcomere does, as the Z-discs are drawn together.",
+      "context": ["In the sliding filament theory, myosin cross-bridges pull actin filaments toward the centre of the sarcomere. The filaments do not change length; the sarcomere shortens as the Z-discs approach each other."],
+      "in_finetune_domain": false
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "en_001", "audio_path": "fixtures/asr/en_001.wav", "reference": "What is the origin and insertion of the pectoralis major?", "language": "english"}
+{"id": "ta_001", "audio_path": "fixtures/asr/ta_001.wav", "reference": "பெக்டோரலிஸ் மேஜர் தசையின் செயல்பாடு என்ன?", "language": "tamil"}
+{"id": "si_001", "audio_path": "fixtures/asr/si_001.wav", "reference": "පෙක්ටෝරාලිස් මේජර් යනු කුමක්ද?", "language": "sinhala"}
+{"id": "mx_001", "audio_path": "fixtures/asr/mx_001.wav", "reference": "pectoralis major muscle பத்தி சொல்லுங்க", "language": "mixed"}

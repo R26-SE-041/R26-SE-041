@@ -1,0 +1,80 @@
+{
+  "description": "Labelled routing set for backend/app/services/model_router.py. Gold labels encode what the system SHOULD do, not what the current regex does, so that over- and under-triggering both show up as errors. Routes: document_rag_base | muscle_finetuned_v2 | general_base.",
+  "route_semantics": {
+    "document_rag_base": "answer strictly from the user's uploaded documents",
+    "muscle_finetuned_v2": "one of the five LoRA-trained muscles: pectoralis major, deltoid, biceps brachii, triceps brachii, quadriceps femoris",
+    "general_base": "everything else — base Gemma, no adapter"
+  },
+  "cases": [
+    {"id": "c01", "category": "canonical_five", "question": "What is the origin of the pectoralis major?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c02", "category": "canonical_five", "question": "Describe the insertion of the deltoid muscle.", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c03", "category": "canonical_five", "question": "What nerve innervates the biceps brachii?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c04", "category": "canonical_five", "question": "Explain the action of the triceps brachii at the elbow.", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c05", "category": "canonical_five", "question": "How many heads does the quadriceps femoris have?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c06", "category": "canonical_five", "question": "Compare the clavicular and sternocostal heads of the pectoralis major.", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c07", "category": "canonical_five", "question": "Which part of the deltoid abducts the arm?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c08", "category": "canonical_five", "question": "biceps brachii blood supply", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c09", "category": "canonical_five", "question": "What is the long head of the triceps brachii attached to?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c10", "category": "canonical_five", "question": "Name the four components of the quadriceps femoris.", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c11", "category": "canonical_five", "question": "Is the deltoid a multipennate muscle?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c12", "category": "canonical_five", "question": "PECTORALIS MAJOR function please", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2"},
+
+    {"id": "c13", "category": "colloquial_abbrev", "question": "What exercises target the pecs?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "colloquial for pectoralis major"},
+    {"id": "c14", "category": "colloquial_abbrev", "question": "How do the delts help with shoulder abduction?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "colloquial for deltoid"},
+    {"id": "c15", "category": "colloquial_abbrev", "question": "Why do my quads hurt after squats?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "colloquial for quadriceps femoris"},
+    {"id": "c16", "category": "colloquial_abbrev", "question": "What is the bicep muscle attached to?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "singular misspelling, very common in student speech and ASR output"},
+    {"id": "c17", "category": "colloquial_abbrev", "question": "explain the tricep", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "singular misspelling"},
+    {"id": "c18", "category": "colloquial_abbrev", "question": "chest muscle anatomy", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "too vague to assume pectoralis major"},
+
+    {"id": "c19", "category": "near_miss_muscle", "question": "What is the origin of the pectoralis minor?", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "pectoralis MINOR is not one of the five trained muscles"},
+    {"id": "c20", "category": "near_miss_muscle", "question": "Describe the biceps femoris of the hamstring group.", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "biceps FEMORIS is a hamstring, not biceps brachii"},
+    {"id": "c21", "category": "near_miss_muscle", "question": "What forms the triceps surae?", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "triceps SURAE is the calf, not triceps brachii"},
+    {"id": "c22", "category": "near_miss_muscle", "question": "How does the quadratus lumborum stabilise the spine?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c23", "category": "near_miss_muscle", "question": "What is the action of the deltoid ligament of the ankle?", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "deltoid LIGAMENT, not the shoulder muscle"},
+    {"id": "c24", "category": "near_miss_muscle", "question": "Explain the latissimus dorsi origin and insertion.", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c25", "category": "near_miss_muscle", "question": "What is the pectineus muscle?", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "shares a prefix with pectoralis"},
+    {"id": "c26", "category": "near_miss_muscle", "question": "Describe the rotator cuff muscles.", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+
+    {"id": "c27", "category": "document_request", "question": "What does my lecture PDF say about the pectoralis major?", "document_grounded": true, "memento": null, "gold_route": "document_rag_base", "note": "document context must win over the muscle route"},
+    {"id": "c28", "category": "document_request", "question": "Summarise chapter 3 of the uploaded notes.", "document_grounded": true, "memento": null, "gold_route": "document_rag_base"},
+    {"id": "c29", "category": "document_request", "question": "According to the slides, what is the deltoid's innervation?", "document_grounded": true, "memento": null, "gold_route": "document_rag_base"},
+    {"id": "c30", "category": "document_request", "question": "What are the key points in my document?", "document_grounded": true, "memento": null, "gold_route": "document_rag_base"},
+    {"id": "c31", "category": "document_request", "question": "biceps brachii", "document_grounded": true, "memento": {"previous_question": "What is the deltoid?"}, "gold_route": "document_rag_base", "note": "document grounding outranks both the muscle match and the memento"},
+    {"id": "c32", "category": "document_request", "question": "Explain photosynthesis from the uploaded biology handout.", "document_grounded": true, "memento": null, "gold_route": "document_rag_base"},
+
+    {"id": "c33", "category": "followup", "question": "What about its blood supply?", "document_grounded": false, "memento": {"previous_question": "What is the origin of the pectoralis major?"}, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c34", "category": "followup", "question": "And the insertion?", "document_grounded": false, "memento": {"previous_question": "Describe the deltoid muscle."}, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c35", "category": "followup", "question": "Can you simplify that?", "document_grounded": false, "memento": {"previous_question": "What nerve innervates the biceps brachii?"}, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c36", "category": "followup", "question": "Why is that clinically important?", "document_grounded": false, "memento": {"previous_question": "How many heads does the quadriceps femoris have?"}, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c37", "category": "followup", "question": "Give me a mnemonic for it.", "document_grounded": false, "memento": {"previous_question": "Explain the action of the triceps brachii."}, "gold_route": "muscle_finetuned_v2"},
+    {"id": "c38", "category": "followup", "question": "What about the antagonist?", "document_grounded": false, "memento": {"previous_question": "What is the latissimus dorsi?"}, "gold_route": "general_base", "note": "previous question was not a trained muscle"},
+    {"id": "c39", "category": "followup", "question": "Tell me more.", "document_grounded": false, "memento": {"previous_question": "What is the capital of Sri Lanka?"}, "gold_route": "general_base"},
+    {"id": "c40", "category": "followup", "question": "Explain again slowly.", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "no session memory at all"},
+
+    {"id": "c41", "category": "topic_switch", "question": "New topic: explain the Krebs cycle.", "document_grounded": false, "memento": {"previous_question": "What is the origin of the pectoralis major?"}, "gold_route": "general_base"},
+    {"id": "c42", "category": "topic_switch", "question": "Topic change - what is osmosis?", "document_grounded": false, "memento": {"previous_question": "Describe the deltoid."}, "gold_route": "general_base"},
+    {"id": "c43", "category": "topic_switch", "question": "switch topic: tell me about the cardiac cycle", "document_grounded": false, "memento": {"previous_question": "What is the biceps brachii?"}, "gold_route": "general_base"},
+    {"id": "c44", "category": "topic_switch", "question": "Actually, let's talk about the nervous system instead.", "document_grounded": false, "memento": {"previous_question": "What is the origin of the pectoralis major?"}, "gold_route": "general_base", "note": "a topic switch phrased without the trigger keywords"},
+    {"id": "c45", "category": "topic_switch", "question": "Forget that. What is glycolysis?", "document_grounded": false, "memento": {"previous_question": "Describe the quadriceps femoris."}, "gold_route": "general_base", "note": "a topic switch phrased without the trigger keywords"},
+
+    {"id": "c46", "category": "general", "question": "What is the function of the mitochondria?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c47", "category": "general", "question": "Explain Newton's second law.", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c48", "category": "general", "question": "How do I study for anatomy exams?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c49", "category": "general", "question": "What are the bones of the forearm?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c50", "category": "general", "question": "Describe the structure of a synapse.", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c51", "category": "general", "question": "Hello, can you help me study?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c52", "category": "general", "question": "What is the largest organ in the human body?", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+    {"id": "c53", "category": "general", "question": "Explain the difference between tendons and ligaments.", "document_grounded": false, "memento": null, "gold_route": "general_base"},
+
+    {"id": "c54", "category": "multilingual", "question": "பெக்டோரலிஸ் மேஜர் தசையின் செயல்பாடு என்ன?", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "Tamil for 'what is the function of the pectoralis major muscle'"},
+    {"id": "c55", "category": "multilingual", "question": "deltoid muscle பத்தி சொல்லுங்க", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "code-switched Thanglish, Latin-script muscle name"},
+    {"id": "c56", "category": "multilingual", "question": "biceps brachii ගැන කියන්න", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "code-switched Singlish, Latin-script muscle name"},
+    {"id": "c57", "category": "multilingual", "question": "මාංශ පේශි පද්ධතිය ගැන පැහැදිලි කරන්න", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "Sinhala, general muscular-system question"},
+    {"id": "c58", "category": "multilingual", "question": "இதய துடிப்பு பற்றி சொல்லுங்கள்", "document_grounded": false, "memento": null, "gold_route": "general_base", "note": "Tamil, about heartbeat"},
+
+    {"id": "c59", "category": "asr_noise", "question": "what is the origin of the pectoralis mager", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "realistic ASR misspelling of 'major'"},
+    {"id": "c60", "category": "asr_noise", "question": "explain the delta id muscle", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "realistic ASR split of 'deltoid'"},
+    {"id": "c61", "category": "asr_noise", "question": "by seps brachii function", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "realistic ASR split of 'biceps'"},
+    {"id": "c62", "category": "asr_noise", "question": "quadriceps femoris ka action", "document_grounded": false, "memento": null, "gold_route": "muscle_finetuned_v2", "note": "code-switched filler between English terms"}
+  ]
+}
