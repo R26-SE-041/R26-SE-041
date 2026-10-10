@@ -20,16 +20,16 @@ const config: Config = {
           800: "#0d1433",
           700: "#142050",
         },
-        // Electric purple accent
+        // Legacy utility names now map to the warm editorial palette.
         violet: {
-          400: "#a78bfa",
-          500: "#8b5cf6",
-          600: "#7c3aed",
+          400: "#e89576",
+          500: "#d8653b",
+          600: "#c65431",
         },
         // Cyan accent
         cyan: {
-          400: "#22d3ee",
-          500: "#06b6d4",
+          400: "#b69a78",
+          500: "#8d6f50",
         },
         // Glass surfaces
         glass: {
@@ -43,8 +43,8 @@ const config: Config = {
           "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.35) 0%, rgba(6,11,26,0) 70%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(34,211,238,0.15) 0%, transparent 70%)",
         "card-gradient":
           "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)",
-        "progress-gradient": "linear-gradient(90deg, #8b5cf6 0%, #22d3ee 100%)",
-        "button-gradient": "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+        "progress-gradient": "linear-gradient(90deg, #d8653b 0%, #ad7b54 100%)",
+        "button-gradient": "linear-gradient(135deg, #d8653b 0%, #b94e2d 100%)",
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",

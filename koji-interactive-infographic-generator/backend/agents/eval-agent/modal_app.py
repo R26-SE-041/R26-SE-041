@@ -102,7 +102,7 @@ app = modal.App("eval-agent", image=image)
     gpu="A10G",
     secrets=[modal.Secret.from_name("hf-secret")],
     timeout=180,
-    scaledown_window=300,
+    scaledown_window=1200,
 )
 class EvalAgent:
     """

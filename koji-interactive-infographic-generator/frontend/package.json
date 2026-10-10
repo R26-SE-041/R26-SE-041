@@ -8,12 +8,14 @@
     "android": "expo start --android",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.2",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
+    "@supabase/supabase-js": "^2.117.3",
     "base64-arraybuffer": "^1.0.2",
     "expo": "~57.0.11",
     "expo-asset": "~57.0.2",

@@ -207,13 +207,21 @@ def run_automatic_evolution(
     minimum_improvement: float = 0.10,
     deployment_callback: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
+    """Generate and validate a SKILL.md candidate, but never deploy it automatically.
+
+    A candidate that clears the improvement bar is recorded with status
+    'candidate' (pending human review) and left there — deployment requires an
+    explicit `approve_and_deploy_skill_version()` call, mirroring the manual
+    proposed->approved->deployed gate already used for agent memories
+    (see scripts/manage_memories.py). `deployment_callback` is accepted only
+    so callers can still pass `skills_vol.commit` through unchanged; it is
+    unused until a version is approved.
+    """
     from shared.db import (
-        activate_skill_version,
         get_latest_skill_version_number,
         list_active_feedback_patterns,
         list_high_scoring_experiences,
         list_validation_prompts,
-        mark_feedback_patterns_consumed,
         record_skill_version,
     )
     from shared.feedback_patterns import analyze_and_store
@@ -234,7 +242,6 @@ def run_automatic_evolution(
     validation = validate_rules(current_rules, candidate, prompts)
     improvement = validation["new_score"] - validation["old_score"]
     should_deploy = improvement > minimum_improvement
-    status = "deployed" if should_deploy else "rejected"
     pattern_ids = [str(item["id"]) for item in patterns]
     record_skill_version(
         version=version,
@@ -247,18 +254,39 @@ def run_automatic_evolution(
         feedback_pattern_ids=pattern_ids,
         metadata={"errors": validation["errors"], "minimum_improvement": minimum_improvement},
     )
-    if should_deploy:
-        deploy_rules(skill_directory, candidate, version)
-        if deployment_callback:
-            deployment_callback()
-        activate_skill_version(version)
-        mark_feedback_patterns_consumed(pattern_ids)
     return {
-        "status": status,
+        "status": "pending_review" if should_deploy else "rejected",
         "version": version,
         "old_score": validation["old_score"],
         "new_score": validation["new_score"],
         "improvement": improvement,
         "validation_count": len(validation["pairs"]),
-        "version_path": str(skill_directory / f"SKILL_v{version}.md") if status == "deployed" else None,
     }
+
+
+def approve_and_deploy_skill_version(
+    skill_directory: Path,
+    version: int,
+    deployment_callback: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    """Human-triggered deploy of a 'candidate' SKILL.md version onto the live Volume.
+
+    Call this only after reviewing the candidate (e.g. via
+    `scripts/manage_skill_versions.py show <version>`). Raises if the version
+    doesn't exist or isn't currently a pending candidate — `activate_skill_version`
+    enforces that atomically against concurrent approvals.
+    """
+    from shared.db import activate_skill_version, get_skill_version, mark_feedback_patterns_consumed
+
+    row = get_skill_version(version)
+    if row is None:
+        raise ValueError(f"No skill version {version}")
+    if row["status"] != "candidate":
+        raise ValueError(f"Skill version {version} is '{row['status']}', not a pending candidate")
+
+    deploy_rules(skill_directory, row["content"], version)
+    if deployment_callback:
+        deployment_callback()
+    activate_skill_version(version)
+    mark_feedback_patterns_consumed([str(pid) for pid in (row.get("feedback_pattern_ids") or [])])
+    return {"status": "deployed", "version": version}

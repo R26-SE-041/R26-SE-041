@@ -156,9 +156,25 @@ def validate_auto_labels(
         else:
             diagnostics["rejected_duplicate"] += 1
     for key in list(best_by_label):
-        if len(key.split()) == 1 and any(other != key and re.search(rf"\b{re.escape(key)}\b", other) for other in best_by_label):
-            del best_by_label[key]
-            diagnostics["rejected_duplicate"] += 1
+        if len(key.split()) != 1:
+            continue
+        single_region = region_map.get(best_by_label[key]["region_id"])
+        if single_region is None:
+            continue
+        for other_key, other in best_by_label.items():
+            if other_key == key or not re.search(rf"\b{re.escape(key)}\b", other_key):
+                continue
+            other_region = region_map.get(other["region_id"])
+            # Only treat this as the same structure when the two labels come from
+            # the same or a neighbouring grid cell — two distant structures that
+            # merely share a common anatomical word (e.g. "Artery" far from
+            # "Coronary artery") are real, separate labels and must both survive.
+            if other_region is not None \
+                    and abs(single_region["row"] - other_region["row"]) <= 1 \
+                    and abs(single_region["column"] - other_region["column"]) <= 1:
+                del best_by_label[key]
+                diagnostics["rejected_duplicate"] += 1
+                break
     accepted = sorted(best_by_label.values(), key=lambda item: item["confidence"], reverse=True)[:max_labels]
     diagnostics["accepted_labels"] = len(accepted)
     return accepted, diagnostics

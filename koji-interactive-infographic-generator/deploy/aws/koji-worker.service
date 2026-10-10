@@ -1,0 +1,22 @@
+[Unit]
+Description=Koji durable model job worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=koji
+Group=koji
+WorkingDirectory=/opt/koji/current/backend
+EnvironmentFile=/etc/koji/studio.env
+ExecStart=/opt/koji/current/venv/bin/python -m studio.worker
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target

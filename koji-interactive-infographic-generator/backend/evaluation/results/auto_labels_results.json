@@ -1,0 +1,334 @@
+[
+  {
+    "organ": "heart",
+    "condition": "raw_base",
+    "latency_s": 68.83,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 2,
+      "rejected_low_confidence": 5,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 9,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "atrium",
+        "confidence": 0.9
+      },
+      {
+        "label": "ventricle",
+        "confidence": 0.9
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "heart",
+    "condition": "agentic_pipeline",
+    "latency_s": 39.29,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 7,
+      "rejected_low_confidence": 3,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 6,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Aorta",
+        "confidence": 0.95
+      },
+      {
+        "label": "atrioventricular node",
+        "confidence": 0.95
+      },
+      {
+        "label": "Pulmonary artery",
+        "confidence": 0.9
+      },
+      {
+        "label": "right atrium",
+        "confidence": 0.9
+      },
+      {
+        "label": "left ventricle",
+        "confidence": 0.9
+      },
+      {
+        "label": "Left atrium",
+        "confidence": 0.85
+      },
+      {
+        "label": "right ventricle",
+        "confidence": 0.85
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "brain",
+    "condition": "raw_base",
+    "latency_s": 39.83,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 6,
+      "rejected_low_confidence": 7,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 3,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Cerebral Cortex",
+        "confidence": 0.95
+      },
+      {
+        "label": "Cerebellum",
+        "confidence": 0.9
+      },
+      {
+        "label": "temporal lobe",
+        "confidence": 0.9
+      },
+      {
+        "label": "nasal cavity",
+        "confidence": 0.9
+      },
+      {
+        "label": "mandible",
+        "confidence": 0.9
+      },
+      {
+        "label": "Thalamus",
+        "confidence": 0.85
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "brain",
+    "condition": "agentic_pipeline",
+    "latency_s": 37.55,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 4,
+      "rejected_low_confidence": 4,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 8,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Cerebral Cortex",
+        "confidence": 0.95
+      },
+      {
+        "label": "Cerebellum",
+        "confidence": 0.95
+      },
+      {
+        "label": "Pons",
+        "confidence": 0.9
+      },
+      {
+        "label": "Medulla oblongata",
+        "confidence": 0.85
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "kidneys",
+    "condition": "raw_base",
+    "latency_s": 47.52,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 5,
+      "rejected_low_confidence": 0,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 11,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Renal artery",
+        "confidence": 0.95
+      },
+      {
+        "label": "Renal vein",
+        "confidence": 0.95
+      },
+      {
+        "label": "Renal pelvis",
+        "confidence": 0.95
+      },
+      {
+        "label": "Renal cortex",
+        "confidence": 0.95
+      },
+      {
+        "label": "Ureter",
+        "confidence": 0.9
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "kidneys",
+    "condition": "agentic_pipeline",
+    "latency_s": 36.82,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 2,
+      "rejected_low_confidence": 0,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 14,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Renal Pelvis",
+        "confidence": 0.95
+      },
+      {
+        "label": "Ureter",
+        "confidence": 0.9
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "liver",
+    "condition": "raw_base",
+    "latency_s": 36.15,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 1,
+      "rejected_low_confidence": 0,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 15,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Liver",
+        "confidence": 0.95
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "liver",
+    "condition": "agentic_pipeline",
+    "latency_s": 45.32,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 4,
+      "rejected_low_confidence": 4,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 8,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Gallbladder",
+        "confidence": 0.95
+      },
+      {
+        "label": "Hepatic duct",
+        "confidence": 0.9
+      },
+      {
+        "label": "Inferior vena cava",
+        "confidence": 0.9
+      },
+      {
+        "label": "Portal vein",
+        "confidence": 0.9
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "lungs",
+    "condition": "raw_base",
+    "latency_s": 36.49,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 4,
+      "rejected_low_confidence": 0,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 12,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Trachea",
+        "confidence": 0.95
+      },
+      {
+        "label": "Right Lung",
+        "confidence": 0.9
+      },
+      {
+        "label": "Left Lung",
+        "confidence": 0.9
+      },
+      {
+        "label": "Bronchus",
+        "confidence": 0.85
+      }
+    ],
+    "error": null
+  },
+  {
+    "organ": "lungs",
+    "condition": "agentic_pipeline",
+    "latency_s": 36.16,
+    "diagnostics": {
+      "candidate_regions": 16,
+      "qwen_regions": 16,
+      "accepted_labels": 3,
+      "rejected_low_confidence": 0,
+      "rejected_invalid": 0,
+      "rejected_duplicate": 13,
+      "completed_batches": 4,
+      "failed_batches": 0
+    },
+    "labels": [
+      {
+        "label": "Trachea",
+        "confidence": 0.95
+      },
+      {
+        "label": "Lung",
+        "confidence": 0.95
+      },
+      {
+        "label": "Bronchus",
+        "confidence": 0.9
+      }
+    ],
+    "error": null
+  }
+]

@@ -1,6 +1,6 @@
 // Type definitions for Adaptive Quiz Platform
 
-export type ExamType = "mcq" | "structured" | "essay";
+export type ExamType = "mcq" | "fill_blank" | "structured" | "essay";
 export type DifficultyMode = "easy" | "medium" | "hard" | "adaptive";
 export type SessionStatus = "processing" | "ready" | "error";
 export type BloomLevel =
@@ -42,15 +42,17 @@ export interface SessionStatusResponse {
   num_questions: number;
   message: string;
   chunk_count: number;
+  is_topic_session?: boolean;
 }
 
 // ── Quiz ─────────────────────────────────────────────────────────
 
 export interface MCQOptions {
-  A: string;
-  B: string;
-  C: string;
-  D: string;
+  "1": string;
+  "2": string;
+  "3": string;
+  "4": string;
+  "5": string;
 }
 
 export interface Question {
@@ -64,6 +66,9 @@ export interface Question {
   bloom_level: BloomLevel;
   difficulty: number; // 0.0 - 1.0
   grounding_score: number;
+  grounding_status: "grounded" | "topic_model";
+  source_file: string;
+  page_number: number;
   is_flagged: boolean;
 }
 
@@ -82,6 +87,14 @@ export interface SubmitAnswerResponse {
   attempts: number;
   next_question_available: boolean;
   quiz_complete: boolean;
+  correct_answer?: string | null;
+  correct_answer_text?: string | null;
+  explanation?: string | null;
+}
+
+export interface AdvanceQuestionResponse {
+  quiz_complete: boolean;
+  result: SubmitAnswerResponse;
 }
 
 // ── Analytics ────────────────────────────────────────────────────
@@ -95,6 +108,7 @@ export interface ResourceLink {
 
 export interface WeakTopicRecommendation {
   topic: string;
+  recommendation_type?: "review" | "enrichment";
   score_ratio: number;
   percentage: number;
   concept_notes: string[];
@@ -104,6 +118,7 @@ export interface WeakTopicRecommendation {
 export interface QuestionMarkDetail {
   q_num: number;
   topic: string;
+  q_type?: ExamType;
   bloom: string;
   difficulty: number;
   is_correct: boolean;
@@ -111,6 +126,17 @@ export interface QuestionMarkDetail {
   hints_used: number;
   marks: number;
   max_marks: number;
+  question?: string;
+  options?: Record<string, string>;
+  student_answer?: string;
+  correct_answer?: string;
+  model_answer?: string;
+  attempt_history?: Array<{
+    attempt: number;
+    answer: string;
+    is_correct: boolean;
+    hint?: string | null;
+  }>;
 }
 
 export interface AnalyticsReport {
@@ -135,6 +161,7 @@ export interface AnalyticsReport {
   avg_attempts?: number;
   avg_hints_used?: number;
   total_time_min?: number;
+  recommendations_pending?: boolean;
 }
 
 // ── UI State ─────────────────────────────────────────────────────

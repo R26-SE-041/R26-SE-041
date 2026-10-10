@@ -7,6 +7,7 @@ import base64
 import httpx
 
 from app.core.config import settings
+from app.core.http import modal_client
 
 TIMEOUT = 120.0  # SRCNN inference + network round-trip
 
@@ -29,7 +30,7 @@ async def enhance_image(image_bytes: bytes) -> bytes:
 
     payload = {"image_b64": base64.b64encode(image_bytes).decode("utf-8")}
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with modal_client(TIMEOUT) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
 

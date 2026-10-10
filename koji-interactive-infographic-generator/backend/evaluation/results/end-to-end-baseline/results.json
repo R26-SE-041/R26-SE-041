@@ -1,0 +1,406 @@
+{
+  "protocol": {
+    "id": "end-to-end-minimal-prompt-v1",
+    "prompts": [
+      "eye",
+      "heart",
+      "skin"
+    ],
+    "seed": 260902,
+    "raw_condition": "one-word prompt -> FLUX.1-dev",
+    "pipeline_condition": "one-word input -> Anatomy workspace -> Qwen prompt agent (persona/SKILL/MEMENTO) -> FLUX.1-dev -> Qwen-VL labels -> rendered overlay",
+    "image_config": {
+      "width": 512,
+      "height": 512,
+      "inference_steps": 25,
+      "guidance_scale": 3.5
+    },
+    "endpoints": {
+      "prompt": "https://agal-koji--prompt-agent-api.modal.run",
+      "image": "https://agal-koji--image-agent-api.modal.run",
+      "eval": "https://agal-koji--eval-agent-api.modal.run",
+      "interactive": "https://agal-koji--interactive-agent-api.modal.run"
+    }
+  },
+  "summary": {
+    "conditions": {
+      "raw_flux1_dev": {
+        "clip_score": {
+          "n": 3,
+          "mean": 27.358936309814453,
+          "sd": 1.6658812898249067
+        },
+        "visual_score": {
+          "n": 3,
+          "mean": 6,
+          "sd": 3.4641016151377544
+        },
+        "pedagogical_score": {
+          "n": 3,
+          "mean": 5,
+          "sd": 3.4641016151377544
+        },
+        "vlm_score": {
+          "n": 3,
+          "mean": 5.5,
+          "sd": 3.4641016151377544
+        }
+      },
+      "our_full_pipeline": {
+        "clip_score": {
+          "n": 3,
+          "mean": 23.7077579498291,
+          "sd": 2.466845310804244
+        },
+        "visual_score": {
+          "n": 3,
+          "mean": 8.666666666666666,
+          "sd": 0.5773502691896257
+        },
+        "pedagogical_score": {
+          "n": 3,
+          "mean": 7.666666666666667,
+          "sd": 0.5773502691896258
+        },
+        "vlm_score": {
+          "n": 3,
+          "mean": 8.166666666666666,
+          "sd": 0.5773502691896257
+        }
+      }
+    },
+    "paired_deltas_pipeline_minus_raw": {
+      "clip_score": {
+        "n": 3,
+        "mean": -3.6511783599853516,
+        "sd": 1.387747755164098
+      },
+      "visual_score": {
+        "n": 3,
+        "mean": 2.6666666666666665,
+        "sd": 2.886751345948129
+      },
+      "pedagogical_score": {
+        "n": 3,
+        "mean": 2.6666666666666665,
+        "sd": 2.886751345948129
+      },
+      "vlm_score": {
+        "n": 3,
+        "mean": 2.6666666666666665,
+        "sd": 2.886751345948129
+      }
+    }
+  },
+  "rows": [
+    {
+      "prompt": "heart",
+      "seed": 260902,
+      "condition": "raw_flux1_dev",
+      "image_file": "images/heart_raw_flux1_dev.png",
+      "metrics": {
+        "clip_score": 27.874460220336914,
+        "visual_score": 8,
+        "pedagogical_score": 7,
+        "vlm_score": 7.5
+      },
+      "evaluator_feedback": "The image aligns well with the 'heart' prompt but lacks educational context.",
+      "evaluation_latency_ms": 36470.77,
+      "generation_prompt": "heart",
+      "generation_latency_ms": 91074.54,
+      "model": "black-forest-labs/FLUX.1-dev",
+      "labels_rendered": 0
+    },
+    {
+      "prompt": "heart",
+      "seed": 260902,
+      "condition": "our_full_pipeline",
+      "image_file": "images/heart_our_full_pipeline.png",
+      "metrics": {
+        "clip_score": 25.82485580444336,
+        "visual_score": 9,
+        "pedagogical_score": 8,
+        "vlm_score": 8.5
+      },
+      "evaluator_feedback": "The image accurately represents the heart with labeled structures, making it useful for educational purposes.",
+      "evaluation_latency_ms": 32565.25,
+      "routed_prompt": "Human anatomy educational illustration: heart",
+      "enhanced_prompt": "HRTANAT. medically accurate illustration of the human heart, anatomical viewpoint or section: An illustration of the heart from the front showing major structures. for general audience learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. portrait composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "heart",
+        "view": "anterior_cutaway",
+        "view_description": "An illustration of the heart from the front showing major structures",
+        "grade_level": "general_audience",
+        "required_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "orientation_note": "Anterior cutaway: anatomical right appears viewer-left and anatomical left viewer-right.",
+        "knowledge_version": "1.0.0"
+      },
+      "generation_latency_ms": 109711.17,
+      "enhancement_latency_ms": 21354.92,
+      "labeling_latency_ms": 46600.57,
+      "model": "Qwen2.5 prompt agent + FLUX.1-dev + Qwen2.5-VL labeling",
+      "labels_rendered": 8,
+      "labels": [
+        {
+          "label": "Aorta",
+          "confidence": 0.95
+        },
+        {
+          "label": "atrioventricular node",
+          "confidence": 0.95
+        },
+        {
+          "label": "Pulmonary artery",
+          "confidence": 0.9
+        },
+        {
+          "label": "atrioventricular bundle",
+          "confidence": 0.9
+        },
+        {
+          "label": "left bundle branch",
+          "confidence": 0.9
+        },
+        {
+          "label": "right bundle branch",
+          "confidence": 0.9
+        },
+        {
+          "label": "right atrium",
+          "confidence": 0.9
+        },
+        {
+          "label": "left ventricle",
+          "confidence": 0.9
+        }
+      ],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 8,
+        "rejected_low_confidence": 1,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 5,
+        "completed_batches": 4,
+        "failed_batches": 0
+      }
+    },
+    {
+      "prompt": "skin",
+      "seed": 260902,
+      "condition": "raw_flux1_dev",
+      "image_file": "images/skin_raw_flux1_dev.png",
+      "metrics": {
+        "clip_score": 25.496232986450195,
+        "visual_score": 2,
+        "pedagogical_score": 1,
+        "vlm_score": 1.5
+      },
+      "evaluator_feedback": "The image does not align well with the 'skin' prompt and lacks educational utility.",
+      "evaluation_latency_ms": 9615.63,
+      "generation_prompt": "skin",
+      "generation_latency_ms": 109720.94,
+      "model": "black-forest-labs/FLUX.1-dev",
+      "labels_rendered": 0
+    },
+    {
+      "prompt": "skin",
+      "seed": 260902,
+      "condition": "our_full_pipeline",
+      "image_file": "images/skin_our_full_pipeline.png",
+      "metrics": {
+        "clip_score": 20.998830795288086,
+        "visual_score": 8,
+        "pedagogical_score": 7,
+        "vlm_score": 7.5
+      },
+      "evaluator_feedback": "The image aligns well with the 'skin' prompt but lacks detailed anatomical labeling for educational purposes.",
+      "evaluation_latency_ms": 12570.53,
+      "routed_prompt": "Human anatomy educational illustration: skin",
+      "enhanced_prompt": "EDUANAT. medically accurate educational illustration of one isolated human skin. standard educational anatomical view. for general audience learners. clear textbook anatomy. portrait composition. preserve the requested anatomical direction, section, laterality, and visible surfaces. do not add unrelated organs, torso, or anatomical structures not requested. centered composition with clear anatomical boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "catalog_verified": false,
+        "organ": "skin",
+        "view_description": "",
+        "grade_level": "general_audience",
+        "required_structures": [],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "knowledge_version": "general-anatomy-1.0",
+        "prompt_profile": "detailed"
+      },
+      "generation_latency_ms": 109985.88,
+      "enhancement_latency_ms": 41031.61,
+      "labeling_latency_ms": 47483.58,
+      "model": "Qwen2.5 prompt agent + FLUX.1-dev + Qwen2.5-VL labeling",
+      "labels_rendered": 8,
+      "labels": [
+        {
+          "label": "Clavicle",
+          "confidence": 0.95
+        },
+        {
+          "label": "Rectum",
+          "confidence": 0.95
+        },
+        {
+          "label": "Sternal notch",
+          "confidence": 0.9
+        },
+        {
+          "label": "Sternum",
+          "confidence": 0.9
+        },
+        {
+          "label": "pectoralis major muscle",
+          "confidence": 0.9
+        },
+        {
+          "label": "Small Intestine",
+          "confidence": 0.9
+        },
+        {
+          "label": "Anus",
+          "confidence": 0.9
+        },
+        {
+          "label": "abdominal wall",
+          "confidence": 0.9
+        }
+      ],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 8,
+        "rejected_low_confidence": 2,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 5,
+        "completed_batches": 4,
+        "failed_batches": 0
+      }
+    },
+    {
+      "prompt": "eye",
+      "seed": 260902,
+      "condition": "raw_flux1_dev",
+      "image_file": "images/eye_raw_flux1_dev.png",
+      "metrics": {
+        "clip_score": 28.70611572265625,
+        "visual_score": 8,
+        "pedagogical_score": 7,
+        "vlm_score": 7.5
+      },
+      "evaluator_feedback": "The image closely aligns with the 'eye' prompt but lacks educational context.",
+      "evaluation_latency_ms": 20024.67,
+      "generation_prompt": "eye",
+      "generation_latency_ms": 102323.2,
+      "model": "black-forest-labs/FLUX.1-dev",
+      "labels_rendered": 0
+    },
+    {
+      "prompt": "eye",
+      "seed": 260902,
+      "condition": "our_full_pipeline",
+      "image_file": "images/eye_our_full_pipeline.png",
+      "metrics": {
+        "clip_score": 24.29958724975586,
+        "visual_score": 9,
+        "pedagogical_score": 8,
+        "vlm_score": 8.5
+      },
+      "evaluator_feedback": "The image effectively aligns with the 'eye' prompt and provides clear labels for key anatomical structures.",
+      "evaluation_latency_ms": 21496.15,
+      "routed_prompt": "Human anatomy educational illustration: eye",
+      "enhanced_prompt": "EDUANAT. medically accurate educational illustration of one isolated human eye. standard educational anatomical view. show the required visible structures: cornea, iris, pupil, lens, sclera, retina, vitreous body, optic nerve. for general audience learners. clear textbook anatomy. portrait composition. preserve the requested anatomical direction, section, laterality, and visible surfaces. do not add unrelated organs, torso, or anatomical structures not requested. centered composition with clear anatomical boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "catalog_verified": false,
+        "organ": "eye",
+        "view_description": "",
+        "grade_level": "general_audience",
+        "required_structures": [
+          "cornea",
+          "iris",
+          "pupil",
+          "lens",
+          "sclera",
+          "retina",
+          "vitreous body",
+          "optic nerve"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "knowledge_version": "general-anatomy-1.0",
+        "prompt_profile": "detailed"
+      },
+      "generation_latency_ms": 95553.53,
+      "enhancement_latency_ms": 39583.4,
+      "labeling_latency_ms": 43863.59,
+      "model": "Qwen2.5 prompt agent + FLUX.1-dev + Qwen2.5-VL labeling",
+      "labels_rendered": 8,
+      "labels": [
+        {
+          "label": "Sclera",
+          "confidence": 0.95
+        },
+        {
+          "label": "Optic disc",
+          "confidence": 0.95
+        },
+        {
+          "label": "Cornea",
+          "confidence": 0.9
+        },
+        {
+          "label": "Vitreous Body",
+          "confidence": 0.9
+        },
+        {
+          "label": "Retina",
+          "confidence": 0.9
+        },
+        {
+          "label": "Lens",
+          "confidence": 0.9
+        },
+        {
+          "label": "Retinal nerve fiber layer",
+          "confidence": 0.9
+        },
+        {
+          "label": "Macula lutea",
+          "confidence": 0.85
+        }
+      ],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 8,
+        "rejected_low_confidence": 6,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 2,
+        "completed_batches": 4,
+        "failed_batches": 0
+      }
+    }
+  ]
+}

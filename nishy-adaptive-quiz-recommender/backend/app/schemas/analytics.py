@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 
 class AnalyticsResponse(BaseModel):
@@ -9,6 +9,7 @@ class AnalyticsResponse(BaseModel):
     question_marks_detail: Optional[List[Dict]] = None
     total_questions: int
     total_answered: int
+    correct_count: int = 0
     topic_scores: Dict
     bloom_scores: Dict
     difficulty_progression: List[float]
@@ -21,3 +22,14 @@ class AnalyticsResponse(BaseModel):
     avg_grounding_score: float
     flagged_questions_count: int
     flagged_questions_pct: float
+    recommendations_pending: bool = False
+
+
+class FeedbackRequest(BaseModel):
+    rating: int = Field(..., ge=1, le=5, description="Star rating 1–5")
+    comment: Optional[str] = Field(None, max_length=500, description="Optional short comment")
+
+
+class FeedbackResponse(BaseModel):
+    status: str
+    message: str

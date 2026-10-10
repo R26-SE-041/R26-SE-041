@@ -10,38 +10,38 @@ import {
   CpuIcon,
   ListIcon,
   ClipboardIcon,
+  ArrowRightIcon,
 } from "@/components/ui/Icons";
 
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-5 max-w-7xl mx-auto w-full">
+      <nav className="flex items-center justify-between px-[18px] py-5 max-w-[1040px] mx-auto w-full border-b border-stone-900/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-button-gradient flex items-center justify-center glow-violet">
-            <span className="text-white font-bold text-sm">AQ</span>
+          <div className="brand-mark w-8 h-8 rounded-lg">
+            <span className="font-bold text-sm">AQ</span>
           </div>
           <span className="font-bold text-lg tracking-tight">
             Adaptive<span className="text-gradient">IQ</span>
           </span>
         </div>
-        <div className="hidden md:flex items-center gap-6 text-sm text-white/60">
-          <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
+        <div className="hidden md:flex items-center gap-6 text-sm text-stone-900/60">
+          <a href="#how-it-works" className="hover:text-stone-900 transition-colors">How it works</a>
+          <a href="#features" className="hover:text-stone-900 transition-colors">Features</a>
         </div>
-        <Link href="/upload" className="btn-primary text-sm px-5 py-2.5">
-          Start Quiz →
+        <Link href="/upload" className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5">
+          Start Quiz <ArrowRightIcon />
         </Link>
       </nav>
 
       {/* Hero */}
-      <section className="flex-1 flex flex-col items-center justify-center text-center px-6 pt-16 pb-24 relative">
-        {/* Background hero gradient */}
+      <section className="flex-1 flex flex-col items-center justify-center text-center px-[18px] pt-20 pb-24 relative">
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 80% 50% at 50% -5%, rgba(124,58,237,0.4) 0%, transparent 70%)",
+              "radial-gradient(ellipse 60% 42% at 50% 10%, rgba(216,101,59,0.10) 0%, transparent 72%)",
           }}
           aria-hidden="true"
         />
@@ -49,22 +49,21 @@ export default function HomePage() {
         {/* Badge */}
         <div className="animate-fade-in mb-6">
           <span className="badge-violet text-sm px-4 py-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse-slow" />
-            Powered by Qwen2.5-7B + LangGraph
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-600" />
+            Source-grounded adaptive assessment
           </span>
         </div>
 
         {/* Heading */}
-        <h1 className="animate-slide-up text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1] mb-6 max-w-4xl">
-          Turn your notes into
+        <h1 className="animate-slide-up text-5xl md:text-[58px] font-bold tracking-[-2px] leading-[1.08] md:leading-[63px] mb-7 max-w-4xl text-stone-800">
+          Study with purpose.
           <br />
-          <span className="text-gradient">adaptive quizzes</span>
+          <span className="text-gradient italic">Learn with evidence.</span>
         </h1>
 
-        <p className="animate-fade-in text-lg md:text-xl text-white/60 max-w-2xl mb-10 leading-relaxed">
-          Upload any study material — PDF, DOCX, PPTX. Our multi-agent AI extracts
-          topics, generates Bloom&apos;s-level questions, and adapts difficulty to
-          your answers in real-time.
+        <p className="animate-fade-in text-lg md:text-xl text-stone-900/60 max-w-2xl mb-10 leading-relaxed">
+          Turn your own notes into structured, adaptive assessments. Every question is grounded
+          in your material and adjusts thoughtfully as you progress.
         </p>
 
         {/* CTA Buttons */}
@@ -81,22 +80,22 @@ export default function HomePage() {
         </div>
 
         {/* Stats row */}
-        <div className="animate-fade-in mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto text-center">
+        <div className="animate-fade-in mt-16 grid grid-cols-3 gap-0 max-w-xl w-full mx-auto text-center editorial-rule py-5">
           {[
             { val: "7B", label: "Parameter LLM" },
             { val: "RAG", label: "Grounded Questions" },
             { val: "IRT", label: "Adaptive Engine" },
           ].map((s) => (
-            <div key={s.val}>
-              <div className="text-2xl font-bold text-gradient">{s.val}</div>
-              <div className="text-xs text-white/40 mt-1">{s.label}</div>
+            <div key={s.val} className="px-4 border-r border-stone-900/10 last:border-r-0">
+              <div className="text-2xl font-semibold text-orange-700 font-serif">{s.val}</div>
+              <div className="text-xs text-stone-500 mt-1">{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="py-24 px-6 max-w-6xl mx-auto w-full">
+      <section id="how-it-works" className="py-24 px-[18px] max-w-[1040px] mx-auto w-full">
         <div className="text-center mb-16">
           <p className="section-label mb-3">The Process</p>
           <h2 className="text-3xl md:text-4xl font-bold">How AdaptiveIQ works</h2>
@@ -108,46 +107,42 @@ export default function HomePage() {
               step: "01",
               icon: <FileTextIcon className="w-8 h-8" />,
               title: "Upload Documents",
-              desc: "PDF, DOCX, PPTX, TXT — any study material you have.",
-              color: "from-violet-600/20 to-violet-600/5",
+              desc: "Use PDF, DOCX, PPTX, TXT, JPG, or PNG study material.",
             },
             {
               step: "02",
               icon: <ZapIcon className="w-8 h-8" />,
               title: "AI Ingestion",
               desc: "LangGraph agents extract topics and build a knowledge graph.",
-              color: "from-indigo-600/20 to-indigo-600/5",
             },
             {
               step: "03",
               icon: <HelpCircleIcon className="w-8 h-8" />,
               title: "Adaptive Questions",
               desc: "Qwen2.5-7B generates Bloom's-level MCQs grounded in your docs.",
-              color: "from-cyan-600/20 to-cyan-600/5",
             },
             {
               step: "04",
               icon: <BarChartIcon className="w-8 h-8" />,
               title: "Instant Feedback",
               desc: "See your performance, weak topics, and difficulty progression.",
-              color: "from-emerald-600/20 to-emerald-600/5",
             },
           ].map((item) => (
             <div
               key={item.step}
-              className={`glass-card p-6 bg-gradient-to-b ${item.color} relative overflow-hidden`}
+              className="glass-card p-[22px] relative overflow-hidden"
             >
-              <div className="text-xs font-bold text-white/20 mb-4 tracking-widest">STEP {item.step}</div>
-              <div className="mb-4 text-white/70">{item.icon}</div>
-              <h3 className="font-bold text-white mb-2">{item.title}</h3>
-              <p className="text-sm text-white/50 leading-relaxed">{item.desc}</p>
+              <div className="text-xs font-bold text-stone-400 mb-4 tracking-widest">STEP {item.step}</div>
+              <div className="mb-4 text-orange-700 w-12 h-12 rounded-xl bg-orange-50 border border-orange-900/10 flex items-center justify-center">{item.icon}</div>
+              <h3 className="font-bold text-stone-900 mb-2">{item.title}</h3>
+              <p className="text-sm text-stone-500 leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* Features */}
-      <section id="features" className="py-24 px-6 max-w-6xl mx-auto w-full">
+      <section id="features" className="py-24 px-[18px] max-w-[1040px] mx-auto w-full">
         <div className="text-center mb-16">
           <p className="section-label mb-3">Features</p>
           <h2 className="text-3xl md:text-4xl font-bold">
@@ -167,14 +162,14 @@ export default function HomePage() {
             {
               icon: <TrendingUpIcon className="w-7 h-7" />,
               title: "Real-time Difficulty Adaptation",
-              desc: "Correct answer → harder question. Wrong answer → easier with hint. Implements Item Response Theory principles.",
+              desc: "Strong performance keeps questions challenging. More attempts gradually reduce the next question's difficulty.",
               badge: "IRT Model",
               badgeType: "badge-cyan",
             },
             {
               icon: <LayersIcon className="w-7 h-7" />,
               title: "Bloom's Taxonomy Mapping",
-              desc: "Questions span Remember → Analyze. The system tracks your coverage across all cognitive levels.",
+              desc: "Questions span recall, application, and analysis. The system tracks coverage across cognitive levels.",
               badge: "6 Levels",
               badgeType: "badge-green",
             },
@@ -188,7 +183,7 @@ export default function HomePage() {
             {
               icon: <ZapIcon className="w-7 h-7" />,
               title: "Qwen2.5-7B on Modal.com",
-              desc: "Open-source LLM runs serverlessly on GPU. No OpenAI dependency — fully reproducible for research.",
+              desc: "The open-source LLM runs serverlessly on GPU with a reproducible research setup.",
               badge: "Open Source",
               badgeType: "badge-cyan",
             },
@@ -200,13 +195,13 @@ export default function HomePage() {
               badgeType: "badge-green",
             },
           ].map((f) => (
-            <div key={f.title} className="glass-card-hover p-6">
-              <div className="mb-4 text-white/70">{f.icon}</div>
+            <div key={f.title} className="glass-card-hover p-[22px]">
+              <div className="mb-4 text-orange-700">{f.icon}</div>
               <div className="flex items-start justify-between gap-2 mb-3">
-                <h3 className="font-bold text-white text-lg leading-tight">{f.title}</h3>
+                <h3 className="font-bold text-stone-900 text-lg leading-tight">{f.title}</h3>
                 <span className={`${f.badgeType} shrink-0 mt-0.5`}>{f.badge}</span>
               </div>
-              <p className="text-sm text-white/50 leading-relaxed">{f.desc}</p>
+              <p className="text-sm text-stone-500 leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
@@ -214,20 +209,20 @@ export default function HomePage() {
 
       {/* CTA Banner */}
       <section className="py-20 px-6 max-w-4xl mx-auto w-full text-center">
-        <div className="glass-card p-12" style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(79,70,229,0.1) 100%)" }}>
+        <div className="glass-card p-[22px] md:p-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Ready to test your knowledge?
           </h2>
-          <p className="text-white/60 mb-8 text-lg">Upload your study material and start your first adaptive quiz in minutes.</p>
-          <Link href="/upload" id="cta-banner-start" className="btn-primary text-base px-10 py-4">
-            Get Started Free →
+          <p className="text-stone-900/60 mb-8 text-lg">Upload your study material and start your first adaptive quiz in minutes.</p>
+          <Link href="/upload" id="cta-banner-start" className="btn-primary inline-flex items-center gap-2 text-base px-10 py-4">
+            Get Started Free <ArrowRightIcon />
           </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-8 px-6 text-center text-white/30 text-sm border-t border-white/5">
-        AdaptiveIQ — MSc Research Project · Adaptive AI Assessment Platform · Built with LangGraph + Qwen2.5 + Next.js
+      <footer className="py-8 px-6 text-center text-stone-400 text-sm border-t border-orange-900/10">
+        AdaptiveIQ | MSc Research Project | Adaptive AI Assessment Platform | Built with LangGraph + Qwen2.5 + Next.js
       </footer>
     </main>
   );

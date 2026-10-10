@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: koji-studio-api
+    runtime: python
+    plan: starter
+    rootDir: koji-interactive-infographic-generator/backend
+    buildCommand: pip install -r studio/requirements.txt
+    startCommand: uvicorn studio.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    autoDeployTrigger: "off"
+    buildFilter:
+      paths: [koji-interactive-infographic-generator/backend/**]
+    envVars:
+      - fromGroup: koji-studio
+  - type: worker
+    name: koji-studio-worker
+    runtime: python
+    plan: starter
+    rootDir: koji-interactive-infographic-generator/backend
+    buildCommand: pip install -r studio/requirements.txt
+    startCommand: python -m studio.worker
+    autoDeployTrigger: "off"
+    buildFilter:
+      paths: [koji-interactive-infographic-generator/backend/**]
+    envVars:
+      - fromGroup: koji-studio
+envVarGroups:
+  - name: koji-studio
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PROMPT_AGENT_URL
+        sync: false
+      - key: IMAGE_AGENT_URL
+        sync: false
+      - key: SKETCH_AGENT_URL
+        sync: false
+      - key: INTERACTIVE_AGENT_URL
+        sync: false
+      - key: EVAL_AGENT_URL
+        sync: false
+      - key: THREED_AGENT_URL
+        sync: false
+      - key: ORCHESTRATOR_URL
+        sync: false

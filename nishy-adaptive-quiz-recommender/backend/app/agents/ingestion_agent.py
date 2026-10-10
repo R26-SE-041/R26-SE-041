@@ -39,6 +39,16 @@ def ingestion_agent(state: AssessmentState) -> dict:
     logs = list(state.get("agent_logs", []))
 
     if not document_ids:
+        requested_topic = str(state.get("requested_topic") or "").strip()
+        if requested_topic:
+            logs.append(f"[IngestionAgent] Topic-only session: {requested_topic}")
+            return {
+                "chroma_collection_id": collection_id,
+                "raw_chunks": [],
+                "ingestion_status": "done",
+                "error": None,
+                "agent_logs": logs,
+            }
         return {
             "ingestion_status": "error",
             "error": "No documents selected.",
@@ -48,7 +58,10 @@ def ingestion_agent(state: AssessmentState) -> dict:
     # Merge chunks from the selected document collections into the session collection
     source_collections = [f"doc_{doc_id}" for doc_id in document_ids]
     try:
-        rag.merge_collections(collection_id, source_collections)
+        copied = rag.merge_collections(collection_id, source_collections)
+        if copied == 0:
+            raise ValueError("No chunks available in the selected PDF collection(s).")
+        raw_chunks = rag.get_source_chunks(collection_id, limit=1000)
         logs.append(f"[IngestionAgent] Merged {len(document_ids)} documents into session collection '{collection_id}'")
     except Exception as e:
         return {
@@ -60,6 +73,7 @@ def ingestion_agent(state: AssessmentState) -> dict:
     logger.info(f"[IngestionAgent] Done merging documents")
     return {
         "chroma_collection_id": collection_id,
+        "raw_chunks": raw_chunks,
         "ingestion_status": "done",
         "agent_logs": logs
     }

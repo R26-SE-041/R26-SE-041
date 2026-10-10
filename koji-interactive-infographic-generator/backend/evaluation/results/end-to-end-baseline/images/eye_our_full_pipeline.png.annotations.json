@@ -1,0 +1,146 @@
+[
+  {
+    "structure_id": "auto.sclera",
+    "label": "Sclera",
+    "anchor_x": 0.25,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.166015625,
+      0.166015625,
+      0.333984375,
+      0.333984375
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R1",
+    "label_x": 0.02,
+    "label_y": 0.25
+  },
+  {
+    "structure_id": "auto.optic_disc",
+    "label": "Optic disc",
+    "anchor_x": 0.25,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.166015625,
+      0.5,
+      0.333984375,
+      0.666015625
+    ],
+    "confidence": 0.95,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R9",
+    "label_x": 0.02,
+    "label_y": 0.58203125
+  },
+  {
+    "structure_id": "auto.cornea",
+    "label": "Cornea",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.25,
+    "bbox": [
+      0.333984375,
+      0.166015625,
+      0.5,
+      0.333984375
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R2",
+    "label_x": 0.02,
+    "label_y": 0.31700000000000006
+  },
+  {
+    "structure_id": "auto.vitreous_body",
+    "label": "Vitreous Body",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.333984375,
+      0.333984375,
+      0.5,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R6",
+    "label_x": 0.02,
+    "label_y": 0.416015625
+  },
+  {
+    "structure_id": "auto.retina",
+    "label": "Retina",
+    "anchor_x": 0.58203125,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.5,
+      0.333984375,
+      0.666015625,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R7",
+    "label_x": 0.7,
+    "label_y": 0.416015625
+  },
+  {
+    "structure_id": "auto.lens",
+    "label": "Lens",
+    "anchor_x": 0.75,
+    "anchor_y": 0.416015625,
+    "bbox": [
+      0.666015625,
+      0.333984375,
+      0.833984375,
+      0.5
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R8",
+    "label_x": 0.7,
+    "label_y": 0.483015625
+  },
+  {
+    "structure_id": "auto.retinal_nerve_fiber_layer",
+    "label": "Retinal nerve fiber layer",
+    "anchor_x": 0.416015625,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.333984375,
+      0.5,
+      0.5,
+      0.666015625
+    ],
+    "confidence": 0.9,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R10",
+    "label_x": 0.02,
+    "label_y": 0.6490312500000001
+  },
+  {
+    "structure_id": "auto.macula_lutea",
+    "label": "Macula lutea",
+    "anchor_x": 0.58203125,
+    "anchor_y": 0.58203125,
+    "bbox": [
+      0.5,
+      0.5,
+      0.666015625,
+      0.666015625
+    ],
+    "confidence": 0.85,
+    "verified": true,
+    "grounding": "marker_grounded_context_crop_qwen_vl",
+    "region_id": "R11",
+    "label_x": 0.7,
+    "label_y": 0.58203125
+  }
+]

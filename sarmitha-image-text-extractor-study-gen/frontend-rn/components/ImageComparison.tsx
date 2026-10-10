@@ -1,91 +1,41 @@
 import React from "react";
-import { View, Text, Image, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
+import { Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Sparkles } from "lucide-react-native";
+import { fonts, useAppTheme } from "@/theme";
 
-interface Props {
-  originalB64: string;
-  enhancedB64: string;
-}
+interface Props { originalB64: string; enhancedB64: string; }
 
 export default function ImageComparison({ originalB64, enhancedB64 }: Props) {
   const { width } = useWindowDimensions();
-  // Stack vertically on narrow screens, side-by-side on wide
-  const isWide = width >= 640;
-
   return (
-    <View style={[styles.container, isWide && styles.containerRow]}>
-      {/* Original */}
-      <View style={styles.imageBlock}>
-        <View style={styles.labelWrap}>
-          <Text style={styles.labelText}>Original</Text>
-        </View>
-        <View style={styles.imageBorder}>
-          <Image
-            source={{ uri: `data:image/png;base64,${originalB64}` }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        </View>
-      </View>
+    <View style={[styles.container, width >= 680 && styles.containerRow]}>
+      <ImageBlock label="Original image" source={`data:image/png;base64,${originalB64}`} />
+      <ImageBlock label="SwinSR enhanced · 4×" source={`data:image/png;base64,${enhancedB64}`} enhanced />
+    </View>
+  );
+}
 
-      {/* Enhanced */}
-      <View style={styles.imageBlock}>
-        <View style={[styles.labelWrap, styles.labelWrapAccent]}>
-          <Text style={[styles.labelText, styles.labelTextAccent]}>Enhanced (4×)</Text>
-        </View>
-        <View style={[styles.imageBorder, styles.imageBorderAccent]}>
-          <Image
-            source={{ uri: `data:image/png;base64,${enhancedB64}` }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        </View>
+function ImageBlock({ label, source, enhanced = false }: { label: string; source: string; enhanced?: boolean }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={[styles.imageBlock, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]}>
+      <View style={styles.labelRow}>
+        {enhanced && <Sparkles size={14} color={colors.primaryBright} />}
+        <Text style={[styles.labelText, { color: enhanced ? colors.primaryBright : colors.textMuted }]}>{label}</Text>
+      </View>
+      <View style={[styles.imageBorder, { backgroundColor: colors.canvas, borderColor: colors.border }]}>
+        <Image source={{ uri: source }} style={styles.image} resizeMode="contain" />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: "column",
-    gap: 20,
-  },
-  containerRow: {
-    flexDirection: "row",
-  },
-  imageBlock: {
-    flex: 1,
-    gap: 8,
-  },
-  labelWrap: {
-    alignSelf: "flex-start",
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  labelWrapAccent: {
-    backgroundColor: "rgba(139,92,246,0.2)",
-  },
-  labelText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.8)",
-  },
-  labelTextAccent: {
-    color: "#c4b5fd",
-  },
-  imageBorder: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "rgba(0,0,0,0.2)",
-    overflow: "hidden",
-  },
-  imageBorderAccent: {
-    borderColor: "rgba(139,92,246,0.3)",
-  },
-  image: {
-    width: "100%",
-    height: 240,
-  },
+  container: { flexDirection: "column", gap: 20 },
+  containerRow: { flexDirection: "row" },
+  imageBlock: { flex: 1, borderRadius: 20, borderWidth: 1, padding: 12 },
+  labelRow: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 4 },
+  labelText: { fontSize: 12, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", fontFamily: fonts.sans },
+  imageBorder: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
+  image: { width: "100%", height: 260 },
 });

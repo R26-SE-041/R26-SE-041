@@ -1,202 +1,67 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
-import { CheckCircle, Upload, ImageUp, ScanText } from "lucide-react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { Check } from "lucide-react-native";
+import { fonts, glassSurface, useAppTheme } from "@/theme";
 
 export type Step = "idle" | "uploading" | "enhancing" | "extracting" | "done" | "error";
-
-interface Props {
-  step: Step;
-  errorMessage?: string;
-}
+interface Props { step: Step; errorMessage?: string; }
 
 const STEPS = [
-  {
-    id: "uploading" as Step,
-    label: "Uploading image",
-    Icon: Upload,
-    doneLabel: "Image received",
-  },
-  {
-    id: "enhancing" as Step,
-    label: "Enhancing with SRCNN",
-    Icon: ImageUp,
-    doneLabel: "Image enhanced (4×)",
-  },
-  {
-    id: "extracting" as Step,
-    label: "Extracting Sinhala text with TrOCR",
-    Icon: ScanText,
-    doneLabel: "Sinhala text extracted",
-  },
+  { id: "uploading" as Step, label: "Uploading image", doneLabel: "Image received" },
+  { id: "enhancing" as Step, label: "Enhancing with SwinSR", doneLabel: "Image enhanced · 4×" },
+  { id: "extracting" as Step, label: "Extracting Sinhala text", doneLabel: "Sinhala text extracted" },
 ] as const;
-
 const ORDER: Step[] = ["idle", "uploading", "enhancing", "extracting", "done", "error"];
 
-function stepIndex(s: Step) {
-  return ORDER.indexOf(s);
-}
-
 export default function ProcessingStatus({ step, errorMessage }: Props) {
+  const { colors } = useAppTheme();
   if (step === "idle") return null;
-
-  const currentIdx = stepIndex(step);
+  const currentIndex = ORDER.indexOf(step);
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>PROCESSING PIPELINE</Text>
-
+    <View style={[styles.card, glassSurface(colors)]}>
+      <Text style={[styles.sectionLabel, { color: colors.textDim }]}>PROCESSING STATUS</Text>
+      <Text style={[styles.title, { color: colors.text }]}>Turning pixels into text</Text>
       <View style={styles.steps}>
-        {STEPS.map((s) => {
-          const sIdx = stepIndex(s.id);
-          const isActive = step === s.id;
-          const isDone = currentIdx > sIdx && step !== "error";
-          const { Icon } = s;
-
-          const iconBg = isDone
-            ? "rgba(52,211,153,0.12)"
-            : isActive
-            ? "rgba(139,92,246,0.15)"
-            : "rgba(255,255,255,0.05)";
-
-          const iconColor = isDone ? "#34d399" : isActive ? "#a78bfa" : "rgba(255,255,255,0.2)";
-          const labelColor = isDone ? "#34d399" : isActive ? "#c4b5fd" : "rgba(255,255,255,0.25)";
-
+        {STEPS.map((item, index) => {
+          const isActive = step === item.id;
+          const isDone = currentIndex > ORDER.indexOf(item.id) && step !== "error";
           return (
-            <View key={s.id} style={styles.stepRow}>
-              {/* Icon */}
-              <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: iconBg },
-                  isActive && styles.iconCircleActive,
-                ]}
-              >
-                {isDone ? (
-                  <CheckCircle size={18} color="#34d399" strokeWidth={1.75} />
-                ) : isActive ? (
-                  <ActivityIndicator size="small" color="#a78bfa" />
-                ) : (
-                  <Icon size={18} color={iconColor} strokeWidth={1.75} />
-                )}
+            <View key={item.id} style={[styles.stepRow, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]}>
+              <View style={[styles.number, { backgroundColor: isDone ? colors.success : isActive ? colors.primary : colors.canvas }]}>
+                {isDone ? <Check size={15} color="#ffffff" strokeWidth={3} /> : <Text style={[styles.numberText, { color: isActive ? "#ffffff" : colors.textDim }]}>{index + 1}</Text>}
               </View>
-
-              {/* Label */}
-              <Text style={[styles.stepLabel, { color: labelColor }]}>
-                {isDone ? s.doneLabel : s.label}
-              </Text>
-
-              {/* Badge */}
-              {isActive && (
-                <View style={styles.runningBadge}>
-                  <View style={styles.runningDot} />
-                  <Text style={styles.runningText}>Running</Text>
-                </View>
-              )}
-              {isDone && (
-                <CheckCircle size={16} color="#34d399" strokeWidth={1.75} />
-              )}
+              <View style={styles.stepCopy}>
+                <Text style={[styles.stepLabel, { color: isDone ? colors.success : isActive ? colors.text : colors.textMuted }]}>{isDone ? item.doneLabel : item.label}</Text>
+                <Text style={[styles.stepMeta, { color: colors.textDim }]}>{isDone ? "Complete" : isActive ? "In progress" : "Waiting"}</Text>
+              </View>
+              {isActive && <ActivityIndicator size="small" color={colors.primaryBright} />}
             </View>
           );
         })}
       </View>
-
-      {/* Error */}
-      {step === "error" && errorMessage && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Error</Text>
-          <Text style={styles.errorMsg}>{errorMessage}</Text>
+      {step === "error" && errorMessage ? (
+        <View style={[styles.errorBox, { backgroundColor: colors.surfaceSoft, borderColor: colors.danger }]}>
+          <Text style={[styles.errorTitle, { color: colors.danger }]}>Processing error</Text>
+          <Text style={[styles.errorMsg, { color: colors.textMuted }]}>{errorMessage}</Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 1.2,
-    color: "rgba(255,255,255,0.35)",
-    marginBottom: 18,
-  },
-  steps: {
-    gap: 16,
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  iconCircleActive: {
-    shadowColor: "#7c3aed",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  stepLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  runningBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 999,
-    backgroundColor: "rgba(139,92,246,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  runningDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#a78bfa",
-  },
-  runningText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#c4b5fd",
-  },
-  errorBox: {
-    marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(248,113,113,0.2)",
-    backgroundColor: "rgba(248,113,113,0.08)",
-    padding: 14,
-  },
-  errorTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#f87171",
-    marginBottom: 4,
-  },
-  errorMsg: {
-    fontSize: 13,
-    color: "rgba(252,165,165,0.75)",
-    lineHeight: 20,
-  },
+  card: { marginBottom: 20 },
+  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 1.1, marginBottom: 8, fontFamily: fonts.sans },
+  title: { fontSize: 24, lineHeight: 29, fontWeight: "700", marginBottom: 20, fontFamily: fonts.serif },
+  steps: { gap: 10 },
+  stepRow: { minHeight: 66, borderRadius: 20, borderWidth: 1, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  number: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  numberText: { fontSize: 12, fontWeight: "800", fontFamily: fonts.sans },
+  stepCopy: { flex: 1 },
+  stepLabel: { fontSize: 14, fontWeight: "600", fontFamily: fonts.sans },
+  stepMeta: { fontSize: 11, marginTop: 3, fontFamily: fonts.sans },
+  errorBox: { marginTop: 14, borderRadius: 20, borderWidth: 1, padding: 16 },
+  errorTitle: { fontSize: 14, fontWeight: "700", marginBottom: 5, fontFamily: fonts.sans },
+  errorMsg: { fontSize: 13, lineHeight: 20, fontFamily: fonts.sans },
 });

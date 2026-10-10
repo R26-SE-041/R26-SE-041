@@ -1,35 +1,21 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-} from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { FileText, Copy, Check } from "lucide-react-native";
-
+import { Check, Copy } from "lucide-react-native";
 import type { ProcessResult } from "@/lib/api";
+import { fonts, glassSurface, type AppColors, useAppTheme } from "@/theme";
 
-interface Props {
-  result: ProcessResult;
-}
+interface Props { result: ProcessResult; }
+type Language = "si" | "ta" | "en";
 
 export default function OcrResult({ result }: Props) {
+  const { colors } = useAppTheme();
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"si" | "ta" | "en">("si");
-  
-  const getText = () => {
-    switch (activeTab) {
-      case "ta": return result.extracted_text_ta || "Translation not available";
-      case "en": return result.extracted_text_en || "Translation not available";
-      default: return result.extracted_text || "";
-    }
-  };
-
-  const text = getText();
-  const isEmpty = activeTab === "si" ? !text.trim() : false;
+  const [activeTab, setActiveTab] = useState<Language>("si");
+  const text = activeTab === "ta"
+    ? result.extracted_text_ta || "Translation not available"
+    : activeTab === "en" ? result.extracted_text_en || "Translation not available" : result.extracted_text || "";
+  const isEmpty = activeTab === "si" && !text.trim();
   const wordCount = text.split(/\s+/).filter(Boolean).length;
 
   const handleCopy = async () => {
@@ -39,175 +25,68 @@ export default function OcrResult({ result }: Props) {
   };
 
   return (
-    <View style={styles.card}>
-      {/* Header */}
+    <View style={[styles.card, glassSurface(colors)]}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <FileText size={16} color="#a78bfa" strokeWidth={1.75} />
-          <Text style={styles.title}>Extracted Text</Text>
-          {activeTab === "si" && !isEmpty && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {wordCount} {wordCount === 1 ? "word" : "words"}
-              </Text>
-            </View>
-          )}
+        <View style={styles.headerCopy}>
+          <Text style={[styles.sectionLabel, { color: colors.textDim }]}>03 · EXTRACTED TEXT</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Your document, digitised.</Text>
+          {activeTab === "si" && !isEmpty ? <Text style={[styles.wordCount, { color: colors.textMuted }]}>{wordCount} {wordCount === 1 ? "word" : "words"} extracted</Text> : null}
         </View>
-
-        {!isEmpty && (
-          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.7}>
-            {copied ? (
-              <>
-                <Check size={13} color="#34d399" strokeWidth={2} />
-                <Text style={[styles.copyBtnText, { color: "#34d399" }]}>Copied</Text>
-              </>
-            ) : (
-              <>
-                <Copy size={13} color="rgba(255,255,255,0.6)" strokeWidth={1.75} />
-                <Text style={styles.copyBtnText}>Copy</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        {!isEmpty ? (
+          <Pressable
+            style={({ pressed }) => [styles.copyBtn, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }, pressed && styles.pressed]}
+            onPress={handleCopy}
+          >
+            {copied ? <Check size={15} color={colors.success} /> : <Copy size={15} color={colors.primaryBright} />}
+            <Text style={[styles.copyBtnText, { color: copied ? colors.success : colors.textMuted }]}>{copied ? "Copied" : "Copy text"}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "si" && styles.activeTab]}
-          onPress={() => setActiveTab("si")}
-        >
-          <Text style={[styles.tabText, activeTab === "si" && styles.activeTabText]}>Sinhala</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "ta" && styles.activeTab]}
-          onPress={() => setActiveTab("ta")}
-        >
-          <Text style={[styles.tabText, activeTab === "ta" && styles.activeTabText]}>Tamil</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "en" && styles.activeTab]}
-          onPress={() => setActiveTab("en")}
-        >
-          <Text style={[styles.tabText, activeTab === "en" && styles.activeTabText]}>English</Text>
-        </TouchableOpacity>
+      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]}>
+        <LanguageTab id="si" label="Sinhala" active={activeTab} onPress={setActiveTab} colors={colors} />
+        <LanguageTab id="ta" label="Tamil" active={activeTab} onPress={setActiveTab} colors={colors} />
+        <LanguageTab id="en" label="English" active={activeTab} onPress={setActiveTab} colors={colors} />
       </View>
 
-      {/* Body */}
       {isEmpty ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>No text detected in the image</Text>
-        </View>
+        <View style={[styles.emptyWrap, { backgroundColor: colors.canvas, borderColor: colors.border }]}><Text style={[styles.emptyText, { color: colors.textMuted }]}>No text was detected in this image.</Text></View>
       ) : (
-        <ScrollView
-          style={styles.textBox}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator={Platform.OS !== "web"}
-        >
-          <Text style={styles.ocrText} selectable>
-            {text}
-          </Text>
+        <ScrollView style={[styles.textBox, { backgroundColor: colors.canvas, borderColor: colors.border }]} nestedScrollEnabled showsVerticalScrollIndicator={Platform.OS !== "web"}>
+          <Text style={[styles.ocrText, { color: colors.text }]} selectable>{text}</Text>
         </ScrollView>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 20,
-    padding: 20,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-    flexWrap: "wrap",
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.9)",
-  },
-  badge: {
-    borderRadius: 999,
-    backgroundColor: "rgba(139,92,246,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    fontSize: 12,
-    color: "#c4b5fd",
-  },
-  copyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  copyBtnText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.6)",
-  },
-  emptyWrap: {
-    paddingVertical: 32,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.25)",
-  },
-  tabsContainer: {
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.2)",
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 6,
-  },
-  activeTab: {
-    backgroundColor: "rgba(139,92,246,0.2)",
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.4)",
-  },
-  activeTabText: {
-    color: "#c4b5fd",
-  },
-  textBox: {
-    maxHeight: 400,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    padding: 16,
-  },
-  ocrText: {
-    fontSize: 16,
-    lineHeight: 30,
-    color: "rgba(255,255,255,0.85)",
-    fontFamily: Platform.OS === "web" ? "system-ui, sans-serif" : undefined,
-  },
-});
+function LanguageTab({ id, label, active, onPress, colors }: { id: Language; label: string; active: Language; onPress: (id: Language) => void; colors: AppColors }) {
+  const selected = active === id;
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.primary }, pressed && styles.pressed]}
+      onPress={() => onPress(id)}
+    >
+      <Text style={[styles.tabText, { color: selected ? "#ffffff" : colors.textMuted }]}>{label}</Text>
+    </Pressable>
+  );
+}
 
+const styles = StyleSheet.create({
+  card: { marginBottom: 20 },
+  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 14 },
+  headerCopy: { flex: 1, minWidth: 230 },
+  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 1.1, marginBottom: 8, fontFamily: fonts.sans },
+  title: { fontSize: 24, lineHeight: 29, fontWeight: "700", fontFamily: fonts.serif },
+  wordCount: { fontSize: 12, marginTop: 6, fontWeight: "600", fontFamily: fonts.sans },
+  copyBtn: { minHeight: 46, borderRadius: 13, borderWidth: 1, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", gap: 8 },
+  copyBtnText: { fontSize: 13, fontWeight: "700", fontFamily: fonts.sans },
+  tabsContainer: { flexDirection: "row", alignSelf: "flex-start", borderRadius: 50, borderWidth: 1, padding: 4, marginBottom: 16 },
+  tab: { minHeight: 38, borderRadius: 50, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
+  tabText: { fontSize: 12, fontWeight: "700", fontFamily: fonts.sans },
+  textBox: { maxHeight: 400, borderRadius: 20, borderWidth: 1, padding: 20 },
+  ocrText: { fontSize: 17, lineHeight: 32, fontWeight: "400", fontFamily: fonts.sans },
+  emptyWrap: { minHeight: 130, padding: 24, alignItems: "center", justifyContent: "center", borderRadius: 20, borderWidth: 1 },
+  emptyText: { fontSize: 14, fontFamily: fonts.sans },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
+});

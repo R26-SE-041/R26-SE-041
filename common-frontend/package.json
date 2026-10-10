@@ -1,0 +1,37 @@
+{
+  "name": "biolearnx-common",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "web": "expo start --web --port 8085",
+    "start": "expo start --port 8085",
+    "android": "expo start --android --port 8085",
+    "build:web": "expo export --platform web",
+    "typecheck": "tsc --noEmit",
+    "proxy": "node --env-file-if-exists=.env.local scripts/proxy.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.2",
+    "expo": "~57.0.11",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-web": "~0.21.2",
+    "@supabase/supabase-js": "^2.57.0",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "react-native-url-polyfill": "^2.0.0",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "three": "^0.185.1",
+    "react-native-svg": "15.15.4",
+    "expo-status-bar": "~57.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "@types/node": "^26.2.0",
+    "typescript": "~6.0.3",
+    "@types/three": "^0.183.1"
+  }
+}

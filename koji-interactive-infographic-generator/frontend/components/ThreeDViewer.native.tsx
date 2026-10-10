@@ -71,7 +71,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
 
   const download = async () => {
     try {
-      const uri = `${FileSystem.cacheDirectory}eduvision-model.glb`;
+      const uri = `${FileSystem.cacheDirectory}learnX-model.glb`;
       await FileSystem.writeAsStringAsync(uri, glbBase64, { encoding: FileSystem.EncodingType.Base64 });
       if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "model/gltf-binary", dialogTitle: "Save or share 3D model" });
     } catch (caught) {

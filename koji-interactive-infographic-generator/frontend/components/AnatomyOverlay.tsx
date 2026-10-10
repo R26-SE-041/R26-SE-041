@@ -2,6 +2,7 @@ import React from "react";
 import Svg, { Circle, Line, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import { StyleSheet, View } from "react-native";
 import type { AnatomyAnnotation } from "../App";
+import { annotationGeometry } from "./annotationGeometry";
 
 interface AnatomyOverlayProps {
   annotations: AnatomyAnnotation[];
@@ -29,7 +30,7 @@ function labelBoxWidth(label: string): number {
 export default function AnatomyOverlay({ annotations, selectedStructureId, showGridPrompts = false }: AnatomyOverlayProps) {
   // Defense-in-depth: only render annotations that passed all quality gates.
   // App.tsx already filters upstream, but this component should be self-protecting.
-  const verified = annotations.filter((item) => item.verified === true);
+  const verified = annotations.filter((item) => item.verified === true || item.user_edited === true);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Svg
@@ -60,14 +61,15 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
           );
         })}
         {verified.map((item) => {
-          const anchorX   = item.anchor_x * SCALE;
-          const anchorY   = item.anchor_y * SCALE;
+          const geometry = annotationGeometry(item);
+          const anchorX   = geometry.ax;
+          const anchorY   = geometry.ay;
           // label_y from the backend is the vertical *center* of the label box.
-          const labelCX   = item.label_x * SCALE;
-          const labelCY   = item.label_y * SCALE;
+          const labelCX   = geometry.x;
+          const labelCY   = geometry.y;
           const boxTop    = labelCY - LABEL_BOX_HALF;
           const selected  = selectedStructureId === item.structure_id;
-          const boxWidth  = labelBoxWidth(item.label);
+          const boxWidth  = geometry.width;
 
           // Callout line: anchor point → center of nearest horizontal edge of label box.
           // If label is to the left of anchor, line connects to label's right edge center.
@@ -88,12 +90,13 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
                 y1={anchorY}
                 y2={lineY2}
               />
+              <Polygon points={geometry.arrow} fill={selected ? "#f59e0b" : "#0891b2"} />
               {/* Anchor dot over the anatomical structure */}
               <Circle
                 cx={anchorX}
                 cy={anchorY}
                 fill={selected ? "#f59e0b" : "#06b6d4"}
-                r={selected ? 9 : 6}
+                r={selected ? 5 : 3}
                 stroke="#ffffff"
                 strokeWidth={selected ? 2.5 : 1.5}
               />

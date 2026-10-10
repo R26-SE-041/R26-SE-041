@@ -2,7 +2,7 @@
 API routes for the image enhancement + OCR pipeline.
 
 Pipeline (POST /api/process):
-  1. SRCNN enhancement (Modal)     — 4× super-resolution
+  1. Swin2SR enhancement (Modal)   — 4× super-resolution
   2. TrOCR line extraction (Modal) — per-line crop + text + confidence
   3. SinhaLM context improvement   — full-page contextual correction (optional,
                                      skipped if SINHALM_MODAL_URL not set)
@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.services import srcnn_client, trocr_client, sinhalm_client, visual_client, translate_client
+from app.services.ocr_cleanup import clean_ocr_lines, clean_sinhala_text
 
 router = APIRouter(prefix="/api")
 
@@ -47,7 +48,7 @@ def _validate_upload(file: UploadFile, data: bytes) -> None:
 async def process_image(file: UploadFile = File(...)):
     """
     Full pipeline:
-      1. Enhance with SRCNN (Modal)
+      1. Enhance with Swin2SR (Modal)
       2. Extract lines with TrOCR (Modal) -> gets crops & text per line
       3. For each line:
          a. If low confidence: Visual OCR Agent (Qwen2-VL) -> SinhaLM
@@ -56,7 +57,7 @@ async def process_image(file: UploadFile = File(...)):
     Returns:
       {
         "original_b64":  "<base64 PNG of original>",
-        "enhanced_b64":  "<base64 PNG of SRCNN output>",
+        "enhanced_b64":  "<base64 PNG of Swin2SR output>",
         "extracted_text": "...",
         "extracted_text_ta": "...",
         "extracted_text_en": "...",
@@ -74,23 +75,30 @@ async def process_image(file: UploadFile = File(...)):
     raw_bytes = await file.read()
     _validate_upload(file, raw_bytes)
 
-    # Step 1 — SRCNN enhancement (with new shadow removal logic)
+    # Step 1 — Swin2SR enhancement (with shadow removal logic)
     try:
         enhanced_bytes = await srcnn_client.enhance_image(raw_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"SRCNN service error: {exc.__class__.__name__} - {exc}")
+        raise HTTPException(status_code=502, detail=f"Swin2SR service error: {exc.__class__.__name__} - {exc}")
 
-    # Step 2 — TrOCR OCR (line-by-line)
+    # Step 2 — TrOCR OCR (line-by-line).
+    # OCR the original pixels. Swin2SR is useful for the comparison/download,
+    # but its sharpening and 4x resampling alter the stroke distribution that
+    # the fine-tuned TrOCR model saw during training.
     try:
-        lines_data = await trocr_client.extract_lines(enhanced_bytes)
+        lines_data = await trocr_client.extract_lines(raw_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"TrOCR service error: {exc.__class__.__name__} - {exc}")
 
-    # Step 3 — Normalise line data from TrOCR into the response shape
+    # Step 3 — Reject non-Sinhala noise and normalise valid OCR lines.
+    # Numbers inside a Sinhala sentence are preserved; standalone hallucinated
+    # values such as page numbers are excluded from this Sinhala OCR pipeline.
+    lines_data = clean_ocr_lines(lines_data)
+
     processed_lines = [
         {
             "crop_b64":   line["crop_b64"],
@@ -136,7 +144,7 @@ async def process_image(file: UploadFile = File(...)):
 # ---------------------------------------------------------------------------
 @router.post("/enhance")
 async def enhance_only(file: UploadFile = File(...)):
-    """Enhance image resolution with SRCNN only."""
+    """Enhance image resolution with Swin2SR only."""
     raw_bytes = await file.read()
     _validate_upload(file, raw_bytes)
 
@@ -145,7 +153,7 @@ async def enhance_only(file: UploadFile = File(...)):
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"SRCNN service error: {exc}")
+        raise HTTPException(status_code=502, detail=f"Swin2SR service error: {exc}")
 
     return JSONResponse(
         {
@@ -171,7 +179,7 @@ async def ocr_only(file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"TrOCR service error: {exc}")
 
-    return JSONResponse({"extracted_text": text})
+    return JSONResponse({"extracted_text": clean_sinhala_text(text)})
 
 
 # ---------------------------------------------------------------------------

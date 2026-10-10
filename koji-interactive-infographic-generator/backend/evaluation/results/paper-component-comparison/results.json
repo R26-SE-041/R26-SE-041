@@ -1,0 +1,2104 @@
+{
+  "protocol": {
+    "id": "paper-component-comparison-v1",
+    "created_at": "2026-09-01T15:15:59.626Z",
+    "organs": [
+      "heart",
+      "brain",
+      "kidneys",
+      "liver",
+      "lungs"
+    ],
+    "seeds": [
+      260901
+    ],
+    "conditions": [
+      "raw_flux1_dev",
+      "our_pipeline"
+    ],
+    "speed_mode": "normal",
+    "endpoints": {
+      "prompt": "https://agal-koji--prompt-agent-api.modal.run",
+      "image": "https://agal-koji--image-agent-api.modal.run",
+      "eval": "https://agal-koji--eval-agent-api.modal.run",
+      "interactive": "https://agal-koji--interactive-agent-api.modal.run"
+    },
+    "evaluator_system_context": [
+      "config/global/PERSONA.md",
+      "agents/eval-agent/SKILL.md",
+      "agents/eval-agent/PERSONA.md",
+      "agents/eval-agent/MEMENTO.md"
+    ],
+    "labeler_system_context": [
+      "config/global/PERSONA.md",
+      "agents/interactive-agent/SKILL.md",
+      "agents/interactive-agent/PERSONA.md",
+      "agents/interactive-agent/MEMENTO.md"
+    ]
+  },
+  "summary": {
+    "conditions": {
+      "raw_flux1_dev": {
+        "runs": 5,
+        "metrics": {
+          "clip_score": {
+            "n": 5,
+            "mean": 31.823294830322265,
+            "sd": 1.1675835841055058
+          },
+          "visual_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          },
+          "pedagogical_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          },
+          "vlm_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          }
+        },
+        "label_metrics": {
+          "accepted_label_count": {
+            "n": 5,
+            "mean": 4.4,
+            "sd": 2.3021728866442674
+          },
+          "catalog_match_rate": {
+            "n": 5,
+            "mean": 0.5966666666666667,
+            "sd": 0.27547938015192514
+          },
+          "required_label_precision": {
+            "n": 5,
+            "mean": 0.7333333333333333,
+            "sd": 0.25276251480171835
+          },
+          "required_label_recall": {
+            "n": 5,
+            "mean": 0.2,
+            "sd": 0.06846531968814576
+          },
+          "required_label_f1": {
+            "n": 5,
+            "mean": 0.30383838383838385,
+            "sd": 0.0882275674769034
+          }
+        }
+      },
+      "our_pipeline": {
+        "runs": 5,
+        "metrics": {
+          "clip_score": {
+            "n": 5,
+            "mean": 31.056311798095702,
+            "sd": 1.2760851083748628
+          },
+          "visual_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          },
+          "pedagogical_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          },
+          "vlm_score": {
+            "n": 5,
+            "mean": 9,
+            "sd": 0
+          }
+        },
+        "label_metrics": {
+          "accepted_label_count": {
+            "n": 5,
+            "mean": 4,
+            "sd": 2.23606797749979
+          },
+          "catalog_match_rate": {
+            "n": 5,
+            "mean": 0.4923809523809524,
+            "sd": 0.3052005771459967
+          },
+          "required_label_precision": {
+            "n": 5,
+            "mean": 0.5666666666666667,
+            "sd": 0.4346134936801766
+          },
+          "required_label_recall": {
+            "n": 5,
+            "mean": 0.1,
+            "sd": 0.055901699437494755
+          },
+          "required_label_f1": {
+            "n": 5,
+            "mean": 0.16525252525252526,
+            "sd": 0.09391658243722507
+          }
+        }
+      }
+    },
+    "paired_deltas_pipeline_minus_raw": {
+      "clip_score": {
+        "n": 5,
+        "mean": -0.7669830322265625,
+        "sd": 0.5549786602223158
+      },
+      "visual_score": {
+        "n": 5,
+        "mean": 0,
+        "sd": 0
+      },
+      "pedagogical_score": {
+        "n": 5,
+        "mean": 0,
+        "sd": 0
+      },
+      "vlm_score": {
+        "n": 5,
+        "mean": 0,
+        "sd": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T14:46:48.021Z",
+      "organ": "heart",
+      "condition": "raw_flux1_dev",
+      "condition_label": "Raw FLUX.1-dev",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human heart for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human heart for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "heart",
+        "view": "anterior_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "orientation_note": "Anterior cutaway: anatomical right appears viewer-left and anatomical left viewer-right.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "generic",
+        "policy_id": "generic-preserve-intent-v1",
+        "organ": null,
+        "view": null,
+        "seed": 260901,
+        "input_contract": "direct_prompt",
+        "anatomy_output_rules_applied": false,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": false,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/heart_seed-260901_raw_flux1_dev.png",
+      "stage_latency_ms": {
+        "generation": 124259.69,
+        "evaluation": 36152.36,
+        "autoLabeling": 68677.07
+      },
+      "metrics": {
+        "clip_score": 33.19569778442383,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human heart with all required structures and is suitable for high school students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "detected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "left_atrium"
+        ],
+        "missing_structures": [
+          "pulmonary_veins"
+        ],
+        "hallucinated_structures": [],
+        "structure_recall": 0.875,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 8,
+        "rejected_low_confidence": 1,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 6,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.aorta",
+          "label": "Aorta",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.pulmonary_artery",
+          "label": "Pulmonary artery",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.333984375,
+            0.166015625,
+            0.5,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R2",
+          "label_x": 0.02,
+          "label_y": 0.31700000000000006
+        },
+        {
+          "structure_id": "auto.atrioventricular_node",
+          "label": "atrioventricular node",
+          "anchor_x": 0.25,
+          "anchor_y": 0.416015625,
+          "bbox": [
+            0.166015625,
+            0.333984375,
+            0.333984375,
+            0.5
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R5",
+          "label_x": 0.02,
+          "label_y": 0.416015625
+        },
+        {
+          "structure_id": "auto.right_atrium",
+          "label": "right atrium",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.416015625,
+          "bbox": [
+            0.333984375,
+            0.333984375,
+            0.5,
+            0.5
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R6",
+          "label_x": 0.02,
+          "label_y": 0.483015625
+        },
+        {
+          "structure_id": "auto.left_ventricle",
+          "label": "left ventricle",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.416015625,
+          "bbox": [
+            0.5,
+            0.333984375,
+            0.666015625,
+            0.5
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R7",
+          "label_x": 0.7,
+          "label_y": 0.416015625
+        },
+        {
+          "structure_id": "auto.atrioventricular_bundle",
+          "label": "atrioventricular bundle",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.333984375,
+            0.5,
+            0.5,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R10",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.left_bundle_branch",
+          "label": "left bundle branch",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.5,
+            0.5,
+            0.666015625,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R11",
+          "label_x": 0.7,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.right_bundle_branch",
+          "label": "right bundle branch",
+          "anchor_x": 0.75,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.666015625,
+            0.5,
+            0.833984375,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R12",
+          "label_x": 0.7,
+          "label_y": 0.6490312500000001
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 8,
+        "unique_catalog_label_count": 4,
+        "catalog_match_rate": 0.5,
+        "required_label_precision": 0.5,
+        "required_label_recall": 0.25,
+        "required_label_f1": 0.3333333333333333,
+        "canonical_labels": [
+          "aorta",
+          "pulmonary_arteries",
+          "right_atrium",
+          "left_ventricle"
+        ],
+        "unmatched_labels": [
+          "atrioventricular node",
+          "atrioventricular bundle",
+          "left bundle branch",
+          "right bundle branch"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T14:49:32.281Z",
+      "organ": "heart",
+      "condition": "our_pipeline",
+      "condition_label": "Our pipeline",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human heart for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "HRTANAT. medically accurate illustration of the human heart, anatomical viewpoint or section: internal. for high school learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. portrait composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "heart",
+        "view": "anterior_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "orientation_note": "Anterior cutaway: anatomical right appears viewer-left and anatomical left viewer-right.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "anatomy",
+        "policy_id": "anatomy-clean-base-v1",
+        "organ": "heart",
+        "view": "anterior_cutaway",
+        "seed": 260901,
+        "input_contract": "enhanced_prompt_json",
+        "anatomy_output_rules_applied": true,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": true,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/heart_seed-260901_our_pipeline.png",
+      "stage_latency_ms": {
+        "prompt": 50492.2,
+        "generation": 102671.52,
+        "evaluation": 13390.04,
+        "autoLabeling": 48092.61
+      },
+      "metrics": {
+        "clip_score": 32.758758544921875,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human heart with all required structures and is suitable for high school students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "pulmonary_veins",
+          "left_atrium"
+        ],
+        "detected_structures": [
+          "superior_vena_cava",
+          "inferior_vena_cava",
+          "right_atrium",
+          "right_ventricle",
+          "pulmonary_trunk",
+          "pulmonary_arteries",
+          "left_atrium"
+        ],
+        "missing_structures": [
+          "pulmonary_veins"
+        ],
+        "hallucinated_structures": [],
+        "structure_recall": 0.875,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 7,
+        "rejected_low_confidence": 2,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 7,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.aorta",
+          "label": "Aorta",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.atrioventricular_node",
+          "label": "atrioventricular node",
+          "anchor_x": 0.25,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.166015625,
+            0.5,
+            0.333984375,
+            0.666015625
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R9",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.left_ventricle",
+          "label": "Left Ventricle",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.333984375,
+            0.166015625,
+            0.5,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R2",
+          "label_x": 0.02,
+          "label_y": 0.31700000000000006
+        },
+        {
+          "structure_id": "auto.right_atrium",
+          "label": "right atrium",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.416015625,
+          "bbox": [
+            0.333984375,
+            0.333984375,
+            0.5,
+            0.5
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R6",
+          "label_x": 0.02,
+          "label_y": 0.416015625
+        },
+        {
+          "structure_id": "auto.right_bundle_branch",
+          "label": "right bundle branch",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.333984375,
+            0.5,
+            0.5,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R10",
+          "label_x": 0.02,
+          "label_y": 0.6490312500000001
+        },
+        {
+          "structure_id": "auto.left_bundle_branch",
+          "label": "left bundle branch",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.5,
+            0.5,
+            0.666015625,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R11",
+          "label_x": 0.7,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.coronary_sinus",
+          "label": "coronary sinus",
+          "anchor_x": 0.75,
+          "anchor_y": 0.75,
+          "bbox": [
+            0.666015625,
+            0.666015625,
+            0.833984375,
+            0.833984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R16",
+          "label_x": 0.7,
+          "label_y": 0.75
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 7,
+        "unique_catalog_label_count": 3,
+        "catalog_match_rate": 0.42857142857142855,
+        "required_label_precision": 0.3333333333333333,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.18181818181818182,
+        "canonical_labels": [
+          "aorta",
+          "left_ventricle",
+          "right_atrium"
+        ],
+        "unmatched_labels": [
+          "atrioventricular node",
+          "right bundle branch",
+          "left bundle branch",
+          "coronary sinus"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T14:52:46.327Z",
+      "organ": "brain",
+      "condition": "raw_flux1_dev",
+      "condition_label": "Raw FLUX.1-dev",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human brain for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human brain for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "brain",
+        "view": "midsagittal",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Midsagittal section viewed from the patient's left side: anterior is viewer-left, posterior is viewer-right, superior is up.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "generic",
+        "policy_id": "generic-preserve-intent-v1",
+        "organ": null,
+        "view": null,
+        "seed": 260901,
+        "input_contract": "direct_prompt",
+        "anatomy_output_rules_applied": false,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": false,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/brain_seed-260901_raw_flux1_dev.png",
+      "stage_latency_ms": {
+        "generation": 106740.7,
+        "evaluation": 12520.73,
+        "autoLabeling": 47445.1
+      },
+      "metrics": {
+        "clip_score": 32.25325393676758,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human brain with key structures labeled and positioned correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "detected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 4,
+        "rejected_low_confidence": 7,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 5,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.cerebral_cortex",
+          "label": "Cerebral Cortex",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.cerebellum",
+          "label": "Cerebellum",
+          "anchor_x": 0.25,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.166015625,
+            0.5,
+            0.333984375,
+            0.666015625
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R9",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.pons",
+          "label": "Pons",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.333984375,
+            0.5,
+            0.5,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R10",
+          "label_x": 0.02,
+          "label_y": 0.6490312500000001
+        },
+        {
+          "structure_id": "auto.medulla_oblongata",
+          "label": "Medulla oblongata",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.5,
+            0.5,
+            0.666015625,
+            0.666015625
+          ],
+          "confidence": 0.85,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R11",
+          "label_x": 0.7,
+          "label_y": 0.58203125
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 4,
+        "unique_catalog_label_count": 3,
+        "catalog_match_rate": 0.75,
+        "required_label_precision": 0.6666666666666666,
+        "required_label_recall": 0.25,
+        "required_label_f1": 0.36363636363636365,
+        "canonical_labels": [
+          "cerebellum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "unmatched_labels": [
+          "Cerebral Cortex"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T14:55:25.975Z",
+      "organ": "brain",
+      "condition": "our_pipeline",
+      "condition_label": "Our pipeline",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human brain for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "BRNANAT. medically accurate illustration of the human brain, anatomical viewpoint or section: internal. for high school learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. landscape composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "brain",
+        "view": "midsagittal",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Midsagittal section viewed from the patient's left side: anterior is viewer-left, posterior is viewer-right, superior is up.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "anatomy",
+        "policy_id": "anatomy-clean-base-v1",
+        "organ": "brain",
+        "view": "midsagittal",
+        "seed": 260901,
+        "input_contract": "enhanced_prompt_json",
+        "anatomy_output_rules_applied": true,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": true,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/brain_seed-260901_our_pipeline.png",
+      "stage_latency_ms": {
+        "prompt": 27198.77,
+        "generation": 102379.44,
+        "evaluation": 12968.82,
+        "autoLabeling": 44219.74
+      },
+      "metrics": {
+        "clip_score": 31.428401947021484,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human brain with key structures labeled and oriented correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "detected_structures": [
+          "cerebrum",
+          "frontal_lobe",
+          "parietal_lobe",
+          "temporal_lobe",
+          "occipital_lobe",
+          "corpus_callosum",
+          "pons",
+          "medulla_oblongata"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 3,
+        "rejected_low_confidence": 4,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 9,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.cerebral_cortex",
+          "label": "Cerebral Cortex",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.cerebellum",
+          "label": "Cerebellum",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.333984375,
+            0.5,
+            0.5,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R10",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.brainstem",
+          "label": "Brainstem",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.5,
+            0.5,
+            0.666015625,
+            0.666015625
+          ],
+          "confidence": 0.85,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R11",
+          "label_x": 0.7,
+          "label_y": 0.58203125
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 3,
+        "unique_catalog_label_count": 1,
+        "catalog_match_rate": 0.3333333333333333,
+        "required_label_precision": 0,
+        "required_label_recall": 0,
+        "required_label_f1": 0,
+        "canonical_labels": [
+          "cerebellum"
+        ],
+        "unmatched_labels": [
+          "Cerebral Cortex",
+          "Brainstem"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T14:58:53.073Z",
+      "organ": "kidneys",
+      "condition": "raw_flux1_dev",
+      "condition_label": "Raw FLUX.1-dev",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human kidneys for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human kidneys for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "kidneys",
+        "view": "paired_coronal_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Anterior paired view: patient's right kidney appears viewer-left; at least one kidney is shown in coronal section.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "generic",
+        "policy_id": "generic-preserve-intent-v1",
+        "organ": null,
+        "view": null,
+        "seed": 260901,
+        "input_contract": "direct_prompt",
+        "anatomy_output_rules_applied": false,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": false,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/kidneys_seed-260901_raw_flux1_dev.png",
+      "stage_latency_ms": {
+        "generation": 114711.49,
+        "evaluation": 20132.75,
+        "autoLabeling": 48076.76
+      },
+      "metrics": {
+        "clip_score": 30.772096633911133,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the kidneys with key structures labeled and positioned correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "detected_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 2,
+        "rejected_low_confidence": 0,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 14,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.renal_pelvis",
+          "label": "Renal Pelvis",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.ureter",
+          "label": "Ureter",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.75,
+          "bbox": [
+            0.333984375,
+            0.666015625,
+            0.5,
+            0.833984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R14",
+          "label_x": 0.02,
+          "label_y": 0.75
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 2,
+        "unique_catalog_label_count": 2,
+        "catalog_match_rate": 1,
+        "required_label_precision": 1,
+        "required_label_recall": 0.25,
+        "required_label_f1": 0.4,
+        "canonical_labels": [
+          "renal_pelvis",
+          "ureter"
+        ],
+        "unmatched_labels": []
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T15:01:42.597Z",
+      "organ": "kidneys",
+      "condition": "our_pipeline",
+      "condition_label": "Our pipeline",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human kidneys for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "KDNANAT. medically accurate illustration of the human kidneys, anatomical viewpoint or section: internal. for high school learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. landscape composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "kidneys",
+        "view": "paired_coronal_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Anterior paired view: patient's right kidney appears viewer-left; at least one kidney is shown in coronal section.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "anatomy",
+        "policy_id": "anatomy-clean-base-v1",
+        "organ": "kidneys",
+        "view": "paired_coronal_cutaway",
+        "seed": 260901,
+        "input_contract": "enhanced_prompt_json",
+        "anatomy_output_rules_applied": true,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": true,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/kidneys_seed-260901_our_pipeline.png",
+      "stage_latency_ms": {
+        "prompt": 24073.47,
+        "generation": 107809.42,
+        "evaluation": 12710.29,
+        "autoLabeling": 48634.37
+      },
+      "metrics": {
+        "clip_score": 29.32705307006836,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the kidneys with the required structures and is suitable for high school students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "detected_structures": [
+          "right_kidney",
+          "left_kidney",
+          "renal_cortex",
+          "renal_medulla",
+          "renal_pyramids",
+          "renal_pelvis",
+          "ureter",
+          "renal_artery"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 1,
+        "rejected_low_confidence": 0,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 15,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.renal_pelvis",
+          "label": "Renal Pelvis",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 1,
+        "unique_catalog_label_count": 1,
+        "catalog_match_rate": 1,
+        "required_label_precision": 1,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.2222222222222222,
+        "canonical_labels": [
+          "renal_pelvis"
+        ],
+        "unmatched_labels": []
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T15:05:12.741Z",
+      "organ": "liver",
+      "condition": "raw_flux1_dev",
+      "condition_label": "Raw FLUX.1-dev",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human liver for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human liver for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "liver",
+        "view": "inferior_visceral",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Inferior visceral surface with anatomical right on viewer-left and anterior toward the lower edge.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "generic",
+        "policy_id": "generic-preserve-intent-v1",
+        "organ": null,
+        "view": null,
+        "seed": 260901,
+        "input_contract": "direct_prompt",
+        "anatomy_output_rules_applied": false,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": false,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/liver_seed-260901_raw_flux1_dev.png",
+      "stage_latency_ms": {
+        "generation": 115224.99,
+        "evaluation": 16645.33,
+        "autoLabeling": 50808.66
+      },
+      "metrics": {
+        "clip_score": 32.44709014892578,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human liver with all required structures and is suitable for high school students.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "detected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 5,
+        "rejected_low_confidence": 8,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 3,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.gallbladder",
+          "label": "Gallbladder",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.inferior_vena_cava",
+          "label": "Inferior Vena Cava",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.333984375,
+            0.166015625,
+            0.5,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R2",
+          "label_x": 0.02,
+          "label_y": 0.31700000000000006
+        },
+        {
+          "structure_id": "auto.liver",
+          "label": "Liver",
+          "anchor_x": 0.75,
+          "anchor_y": 0.416015625,
+          "bbox": [
+            0.666015625,
+            0.333984375,
+            0.833984375,
+            0.5
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R8",
+          "label_x": 0.7,
+          "label_y": 0.416015625
+        },
+        {
+          "structure_id": "auto.pancreas",
+          "label": "Pancreas",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.333984375,
+            0.5,
+            0.5,
+            0.666015625
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R10",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.hepatic_vein",
+          "label": "Hepatic Vein",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.5,
+            0.166015625,
+            0.666015625,
+            0.333984375
+          ],
+          "confidence": 0.85,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R3",
+          "label_x": 0.7,
+          "label_y": 0.25
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 5,
+        "unique_catalog_label_count": 2,
+        "catalog_match_rate": 0.4,
+        "required_label_precision": 0.5,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.2,
+        "canonical_labels": [
+          "gallbladder",
+          "inferior_vena_cava"
+        ],
+        "unmatched_labels": [
+          "Liver",
+          "Pancreas",
+          "Hepatic Vein"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T15:08:00.474Z",
+      "organ": "liver",
+      "condition": "our_pipeline",
+      "condition_label": "Our pipeline",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human liver for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "LVRANAT. medically accurate illustration of the human liver, anatomical viewpoint or section: internal. for high school learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. landscape composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "liver",
+        "view": "inferior_visceral",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "landscape",
+        "show_flow": false,
+        "orientation_note": "Inferior visceral surface with anatomical right on viewer-left and anterior toward the lower edge.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "anatomy",
+        "policy_id": "anatomy-clean-base-v1",
+        "organ": "liver",
+        "view": "inferior_visceral",
+        "seed": 260901,
+        "input_contract": "enhanced_prompt_json",
+        "anatomy_output_rules_applied": true,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": true,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/liver_seed-260901_our_pipeline.png",
+      "stage_latency_ms": {
+        "prompt": 27232.45,
+        "generation": 106873.86,
+        "evaluation": 14948.35,
+        "autoLabeling": 45793.62
+      },
+      "metrics": {
+        "clip_score": 31.345653533935547,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human liver with key structures labeled and positioned correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "detected_structures": [
+          "right_lobe",
+          "left_lobe",
+          "gallbladder",
+          "porta_hepatis",
+          "hepatic_portal_vein",
+          "proper_hepatic_artery",
+          "common_hepatic_duct",
+          "hepatic_veins"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 4,
+        "rejected_low_confidence": 9,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 3,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.gallbladder",
+          "label": "Gallbladder",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.pancreas",
+          "label": "Pancreas",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.333984375,
+            0.166015625,
+            0.5,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R2",
+          "label_x": 0.02,
+          "label_y": 0.31700000000000006
+        },
+        {
+          "structure_id": "auto.inferior_vena_cava",
+          "label": "Inferior Vena Cava",
+          "anchor_x": 0.25,
+          "anchor_y": 0.75,
+          "bbox": [
+            0.166015625,
+            0.666015625,
+            0.333984375,
+            0.833984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R13",
+          "label_x": 0.02,
+          "label_y": 0.75
+        },
+        {
+          "structure_id": "auto.spleen",
+          "label": "Spleen",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.5,
+            0.166015625,
+            0.666015625,
+            0.333984375
+          ],
+          "confidence": 0.85,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R3",
+          "label_x": 0.7,
+          "label_y": 0.25
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 4,
+        "unique_catalog_label_count": 2,
+        "catalog_match_rate": 0.5,
+        "required_label_precision": 0.5,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.2,
+        "canonical_labels": [
+          "gallbladder",
+          "inferior_vena_cava"
+        ],
+        "unmatched_labels": [
+          "Pancreas",
+          "Spleen"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T15:11:19.462Z",
+      "organ": "lungs",
+      "condition": "raw_flux1_dev",
+      "condition_label": "Raw FLUX.1-dev",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human lungs for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human lungs for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "lungs",
+        "view": "airway_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "orientation_note": "Anterior cutaway showing the branching airway tree within both lungs.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "generic",
+        "policy_id": "generic-preserve-intent-v1",
+        "organ": null,
+        "view": null,
+        "seed": 260901,
+        "input_contract": "direct_prompt",
+        "anatomy_output_rules_applied": false,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": false,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/lungs_seed-260901_raw_flux1_dev.png",
+      "stage_latency_ms": {
+        "generation": 117933.34,
+        "evaluation": 14159.19,
+        "autoLabeling": 45996.05
+      },
+      "metrics": {
+        "clip_score": 30.448335647583008,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human lungs with key structures labeled and positioned correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "detected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 3,
+        "rejected_low_confidence": 0,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 13,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.trachea",
+          "label": "Trachea",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.bronchus",
+          "label": "Bronchus",
+          "anchor_x": 0.25,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.166015625,
+            0.5,
+            0.333984375,
+            0.666015625
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R9",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.lung",
+          "label": "Lung",
+          "anchor_x": 0.25,
+          "anchor_y": 0.75,
+          "bbox": [
+            0.166015625,
+            0.666015625,
+            0.333984375,
+            0.833984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R13",
+          "label_x": 0.02,
+          "label_y": 0.75
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 3,
+        "unique_catalog_label_count": 1,
+        "catalog_match_rate": 0.3333333333333333,
+        "required_label_precision": 1,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.2222222222222222,
+        "canonical_labels": [
+          "trachea"
+        ],
+        "unmatched_labels": [
+          "Bronchus",
+          "Lung"
+        ]
+      }
+    },
+    {
+      "protocol_version": "paper-component-comparison-v1",
+      "generated_at": "2026-09-01T15:14:11.985Z",
+      "organ": "lungs",
+      "condition": "our_pipeline",
+      "condition_label": "Our pipeline",
+      "seed": 260901,
+      "original_prompt": "Create a clear, scientifically accurate educational anatomy diagram of the human lungs for a secondary-school biology student. Show the important internal structures in a standard instructional view.",
+      "generation_prompt": "LNGANAT. medically accurate illustration of the human lungs, anatomical viewpoint or section: internal. for high school learners. clear textbook anatomy. preserve the requested viewpoint, anatomical laterality, depth, and visible-versus-hidden surfaces. portrait composition. isolated centered organ with clear boundaries. white or very light neutral background, no labels, no text, no arrows, no callouts, no border, no watermark.",
+      "anatomy_spec": {
+        "is_anatomy": true,
+        "organ": "lungs",
+        "view": "airway_cutaway",
+        "view_description": "internal",
+        "grade_level": "high_school",
+        "required_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "focus_structures": [],
+        "detail_level": "intermediate",
+        "orientation": "portrait",
+        "show_flow": false,
+        "orientation_note": "Anterior cutaway showing the branching airway tree within both lungs.",
+        "knowledge_version": "1.0.0"
+      },
+      "model": "black-forest-labs/FLUX.1-dev",
+      "generation_metadata": {
+        "domain": "anatomy",
+        "policy_id": "anatomy-clean-base-v1",
+        "organ": "lungs",
+        "view": "airway_cutaway",
+        "seed": 260901,
+        "input_contract": "enhanced_prompt_json",
+        "anatomy_output_rules_applied": true,
+        "policy_version": "image-runtime-v2",
+        "domain_rules_applied": true,
+        "memory_context_applied": false,
+        "regeneration_feedback_applied": false
+      },
+      "image_file": "images/lungs_seed-260901_our_pipeline.png",
+      "stage_latency_ms": {
+        "prompt": 20827.6,
+        "generation": 104184.23,
+        "evaluation": 17992.33,
+        "autoLabeling": 50255.93
+      },
+      "metrics": {
+        "clip_score": 30.42169189453125,
+        "visual_score": 9,
+        "pedagogical_score": 9,
+        "vlm_score": 9
+      },
+      "evaluator_feedback": "The image accurately represents the human lungs with key structures labeled and positioned correctly.",
+      "anatomy_metrics": {
+        "expected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "detected_structures": [
+          "trachea",
+          "right_main_bronchus",
+          "left_main_bronchus",
+          "right_upper_lobe",
+          "right_middle_lobe",
+          "right_lower_lobe",
+          "left_upper_lobe",
+          "left_lower_lobe"
+        ],
+        "missing_structures": [],
+        "hallucinated_structures": [],
+        "structure_recall": 1,
+        "orientation_correct": true,
+        "relation_accuracy": 1,
+        "clean_image_compliance": 1
+      },
+      "anatomy_hard_failures": [],
+      "auto_label_diagnostics": {
+        "candidate_regions": 16,
+        "qwen_regions": 16,
+        "accepted_labels": 5,
+        "rejected_low_confidence": 0,
+        "rejected_invalid": 0,
+        "rejected_duplicate": 11,
+        "completed_batches": 4,
+        "failed_batches": 0
+      },
+      "auto_labels": [
+        {
+          "structure_id": "auto.trachea",
+          "label": "Trachea",
+          "anchor_x": 0.25,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.166015625,
+            0.166015625,
+            0.333984375,
+            0.333984375
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R1",
+          "label_x": 0.02,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.bronchus",
+          "label": "Bronchus",
+          "anchor_x": 0.25,
+          "anchor_y": 0.58203125,
+          "bbox": [
+            0.166015625,
+            0.5,
+            0.333984375,
+            0.666015625
+          ],
+          "confidence": 0.95,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R9",
+          "label_x": 0.02,
+          "label_y": 0.58203125
+        },
+        {
+          "structure_id": "auto.right_lung",
+          "label": "Right Lung",
+          "anchor_x": 0.416015625,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.333984375,
+            0.166015625,
+            0.5,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R2",
+          "label_x": 0.7,
+          "label_y": 0.25
+        },
+        {
+          "structure_id": "auto.left_lung",
+          "label": "Left Lung",
+          "anchor_x": 0.58203125,
+          "anchor_y": 0.25,
+          "bbox": [
+            0.5,
+            0.166015625,
+            0.666015625,
+            0.333984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R3",
+          "label_x": 0.7,
+          "label_y": 0.31700000000000006
+        },
+        {
+          "structure_id": "auto.lung_tissue",
+          "label": "Lung tissue",
+          "anchor_x": 0.25,
+          "anchor_y": 0.75,
+          "bbox": [
+            0.166015625,
+            0.666015625,
+            0.333984375,
+            0.833984375
+          ],
+          "confidence": 0.9,
+          "verified": true,
+          "grounding": "marker_grounded_context_crop_qwen_vl",
+          "region_id": "R13",
+          "label_x": 0.02,
+          "label_y": 0.75
+        }
+      ],
+      "label_metrics": {
+        "accepted_label_count": 5,
+        "unique_catalog_label_count": 1,
+        "catalog_match_rate": 0.2,
+        "required_label_precision": 1,
+        "required_label_recall": 0.125,
+        "required_label_f1": 0.2222222222222222,
+        "canonical_labels": [
+          "trachea"
+        ],
+        "unmatched_labels": [
+          "Bronchus",
+          "Right Lung",
+          "Left Lung",
+          "Lung tissue"
+        ]
+      }
+    }
+  ]
+}

@@ -17,4 +17,7 @@ node_modules/
 
 # DB
 backend/db/sessions.db
+backend/db/checkpoints.db
 backend/db/chroma/
+backend/db/chroma_v5/
+backend/db/chroma_v6/

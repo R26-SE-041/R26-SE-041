@@ -16,6 +16,8 @@ from app.schemas.session import StartSessionResponse, SessionStatusResponse, Cre
 from app.services.db_service import DbService
 from app.graph.graph import get_graph
 from app.graph.state import AssessmentState
+from app.services.question_prefetch import prefetch_next_question
+from app.services.session_work import submit_session_work
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,6 +25,7 @@ db = DbService()
 
 # In-memory store for agent logs (for debugging)
 _session_logs: dict = {}
+_session_errors: dict = {}
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
 MAX_FILE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
@@ -37,13 +40,17 @@ def _initial_state(
     difficulty_mode: str,
     time_limit_min: Optional[int],
     document_ids: list,
+    subject: str,
+    requested_topic: Optional[str] = None,
 ) -> AssessmentState:
     """Build the initial LangGraph state for a new session."""
     diff_map = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.8}
     return {
         "session_id":             session_id,
         "student_id":             student_id,
+        "subject":                subject,
         "document_ids":           document_ids,
+        "requested_topic":        requested_topic,
         "raw_chunks":             [],
         "chroma_collection_id":   session_id,
         "ingestion_status":       "pending",
@@ -66,6 +73,7 @@ def _initial_state(
         "bloom_scores":           {},
         "_pending_answer":        "",
         "_answer_time_sec":       0,
+        "_skip_requested":        False,
         "weak_topics":            [],
         "strong_topics":          [],
         "recommendations":        [],
@@ -81,24 +89,13 @@ def _run_setup_phase(session_id: str, state: AssessmentState):
     """
     Background task: ingestion → knowledge extraction → first question generation.
     """
-    from app.services.llm_service import LlmService
     _session_logs[session_id] = ["[Setup] Starting..."]
     try:
-        # Pre-flight: check Modal endpoint is reachable before running graph
-        llm = LlmService()
-        health = llm.check_health()
-        _session_logs[session_id].append(f"[Setup] Modal health check: {health}")
-        if not health:
-            msg = "Modal endpoint unreachable. Run: modal deploy modal_inference/qwen_endpoint.py"
-            _session_logs[session_id].append(f"[Setup] FATAL: {msg}")
-            logger.error(f"Session {session_id}: {msg}")
-            db.update_session_status(session_id, "error")
-            return
-
         graph = get_graph()
         config = {"configurable": {"thread_id": session_id}}
         _session_logs[session_id].append("[Setup] Invoking graph...")
         final_state = graph.invoke(state, config=config)
+
 
         # Save agent logs from graph
         agent_logs = (final_state or {}).get("agent_logs", [])
@@ -111,10 +108,13 @@ def _run_setup_phase(session_id: str, state: AssessmentState):
             chunk_count = len(final_state.get("raw_chunks", []))
             db.update_session_progress(session_id, topics, chunk_count)
             db.update_session_status(session_id, "ready")
+            # Start a one-question look-ahead while the learner reads Q1.
+            submit_session_work(session_id, prefetch_next_question, session_id)
             _session_logs[session_id].append(f"[Setup] SUCCESS: {len(questions)} questions generated")
             logger.info(f"Session {session_id} setup complete | {len(questions)} question(s)")
         else:
             err = (final_state or {}).get("error") or "No questions generated"
+            _session_errors[session_id] = str(err)
             _session_logs[session_id].append(f"[Setup] FAILED: {err}")
             logger.error(f"Session {session_id} failed: {err}")
             for log in agent_logs[-10:]:
@@ -125,6 +125,7 @@ def _run_setup_phase(session_id: str, state: AssessmentState):
         tb = traceback.format_exc()
         _session_logs[session_id].append(f"[Setup] EXCEPTION: {type(e).__name__}: {e}")
         _session_logs[session_id].append(tb)
+        _session_errors[session_id] = str(e)
         logger.error(f"Session setup failed: {e}", exc_info=True)
         db.update_session_status(session_id, "error")
 
@@ -139,8 +140,16 @@ async def start_session(
     Unified endpoint: create session using existing document_ids.
     Returns session_id immediately. Poll /status to know when ready.
     """
-    if not request.document_ids:
-        raise HTTPException(status_code=400, detail="Must provide at least one document_id.")
+    topic = " ".join((request.topic or "").split()).strip()
+    if not request.document_ids and not topic:
+        raise HTTPException(
+            status_code=400,
+            detail="Select at least one study document or enter a Biology topic.",
+        )
+    if topic and not (2 <= len(topic) <= 120):
+        raise HTTPException(status_code=400, detail="Biology topic must be between 2 and 120 characters.")
+    if topic and not request.document_ids and request.exam_type != "mcq":
+        raise HTTPException(status_code=400, detail="Topic-only quiz generation currently supports MCQ questions.")
 
     session_id = str(uuid.uuid4())
 
@@ -154,12 +163,14 @@ async def start_session(
         "time_limit_min":       request.time_limit_min,
         "status":               "processing",
         "chroma_collection_id": session_id,
+        "is_topic_session":     1 if (topic and not request.document_ids) else 0,
     })
 
     # Pass document_ids into state instead of file paths
     state = _initial_state(
         session_id, request.student_id, request.exam_type,
-        request.num_questions, request.difficulty_mode, request.time_limit_min, request.document_ids
+        request.num_questions, request.difficulty_mode, request.time_limit_min,
+        request.document_ids, request.subject, topic or None,
     )
 
     background_tasks.add_task(_run_setup_phase, session_id, state)
@@ -167,7 +178,11 @@ async def start_session(
     return StartSessionResponse(
         session_id=session_id,
         status="processing",
-        message=f"{len(request.document_ids)} document(s) selected. Initializing session...",
+        message=(
+            f"{len(request.document_ids)} document(s) selected. Initializing session..."
+            if request.document_ids
+            else f'Generating a Biology quiz about "{topic}"...'
+        ),
     )
 
 
@@ -189,9 +204,12 @@ def get_session_status(session_id: str):
 
     status = session["status"]
     msg_map = {
-        "processing": "Processing your documents... (this may take up to 60s for topic extraction)",
+        "processing": "Processing your documents... (the first Modal GPU request may take a few minutes)",
         "ready":      "Ready! Start your quiz.",
-        "error":      "Setup failed. Check that the Modal endpoint is deployed: modal deploy modal_inference/qwen_endpoint.py",
+        "error":      _session_errors.get(
+            session_id,
+            "Setup failed. Check the backend session debug log and Modal app logs.",
+        ),
     }
 
     return SessionStatusResponse(
@@ -201,6 +219,7 @@ def get_session_status(session_id: str):
         num_questions=session["num_questions"],
         message=msg_map.get(status, status),
         chunk_count=chunk_count,
+        is_topic_session=bool(session.get("is_topic_session", 0))
     )
 
 

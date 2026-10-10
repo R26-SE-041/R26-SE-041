@@ -134,12 +134,19 @@ def consolidate_feedback_candidates(
     memento_min_pairs: int = 10,
     skill_min_pairs: int = 25,
     minimum_sessions: int = 3,
+    minimum_users: int = 3,
 ) -> list[dict[str, Any]]:
-    """Create deterministic candidates; deployment still requires validation/review."""
+    """Create deterministic candidates; deployment still requires validation/review.
+
+    `minimum_users` requires the pattern to be corroborated by distinct people
+    (see list_preference_reason_aggregates), not just distinct sessions from
+    the same person — a single power user can otherwise satisfy a session
+    count alone.
+    """
     from shared.db import list_preference_reason_aggregates, upsert_agent_memory, upsert_memory_candidate
     from shared.rag import embed
 
-    rows = list_preference_reason_aggregates(memento_min_pairs, minimum_sessions)
+    rows = list_preference_reason_aggregates(memento_min_pairs, minimum_sessions, minimum_users)
     candidates: list[dict[str, Any]] = []
     global_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -151,7 +158,8 @@ def consolidate_feedback_candidates(
             continue
         evidence_count = int(row["evidence_count"])
         distinct_sessions = int(row["distinct_sessions"])
-        confidence = min(0.99, 0.55 + min(evidence_count, 50) / 125 + min(distinct_sessions, 20) / 100)
+        distinct_users = int(row["distinct_users"])
+        confidence = min(0.99, 0.55 + min(evidence_count, 50) / 125 + min(distinct_users, 20) / 100)
         memory_type = "skill" if evidence_count >= skill_min_pairs and distinct_sessions >= 5 else "memento"
         fingerprint = hashlib.sha256(f"agent:{agent_name}:{memory_type}:{reason}".encode()).hexdigest()
         candidate = {
@@ -162,6 +170,7 @@ def consolidate_feedback_candidates(
             "lesson": lesson,
             "evidence_count": evidence_count,
             "distinct_sessions": distinct_sessions,
+            "distinct_users": distinct_users,
             "confidence": round(confidence, 4),
             "evidence_pair_ids": row.get("pair_ids") or [],
             "metadata": {
@@ -201,6 +210,7 @@ def consolidate_feedback_candidates(
             "lesson": lesson,
             "evidence_count": sum(item["evidence_count"] for item in evidence),
             "distinct_sessions": max(item["distinct_sessions"] for item in evidence),
+            "distinct_users": max(item["distinct_users"] for item in evidence),
             "confidence": min(item["confidence"] for item in evidence),
             "evidence_pair_ids": pair_ids,
             "metadata": {"negative_reason": reason, "source_agents": sorted(item["agent_name"] for item in evidence)},

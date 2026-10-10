@@ -226,6 +226,10 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     deployed_at TIMESTAMPTZ
 );
 
+-- Distinct authors behind the evidence, not distinct sessions — one user
+-- opening several sessions must not be able to satisfy a "many users" bar alone.
+ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS distinct_users INTEGER NOT NULL DEFAULT 1 CHECK (distinct_users > 0);
+
 CREATE INDEX IF NOT EXISTS idx_memory_candidates_review
     ON memory_candidates(status, memory_type, confidence DESC);
 

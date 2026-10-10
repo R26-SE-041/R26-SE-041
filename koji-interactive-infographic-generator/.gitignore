@@ -1,0 +1,13 @@
+.venv/
+tmp/
+**/__pycache__/
+**/.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-android/
+frontend/.expo/
+frontend/.next/
+.env
+.env.*
+!.env.example
+frontend/.vercel/

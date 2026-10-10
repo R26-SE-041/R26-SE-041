@@ -26,48 +26,75 @@ def analytics_agent(state: AssessmentState) -> dict:
             "agent_logs": logs
         }
 
+    terminal_answers = [
+        answer for answer in answers
+        if answer.get("is_terminal") or answer.get("is_correct") or answer.get("attempts", 0) >= 4
+    ]
+    if not terminal_answers:
+        terminal_answers = answers[-1:]
+
     ATTEMPT_MARKS = {1: 100, 2: 75, 3: 50, 4: 25}
 
     weighted_scores = []
     question_marks_detail = []
 
-    for i, a in enumerate(answers):
+    for i, a in enumerate(terminal_answers):
         attempt = a.get("attempts", 1)
         is_correct = a.get("is_correct", False)
         pts = ATTEMPT_MARKS.get(attempt, 25) if is_correct else 0
         weighted_scores.append(pts)
-
-        # Find matching question for topic/bloom/difficulty
+        # Find matching question for topic/bloom/difficulty
         q_id = a.get("q_id", "")
         q_obj = next((q for q in questions if q.get("q_id") == q_id), {})
+        if q_obj.get("q_type") in ("structured", "essay"):
+            attempt_weight = ATTEMPT_MARKS.get(attempt, 25) / 100
+            rubric_score = max(0.0, min(float(a.get("score", 0.0)), 1.0))
+            pts = round(rubric_score * 100 * attempt_weight)
+            weighted_scores[-1] = pts
         topic = q_obj.get("topic", "General")
+        attempts_for_question = [answer for answer in answers if answer.get("q_id") == q_id]
 
         question_marks_detail.append({
-            "q_num":      i + 1,
-            "topic":      topic,
-            "bloom":      q_obj.get("bloom_level", "remember"),
-            "difficulty": round(q_obj.get("difficulty", 0.5), 2),
-            "is_correct": is_correct,
-            "attempts":   attempt,
-            "hints_used": a.get("hints_used", 0),
-            "marks":      pts,
-            "max_marks":  100,
+            "q_num":          i + 1,
+            "topic":          topic,
+            "q_type":         q_obj.get("q_type", "mcq"),
+            "bloom":          q_obj.get("bloom_level", "remember"),
+            "difficulty":     round(q_obj.get("difficulty", 0.5), 2),
+            "is_correct":     is_correct,
+            "attempts":       attempt,
+            "hints_used":     a.get("hints_used", 0),
+            "marks":          pts,
+            "max_marks":      100,
+            "question":       q_obj.get("question", ""),
+            "options":        q_obj.get("options", {}),
+            "student_answer": a.get("student_answer", ""),
+            "correct_answer": q_obj.get("correct_answer", ""),
+            "model_answer":   q_obj.get("model_answer", ""),
+            "attempt_history": [
+                {
+                    "attempt": item.get("attempts", index + 1),
+                    "answer": item.get("student_answer", ""),
+                    "is_correct": item.get("is_correct", False),
+                    "hint": item.get("hint"),
+                }
+                for index, item in enumerate(attempts_for_question)
+            ],
         })
 
-    final_score = round(sum(weighted_scores) / len(weighted_scores), 1)
+    final_score = round(sum(weighted_scores) / max(len(weighted_scores), 1), 1)
     total_marks_earned = sum(weighted_scores)
     total_marks_possible = len(weighted_scores) * 100
 
-
-    # Difficulty progression
-    diff_progression = []
-    d = state.get("current_difficulty", 0.5)
-    for a in answers:
-        if a.get("is_correct"):
-            d = min(1.0, d + 0.1)
-        else:
-            d = max(0.0, d - 0.1)
-        diff_progression.append(round(d, 2))
+    # Report the actual generated question difficulties, not a synthetic trend.
+    terminal_q_ids = []
+    for answer in answers:
+        q_id = answer.get("q_id", "")
+        if (answer.get("is_terminal") or answer.get("is_correct") or answer.get("attempts", 0) >= 4) and q_id not in terminal_q_ids:
+            terminal_q_ids.append(q_id)
+    diff_progression = [
+        round(next((q.get("difficulty", 0.5) for q in questions if q.get("q_id") == q_id), 0.5), 2)
+        for q_id in terminal_q_ids
+    ]
 
     # Research metrics
     grounding_scores = [q.get("grounding_score", 0.0) for q in questions]
@@ -79,8 +106,8 @@ def analytics_agent(state: AssessmentState) -> dict:
     flagged_pct   = round(flagged_count / max(len(questions), 1) * 100, 1)
 
     # Performance metrics
-    avg_attempts   = sum(a.get("attempts", 1) for a in answers) / len(answers)
-    avg_hints      = sum(a.get("hints_used", 0) for a in answers) / len(answers)
+    avg_attempts   = sum(a.get("attempts", 1) for a in terminal_answers) / len(terminal_answers)
+    avg_hints      = sum(a.get("hints_used", 0) for a in terminal_answers) / len(terminal_answers)
     total_time_sec = sum(a.get("time_taken_sec", 0) for a in answers)
 
     report = {
@@ -89,7 +116,8 @@ def analytics_agent(state: AssessmentState) -> dict:
         "total_marks_possible":    total_marks_possible,
         "question_marks_detail":   question_marks_detail,
         "total_questions":         len(questions),
-        "total_answered":          len(answers),
+        "total_answered":          len(terminal_answers),
+        "correct_count":           sum(1 for answer in terminal_answers if answer.get("is_correct")),
         "topic_scores":            state.get("topic_scores", {}),
         "bloom_scores":            state.get("bloom_scores", {}),
         "difficulty_progression":  diff_progression,

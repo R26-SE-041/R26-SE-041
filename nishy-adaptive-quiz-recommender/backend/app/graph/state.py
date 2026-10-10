@@ -2,7 +2,7 @@
 LangGraph State Schema for Adaptive AI Assessment Platform.
 This single TypedDict is the shared state across all agents.
 """
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, List, Optional, Literal, NotRequired
 
 
 class QuestionRecord(TypedDict):
@@ -11,13 +11,19 @@ class QuestionRecord(TypedDict):
     topic: str
     bloom_level: str          # remember|understand|apply|analyze|evaluate|create
     difficulty: float         # 0.0 to 1.0
-    q_type: str               # mcq|structured|essay
+    q_type: str               # mcq|fill_blank|structured|essay
     question: str
-    options: Optional[dict]   # {A, B, C, D} — MCQ only
+    options: Optional[dict]   # {"1", "2", "3", "4", "5"} — MCQ only
     correct_answer: str
     model_answer: str
     grounding_score: float    # Cosine similarity vs source (research metric)
+    grounding_status: str     # grounded; rejected candidates never enter state
+    source_file: str
+    page_number: int
+    retrieved_text: str
     source_chunk_ids: List[str]
+    source_chunks: List[dict]
+    marks_breakdown: NotRequired[Optional[dict]]  # structured only — per-question rubric used by evaluation
 
 
 class AnswerRecord(TypedDict):
@@ -31,6 +37,12 @@ class AnswerRecord(TypedDict):
     time_taken_sec: int
     feedback: str
     misconception: Optional[str]
+    hint: NotRequired[Optional[str]]
+    hint_level: NotRequired[Optional[str]]  # HARD | MEDIUM | EASY
+    correct_answer: NotRequired[Optional[str]]
+    correct_answer_text: NotRequired[Optional[str]]
+    explanation: NotRequired[Optional[str]]
+    is_terminal: NotRequired[bool]
 
 
 class AssessmentState(TypedDict):
@@ -39,9 +51,11 @@ class AssessmentState(TypedDict):
     # ── Session identifiers ────────────────────────────────
     session_id: str
     student_id: str
+    subject: str
 
     # ── Ingestion ─────────────────────────────────────────
     document_ids: List[str]
+    requested_topic: Optional[str]
     raw_chunks: List[dict]           # {chunk_id, text, source, page, heading}
     chroma_collection_id: str
     ingestion_status: str            # pending|done|error
@@ -60,7 +74,7 @@ class AssessmentState(TypedDict):
     time_limit_min: Optional[int]
 
     # ── Quiz planning & generation ─────────────────────────
-    quiz_blueprint: List[dict]       # [{topic, q_type, difficulty}]
+    quiz_blueprint: List[dict]       # complete hidden concept plan for the quiz batch
     questions: List[QuestionRecord]
     current_q_index: int
     flagged_questions: List[str]     # q_ids with low grounding score
@@ -74,6 +88,7 @@ class AssessmentState(TypedDict):
     # ── Pending answer (set by API before evaluation) ──────
     _pending_answer: str
     _answer_time_sec: int
+    _skip_requested: NotRequired[bool]
 
     # ── Output ────────────────────────────────────────────
     weak_topics: List[str]

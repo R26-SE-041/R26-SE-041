@@ -1,0 +1,118 @@
+{
+  "name": "LearnX",
+  "projectId": "R26-SE-041",
+  "contact": {
+    "email": "kojithan.y@gmail.com",
+    "phone": "+94 77 910 8836"
+  },
+  "documents": [
+    {
+      "slug": "topic-assessment-form",
+      "title": "Topic Assessment Form",
+      "description": "Original topic, research motivation and proposed scope.",
+      "category": "Research document"
+    },
+    {
+      "slug": "research-paper",
+      "title": "Research Paper",
+      "description": "LearnX framework, methodology, component evaluation and limitations.",
+      "category": "Research document"
+    },
+    {
+      "slug": "proposal-presentation",
+      "title": "Proposal Presentation",
+      "description": "Research problem, proposed solution and initial component plans.",
+      "category": "Presentation"
+    },
+    {
+      "slug": "progress-presentation-1",
+      "title": "Progress Presentation 1",
+      "description": "First progress review of the project and its four components.",
+      "category": "Presentation"
+    },
+    {
+      "slug": "progress-presentation-2",
+      "title": "Progress Presentation 2",
+      "description": "Second progress review, team details and component developments.",
+      "category": "Presentation"
+    },
+    {
+      "slug": "it22172600-baskaran-component-report",
+      "title": "Baskaran V — Individual Component Report",
+      "description": "Multilingual audio review · IT22172600",
+      "category": "Individual component report"
+    },
+    {
+      "slug": "it22223876-nishara-component-report",
+      "title": "Nishara T — Individual Component Report",
+      "description": "Adaptive assessment · IT22223876",
+      "category": "Individual component report"
+    },
+    {
+      "slug": "it22264220-kojithan-component-report",
+      "title": "Kojithan P. Y — Individual Component Report",
+      "description": "Interactive visualizations · IT22264220",
+      "category": "Individual component report"
+    },
+    {
+      "slug": "it22637482-sarmitha-component-report",
+      "title": "Sarmitha S — Individual Component Report",
+      "description": "Intelligent note generation · IT22637482",
+      "category": "Individual component report"
+    }
+  ],
+  "team": [
+    {
+      "name": "Kojithan P. Y",
+      "id": "IT22264220",
+      "role": "Group Leader",
+      "component": "Interactive visualizations",
+      "image": "kojithan",
+      "email": "it22264220@my.sliit.lk"
+    },
+    {
+      "name": "Baskaran V",
+      "id": "IT22172600",
+      "role": "Team Member",
+      "component": "Multilingual audio review",
+      "image": "baskaran",
+      "email": "it22172600@my.sliit.lk"
+    },
+    {
+      "name": "Nishara T",
+      "id": "IT22223876",
+      "role": "Team Member",
+      "component": "Adaptive assessment",
+      "image": "nishara",
+      "email": "it22223876@my.sliit.lk"
+    },
+    {
+      "name": "Sarmitha S",
+      "id": "IT22637482",
+      "role": "Team Member",
+      "component": "Intelligent note generation",
+      "image": "sarmitha",
+      "email": "it22637482@my.sliit.lk"
+    }
+  ],
+  "supervisors": [
+    {
+      "name": "Prof. Nuwan Kodagoda",
+      "role": "Supervisor",
+      "image": "nuwan-kodagoda",
+      "email": "nuwan.k@sliit.lk"
+    },
+    {
+      "name": "Ms. Malithi Nawarathne",
+      "role": "Co-supervisor",
+      "image": "malithi-nawarathne",
+      "email": "malithi.n@sliit.lk"
+    }
+  ],
+  "milestoneDatesAndMarks": "Not provided; omitted per user instruction",
+  "websiteStack": [
+    "HTML",
+    "CSS"
+  ],
+  "hosting": "Vercel"
+}

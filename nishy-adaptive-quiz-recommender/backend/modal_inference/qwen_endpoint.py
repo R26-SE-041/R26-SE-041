@@ -1,54 +1,93 @@
+"""Modal GPU endpoint for Qwen2.5-7B with the Nishy LoRA adapter.
+
+Deploy from the backend directory:
+    modal deploy modal_inference/qwen_endpoint.py
+
+Required Modal secret:
+    modal secret create huggingface-secret HF_TOKEN=hf_your_token_here
 """
-Modal.com Serverless Endpoint — Qwen2.5-7B-Instruct
-Deploy: modal deploy modal_inference/qwen_endpoint.py
-Test:   modal run modal_inference/qwen_endpoint.py::test_generate
-"""
+
 import modal
 
-MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-GPU_TYPE = "A10G"  # 24GB VRAM — plenty for 7B at 4-bit
+BASE_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
+LORA_ADAPTER_ID = "Nishy11/nishy-qwen2.5-7b-v4"
+GPU_TYPE = "A10G"
 
-def download_model_to_folder():
+hf_secret = modal.Secret.from_name("huggingface-secret")
+
+
+def download_models():
+    """Cache the base model and adapter in the Modal image."""
+    import os
     from huggingface_hub import snapshot_download
-    # Download safetensors, ignore older format weights
-    snapshot_download(repo_id=MODEL_ID, ignore_patterns=["*.pt", "*.bin"])
 
-# ── Image: vllm + model cached in container ────────────────────────────────
+    token = os.environ.get("HF_TOKEN")
+    snapshot_download(
+        repo_id=BASE_MODEL_ID,
+        token=token,
+        ignore_patterns=["*.pt", "*.bin"],
+    )
+    snapshot_download(
+        repo_id=LORA_ADAPTER_ID,
+        token=token,
+        ignore_patterns=["*.pt", "*.bin"],
+    )
+
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "vllm==0.6.4",
-        "huggingface_hub==0.25.2",
+        "torch==2.5.1",
+        "transformers==4.57.6",
+        "peft==0.20.0",
+        "accelerate==1.14.0",
+        "huggingface_hub==0.36.2",
         "hf-transfer==0.1.8",
         "fastapi",
-        "uvicorn",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
-    .run_function(download_model_to_folder)
+    .run_function(download_models, secrets=[hf_secret])
 )
 
-app = modal.App("qwen-adaptive-quiz", image=image)
+app = modal.App("nishy-qwen-adaptive-quiz", image=image)
 
-# ── Model class: loaded once, reused across requests ──────────────────────
+
 @app.cls(
     gpu=GPU_TYPE,
     timeout=600,
-    scaledown_window=600,   # keep warm for 10 min between requests
+    scaledown_window=600,
+    secrets=[hf_secret],
 )
-@modal.concurrent(max_inputs=4)
+@modal.concurrent(max_inputs=1)
 class QwenModel:
     @modal.enter()
     def load_model(self):
-        """Load model on container startup — cached after first cold start."""
-        from vllm import LLM, SamplingParams  # noqa: F401
-        self.llm = LLM(
-            model=MODEL_ID,
-            dtype="bfloat16",
-            max_model_len=8192,
-            gpu_memory_utilization=0.90,
+        """Load the base model and attach the LoRA adapter once per container."""
+        import os
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        token = os.environ.get("HF_TOKEN")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            BASE_MODEL_ID,
             trust_remote_code=True,
+            token=token,
         )
-        print(f"✅ Qwen2.5-7B loaded on {GPU_TYPE}")
+        base_model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL_ID,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
+            trust_remote_code=True,
+            token=token,
+        )
+        self.model = PeftModel.from_pretrained(
+            base_model,
+            LORA_ADAPTER_ID,
+            token=token,
+        )
+        self.model.eval()
+        print(f"READY: {BASE_MODEL_ID} + {LORA_ADAPTER_ID} loaded on {GPU_TYPE}")
 
     @modal.method()
     def generate(
@@ -57,50 +96,59 @@ class QwenModel:
         temperature: float = 0.4,
         max_tokens: int = 1024,
     ) -> str:
-        """Generate text from a prompt. Returns raw string."""
-        from vllm import SamplingParams
+        """Generate a response with the fine-tuned model."""
+        import torch
 
-        params = SamplingParams(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stop=["<|im_end|>", "<|endoftext|>"],
-        )
-        # Qwen2.5 chat template
         messages = [
-            {"role": "system", "content": "You are an expert educational assessment AI. Follow instructions precisely and return only valid JSON when asked."},
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert educational assessment AI. Follow "
+                    "instructions precisely and return only valid JSON when asked."
+                ),
+            },
             {"role": "user", "content": prompt},
         ]
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
-        formatted = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        formatted = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
-        outputs = self.llm.generate([formatted], params)
-        return outputs[0].outputs[0].text.strip()
+        inputs = self.tokenizer(formatted, return_tensors="pt").to("cuda")
+        generation_kwargs = {
+            "max_new_tokens": max_tokens,
+            "do_sample": temperature > 0,
+            "pad_token_id": self.tokenizer.eos_token_id,
+        }
+        if temperature > 0:
+            generation_kwargs["temperature"] = temperature
+
+        with torch.inference_mode():
+            output_ids = self.model.generate(**inputs, **generation_kwargs)
+
+        new_tokens = output_ids[0, inputs["input_ids"].shape[1]:]
+        return self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
-# ── FastAPI web endpoint ───────────────────────────────────────────────────
-@app.function(
-    timeout=600,
-)
+@app.function(timeout=600)
 @modal.concurrent(max_inputs=10)
 @modal.asgi_app()
 def web_endpoint():
-    """HTTP endpoint for FastAPI backend to call."""
+    """Expose the model through a small HTTP API."""
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
 
-    api = FastAPI(title="Qwen2.5-7B Inference API")
+    api = FastAPI(title="Nishy Qwen2.5-7B Fine-Tuned Inference API")
     model = QwenModel()
 
     class GenerateRequest(BaseModel):
         prompt: str
         temperature: float = 0.4
-        max_tokens: int = 1024
+        max_new_tokens: int = 1024
 
     class GenerateResponse(BaseModel):
-        text: str
-        model: str = MODEL_ID
+        response: str
+        model: str = LORA_ADAPTER_ID
 
     @api.post("/generate", response_model=GenerateResponse)
     def generate(req: GenerateRequest):
@@ -108,26 +156,28 @@ def web_endpoint():
             text = model.generate.remote(
                 req.prompt,
                 temperature=req.temperature,
-                max_tokens=req.max_tokens,
+                max_tokens=req.max_new_tokens,
             )
-            return GenerateResponse(text=text)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return GenerateResponse(response=text)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @api.get("/health")
     def health():
-        return {"status": "ok", "model": MODEL_ID}
+        return {
+            "status": "ok",
+            "base_model": BASE_MODEL_ID,
+            "adapter": LORA_ADAPTER_ID,
+        }
 
     return api
 
 
-# ── Local test ────────────────────────────────────────────────────────────
 @app.local_entrypoint()
 def test_generate():
-    """Run: modal run modal_inference/qwen_endpoint.py"""
     model = QwenModel()
     result = model.generate.remote(
-        prompt='Generate a JSON object with key "answer" and value "Hello from Qwen!"',
+        prompt='Return only JSON: {"answer": "Hello from Qwen!"}',
         temperature=0.1,
         max_tokens=128,
     )
