@@ -12,6 +12,6 @@ if force or not before or set(before)=={"0"}:
 else:
     changed=subprocess.check_output(["git","diff","--name-only",before,os.environ["GITHUB_SHA"],"--","koji-interactive-infographic-generator/backend"],cwd=ROOT,text=True).splitlines()
 for name,agent in MODELS.items():
-    affected=changed is None or any("/agents/"+agent+"/" in path or "/backend/shared/" in path or "/backend/anatomy/" in path for path in changed)
+    affected=changed is None or any("/agents/"+agent+"/" in path or "/backend/shared/" in path or "/backend/anatomy/" in path or "/backend/config/" in path or "/backend/skills/" in path for path in changed)
     if affected:
         subprocess.run([sys.executable,"-m","modal","deploy","agents/"+agent+"/modal_app.py"],cwd=ROOT/"backend",check=True)

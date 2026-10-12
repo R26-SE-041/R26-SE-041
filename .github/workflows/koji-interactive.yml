@@ -1,4 +1,5 @@
-name: Koji interactive CI/CD
+name: Koji CI/CD
+
 on:
   pull_request:
     paths:
@@ -12,16 +13,45 @@ on:
       - '.github/workflows/koji-interactive.yml'
   workflow_dispatch:
     inputs:
+      target:
+        description: Koji deployment target
+        type: choice
+        options: [all, frontend, backend]
+        default: all
       deploy_models:
-        description: Redeploy all Koji model endpoints
+        description: Deploy affected Koji Modal model services
         type: boolean
         default: false
+
 permissions:
   contents: read
+
 concurrency:
-  group: koji-interactive-${{ github.ref }}
+  group: koji-ci-${{ github.ref }}
   cancel-in-progress: false
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.plan.outputs.frontend }}
+      backend: ${{ steps.plan.outputs.backend }}
+      models: ${{ steps.plan.outputs.models }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: plan
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPLOY_TARGET: ${{ inputs.target || 'all' }}
+        run: python koji-interactive-infographic-generator/ci/changes.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -36,17 +66,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: koji-interactive-infographic-generator/frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:unit
-      - run: npm run build:web
+      - run: npm run build:web -- --max-workers 2
       - uses: actions/upload-artifact@v4
         with:
           name: koji-web
           path: koji-interactive-infographic-generator/frontend/dist
+          if-no-files-found: error
+
   backend:
     runs-on: ubuntu-latest
     services:
@@ -70,34 +102,129 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       - run: pip install -r studio/requirements-dev.txt
       - run: python ../ci/check.py
-  deploy:
+      - name: Test deployment routing and artifact boundaries
+        run: python -m unittest discover -s ../ci/tests -p 'test_*.py'
+      - name: Package tested CPU API and worker
+        run: python ../ci/package_backend.py ../release/backend.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: koji-backend
+          path: koji-interactive-infographic-generator/release/backend.tar.gz
+          if-no-files-found: error
+
+  deploy_backend:
     if: >-
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
+      needs.changes.outputs.backend == 'true' &&
       github.event_name != 'pull_request' &&
-      (vars.KOJI_DEPLOY_ENABLED == 'true' || startsWith(github.ref, 'refs/tags/koji-release-'))
-    needs: [frontend, backend]
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
+      vars.KOJI_DEPLOY_ENABLED != 'false'
+    needs: [changes, frontend, backend]
     runs-on: ubuntu-latest
     environment: koji-production
+    concurrency:
+      group: koji-backend-production
+      cancel-in-progress: false
+    env:
+      KOJI_EC2_HOST: ${{ vars.KOJI_EC2_HOST }}
+      KOJI_EC2_USER: ${{ vars.KOJI_EC2_USER || 'ubuntu' }}
+      KOJI_EC2_ROOT: ${{ vars.KOJI_EC2_ROOT || '/home/ubuntu/koji' }}
+      KOJI_EC2_SSH_KEY: ${{ secrets.KOJI_EC2_SSH_KEY }}
+      KOJI_EC2_KNOWN_HOSTS: ${{ secrets.KOJI_EC2_KNOWN_HOSTS }}
+      KOJI_BACKEND_ARCHIVE: koji-interactive-infographic-generator/release/backend.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate EC2 deployment access
+        run: |
+          python - <<'PY'
+          import os
+          required = ('KOJI_EC2_HOST', 'KOJI_EC2_SSH_KEY', 'KOJI_EC2_KNOWN_HOSTS')
+          missing = [key for key in required if not os.getenv(key, '').strip()]
+          if missing:
+              raise SystemExit('Configure koji-production deployment settings: ' + ', '.join(missing))
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: koji-backend
+          path: koji-interactive-infographic-generator/release
+      - name: Deploy tested API and worker with rollback
+        run: python koji-interactive-infographic-generator/ci/deploy_ec2.py
+
+  deploy_frontend:
+    if: >-
+      always() && needs.changes.result == 'success' &&
+      needs.frontend.result == 'success' && needs.backend.result == 'success' &&
+      (needs.deploy_backend.result == 'success' || needs.deploy_backend.result == 'skipped') &&
+      needs.changes.outputs.frontend == 'true' &&
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
+      vars.KOJI_DEPLOY_ENABLED != 'false'
+    needs: [changes, frontend, backend, deploy_backend]
+    runs-on: ubuntu-latest
+    environment: koji-production
+    concurrency:
+      group: koji-frontend-production
+      cancel-in-progress: false
     env:
       EXPO_PUBLIC_STUDIO_API_URL: ${{ vars.KOJI_STUDIO_API_URL }}
       EXPO_PUBLIC_STUDIO_PROXY_PATH: ${{ vars.KOJI_STUDIO_PROXY_PATH || '/studio-api' }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ vars.KOJI_SUPABASE_URL }}
       EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.KOJI_SUPABASE_ANON_KEY }}
-      RENDER_API_KEY: ${{ secrets.KOJI_RENDER_API_KEY }}
-      RENDER_API_SERVICE_ID: ${{ vars.KOJI_RENDER_API_SERVICE_ID }}
-      RENDER_WORKER_SERVICE_ID: ${{ vars.KOJI_RENDER_WORKER_SERVICE_ID }}
       VERCEL_TOKEN: ${{ secrets.KOJI_VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.KOJI_VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.KOJI_VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate production frontend settings
+        run: |
+          python - <<'PY'
+          import os
+          required = ('EXPO_PUBLIC_STUDIO_API_URL', 'EXPO_PUBLIC_SUPABASE_URL',
+                      'EXPO_PUBLIC_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID')
+          missing = [key for key in required if not os.getenv(key, '').strip()]
+          if missing:
+              raise SystemExit('Configure Koji frontend deployment settings: ' + ', '.join(missing))
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: koji-web
+          path: koji-interactive-infographic-generator/frontend/dist
+      - run: python koji-interactive-infographic-generator/ci/pack_vercel.py
+      - name: Deploy tested frontend to Vercel production
+        working-directory: koji-interactive-infographic-generator/frontend
+        run: npx --yes vercel@63.1.2 deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
+      - name: Verify frontend API proxy
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          response = json.load(urllib.request.urlopen('https://koji-studio.vercel.app/studio-api/ready', timeout=30))
+          assert response['status'] == 'ok', 'Production API proxy is not ready'
+          PY
+
+  deploy_models:
+    if: >-
+      github.event_name != 'pull_request' && github.ref == 'refs/heads/main' &&
+      ((needs.changes.outputs.models == 'true' && vars.KOJI_MODEL_DEPLOY_ENABLED == 'true') || inputs.deploy_models)
+    needs: [changes, frontend, backend]
+    runs-on: ubuntu-latest
+    environment: koji-production
+    concurrency:
+      group: koji-models-production
+      cancel-in-progress: false
+    env:
       MODAL_TOKEN_ID: ${{ secrets.KOJI_MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.KOJI_MODAL_TOKEN_SECRET }}
-      KOJI_EC2_HOST: ${{ vars.KOJI_EC2_HOST }}
-      KOJI_BACKEND_HOST: ${{ vars.KOJI_BACKEND_HOST }}
-      KOJI_EC2_SSH_KEY: ${{ secrets.KOJI_EC2_SSH_KEY }}
-      KOJI_EC2_KNOWN_HOSTS: ${{ secrets.KOJI_EC2_KNOWN_HOSTS }}
       BEFORE_SHA: ${{ github.event.before }}
       FORCE_MODEL_DEPLOY: ${{ inputs.deploy_models }}
     steps:
@@ -106,39 +233,6 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Validate explicit EC2 release settings
-        if: startsWith(github.ref, 'refs/tags/koji-release-')
-        run: |
-          python - <<'PY'
-          import os
-          required = ['KOJI_EC2_HOST', 'KOJI_EC2_SSH_KEY', 'KOJI_EC2_KNOWN_HOSTS',
-                      'EXPO_PUBLIC_STUDIO_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY',
-                      'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']
-          missing = [name for name in required if not os.environ.get(name, '').strip()]
-          if missing:
-              raise SystemExit('Missing production configuration: ' + ', '.join(missing))
-          if os.environ.get('KOJI_BACKEND_HOST') != 'aws':
-              raise SystemExit('Explicit release tags require KOJI_BACKEND_HOST=aws')
-          PY
-      - run: pip install -r koji-interactive-infographic-generator/backend/studio/requirements.txt modal
-      - name: Deploy affected Modal model endpoints
-        if: (vars.KOJI_MODEL_DEPLOY_ENABLED == 'true' && !startsWith(github.ref, 'refs/tags/koji-release-')) || inputs.deploy_models
-        run: python koji-interactive-infographic-generator/ci/deploy_models.py
-      - name: Deploy API and worker to Render
-        if: vars.KOJI_BACKEND_HOST != 'aws'
-        run: python koji-interactive-infographic-generator/ci/deploy_render.py
-      - name: Deploy API and worker to AWS EC2
-        if: vars.KOJI_BACKEND_HOST == 'aws'
-        run: python koji-interactive-infographic-generator/ci/deploy_ec2.py
-      - uses: actions/download-artifact@v4
-        with:
-          name: koji-web
-          path: koji-interactive-infographic-generator/frontend/dist
-      - run: python koji-interactive-infographic-generator/ci/pack_vercel.py
-      - name: Deploy tested frontend output
-        working-directory: koji-interactive-infographic-generator/frontend
-        run: npx --yes vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+          python-version: '3.12'
+      - run: pip install modal
+      - run: python koji-interactive-infographic-generator/ci/deploy_models.py
