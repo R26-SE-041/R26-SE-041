@@ -1353,16 +1353,16 @@ function Home({ accessToken, studioSession }: AppProps) {
             {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
             <View style={[shared.card, styles.promptCard]}>
               {workspace === "sketch" && <>
-                <Text style={shared.label}>Draw your subject</Text>
+                <Text style={styles.promptLabel}>Draw your subject</Text>
                 <SketchCanvas key={sketchCanvasKey} strokes={sketchStrokes} disabled={isLoading} onChange={(strokes) => { reset(); setSketchStrokes(strokes); setSketchMetadata(undefined); }} />
                 <Text style={styles.hint}>Drawing adherence</Text>
                 <View style={styles.actionButtons}>{[{ label: "Creative", value: 0.55 }, { label: "Balanced", value: 0.85 }, { label: "Strict", value: 1.1 }].map((option) =>
-                  <Pressable key={option.label} disabled={isLoading} onPress={() => setSketchStrength(option.value)} style={styles.ghostButton}>
-                    <Text style={styles.ghostText}>{sketchStrength === option.value ? "✓ " : ""}{option.label}</Text>
+                  <Pressable key={option.label} accessibilityRole="button" accessibilityLabel={option.label + " drawing adherence"} aria-pressed={sketchStrength === option.value} accessibilityState={{ selected: sketchStrength === option.value, disabled: isLoading }} disabled={isLoading} onPress={() => setSketchStrength(option.value)} style={[styles.optionButton, sketchStrength === option.value && styles.optionButtonSelected, isLoading && shared.disabled]}>
+                    <Text style={[styles.optionText, sketchStrength === option.value && styles.optionTextSelected]}>{sketchStrength === option.value ? "✓ " : ""}{option.label}</Text>
                   </Pressable>)}</View>
                 {sketchMetadata && <Text style={styles.hint}>SDXL + Xinsir Scribble · Seed {sketchMetadata.seed}</Text>}
               </>}
-              <Text style={shared.label}>{workspace === "sketch" ? "Additional instruction (optional)" : workspace === "anatomy" ? "Human Anatomy Prompt" : "Your Prompt"}</Text>
+              <Text style={styles.promptLabel}>{workspace === "sketch" ? "Additional instruction (optional)" : workspace === "anatomy" ? "Human Anatomy Prompt" : "Your Prompt"}</Text>
               <TextInput
                 accessibilityLabel="Your prompt"
                 editable={!isLoading}
@@ -1378,7 +1378,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 value={prompt}
               />
               {stage === "idle" && workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 10 }]}>{(workspace === "anatomy" ? ["Anterior view of the human heart", "Human lungs and airways", "Lateral view of the human brain"] : ["Photosynthesis for eighth graders", "The water cycle with clear labels", "Animal cell structure"]).map(example => <Pressable key={example} accessibilityRole="button" disabled={isLoading} style={styles.ghostButton} onPress={() => handlePromptChange(example)}><Text style={styles.ghostText}>{example}</Text></Pressable>)}</View>}
-              {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={[styles.hint, { alignSelf: "center" }]}>Speed</Text>{SPEED_MODES.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label + ": " + item.desc} accessibilityState={{ selected: speedMode === item.id, disabled: isLoading }} disabled={isLoading} onPress={() => setSpeedMode(item.id)} style={[styles.ghostButton, speedMode === item.id && { borderColor: colors.text }]}><Text style={styles.ghostText}>{item.label}</Text></Pressable>)}</View>}
+              {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={styles.optionLabel}>Speed</Text>{SPEED_MODES.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label + ": " + item.desc} aria-pressed={speedMode === item.id} accessibilityState={{ selected: speedMode === item.id, disabled: isLoading }} disabled={isLoading} onPress={() => setSpeedMode(item.id)} style={[styles.optionButton, speedMode === item.id && styles.optionButtonSelected, isLoading && shared.disabled]}><Text style={[styles.optionText, speedMode === item.id && styles.optionTextSelected]}>{speedMode === item.id ? "✓ " : ""}{item.label}</Text></Pressable>)}</View>}
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
                   {workspace === "sketch" ? "Your drawing guides the image directly. Leave the instruction empty to use the default illustration style." : workspace === "anatomy"
@@ -1726,6 +1726,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   centeredBlock: { alignItems: "center", gap: 10 },
   ghostButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 18, paddingVertical: 12 },
   ghostText: { color: colors.textMuted, fontWeight: "700" },
+  promptLabel: { color: colors.text, fontSize: 14, fontWeight: "700", letterSpacing: 0.5 },
+  optionLabel: { color: colors.text, fontSize: 14, fontWeight: "700", alignSelf: "center", marginRight: 4 },
+  optionButton: { minHeight: 44, minWidth: 104, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.textDim, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  optionButtonSelected: { backgroundColor: colors.buttonBackground, borderColor: colors.buttonBackground },
+  optionText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  optionTextSelected: { color: colors.onButton, fontWeight: "700" },
   insightsCard: { gap: 14 },
   insightsHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightsTitle: { color: colors.text, fontWeight: "800", fontSize: 14 },
