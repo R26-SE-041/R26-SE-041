@@ -51,6 +51,13 @@ GitHub environment secrets:
 - `KOJI_EC2_KNOWN_HOSTS`: independently verified SSH host entry
 - existing Vercel/optional Modal credentials
 
+For an explicitly approved release while automatic main deployments are disabled,
+push a `koji-release-*` tag pointing to the tested main commit. The workflow reruns
+frontend and isolated database checks, validates the production configuration,
+and deploys the existing EC2 API/worker followed by the frontend. Release tags
+require `KOJI_BACKEND_HOST=aws` and retain the production environment's approval
+rules. They leave the existing Modal model endpoints running without rebuilding them.
+
 [deploy_ec2.py](../../ci/deploy_ec2.py) uploads only tracked component backend files at the tested commit. It installs dependencies in a release virtual environment, switches the current symlink, restarts both services and checks API readiness plus worker process liveness. A failed readiness check restores the previous release when one exists. No Supabase credentials enter the frontend or build artifact.
 
 Before the first production start, apply the additive database migrations with `python -m studio.migrate` from the backend using the protected backend environment. Apply later migrations deliberately before deployment; CI never migrates the production database. Readiness fails until required settings and tables exist.

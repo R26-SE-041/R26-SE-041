@@ -5,6 +5,8 @@ on:
       - 'koji-interactive-infographic-generator/**'
       - '.github/workflows/koji-interactive.yml'
   push:
+    branches: ['**']
+    tags: ['koji-release-*']
     paths:
       - 'koji-interactive-infographic-generator/**'
       - '.github/workflows/koji-interactive.yml'
@@ -73,15 +75,17 @@ jobs:
       - run: python ../ci/check.py
   deploy:
     if: >-
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
       github.event_name != 'pull_request' &&
-      vars.KOJI_DEPLOY_ENABLED == 'true'
+      (vars.KOJI_DEPLOY_ENABLED == 'true' || startsWith(github.ref, 'refs/tags/koji-release-'))
     needs: [frontend, backend]
     runs-on: ubuntu-latest
     environment: koji-production
     env:
       EXPO_PUBLIC_STUDIO_API_URL: ${{ vars.KOJI_STUDIO_API_URL }}
       EXPO_PUBLIC_STUDIO_PROXY_PATH: ${{ vars.KOJI_STUDIO_PROXY_PATH || '/studio-api' }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.KOJI_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.KOJI_SUPABASE_ANON_KEY }}
       RENDER_API_KEY: ${{ secrets.KOJI_RENDER_API_KEY }}
       RENDER_API_SERVICE_ID: ${{ vars.KOJI_RENDER_API_SERVICE_ID }}
       RENDER_WORKER_SERVICE_ID: ${{ vars.KOJI_RENDER_WORKER_SERVICE_ID }}
@@ -91,6 +95,7 @@ jobs:
       MODAL_TOKEN_ID: ${{ secrets.KOJI_MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.KOJI_MODAL_TOKEN_SECRET }}
       KOJI_EC2_HOST: ${{ vars.KOJI_EC2_HOST }}
+      KOJI_BACKEND_HOST: ${{ vars.KOJI_BACKEND_HOST }}
       KOJI_EC2_SSH_KEY: ${{ secrets.KOJI_EC2_SSH_KEY }}
       KOJI_EC2_KNOWN_HOSTS: ${{ secrets.KOJI_EC2_KNOWN_HOSTS }}
       BEFORE_SHA: ${{ github.event.before }}
@@ -105,9 +110,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Validate explicit EC2 release settings
+        if: startsWith(github.ref, 'refs/tags/koji-release-')
+        run: |
+          python - <<'PY'
+          import os
+          required = ['KOJI_EC2_HOST', 'KOJI_EC2_SSH_KEY', 'KOJI_EC2_KNOWN_HOSTS',
+                      'EXPO_PUBLIC_STUDIO_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+                      'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']
+          missing = [name for name in required if not os.environ.get(name, '').strip()]
+          if missing:
+              raise SystemExit('Missing production configuration: ' + ', '.join(missing))
+          if os.environ.get('KOJI_BACKEND_HOST') != 'aws':
+              raise SystemExit('Explicit release tags require KOJI_BACKEND_HOST=aws')
+          PY
       - run: pip install -r koji-interactive-infographic-generator/backend/studio/requirements.txt modal
       - name: Deploy affected Modal model endpoints
-        if: vars.KOJI_MODEL_DEPLOY_ENABLED == 'true' || inputs.deploy_models
+        if: (vars.KOJI_MODEL_DEPLOY_ENABLED == 'true' && !startsWith(github.ref, 'refs/tags/koji-release-')) || inputs.deploy_models
         run: python koji-interactive-infographic-generator/ci/deploy_models.py
       - name: Deploy API and worker to Render
         if: vars.KOJI_BACKEND_HOST != 'aws'
