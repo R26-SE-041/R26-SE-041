@@ -5,7 +5,6 @@ on:
       - 'koji-interactive-infographic-generator/**'
       - '.github/workflows/koji-interactive.yml'
   push:
-    branches: [main]
     paths:
       - 'koji-interactive-infographic-generator/**'
       - '.github/workflows/koji-interactive.yml'
