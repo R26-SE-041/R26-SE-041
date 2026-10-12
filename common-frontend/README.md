@@ -1,6 +1,6 @@
 # BioLearnX common frontend
 
-An independent Expo / React Native app, initially targeting web, with a warm cream, terracotta and charcoal palette and translucent glass cards. It calls the existing four APIs. No existing backend or frontend source files are changed.
+An independent Expo / React Native app, initially targeting web, with an Anthropic-inspired ivory, terracotta and charcoal design, serif headings, solid paper-like panels and restrained motion. It calls the existing four APIs. No existing backend or frontend source files are changed.
 
 ## Run
 

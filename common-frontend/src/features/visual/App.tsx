@@ -1,4 +1,5 @@
 import { api, authenticatedFetch as fetch } from "../../api";
+import { fonts } from "../../theme";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1130,19 +1131,6 @@ function Home({ accessToken, userId }: AppProps) {
   return (
     <View style={styles.safeArea}>
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
-      <View pointerEvents="none" style={styles.ambientTop} />
-      <View pointerEvents="none" style={styles.ambientBottom} />
-      {workspace !== "history" && (
-        <Pressable
-          accessibilityLabel="Start a new chat"
-          disabled={isLoading}
-          onPress={() => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey((value) => value + 1); }}
-          style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}
-        >
-          <Icon color="#fff" name="wand" size={16} />
-          <Text style={styles.floatingNewPromptText}>New chat</Text>
-        </Pressable>
-      )}
       <View>
         <View style={styles.scrollContent}>
           <View style={styles.container}>
@@ -1152,6 +1140,14 @@ function Home({ accessToken, userId }: AppProps) {
                   <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
                   <Text style={styles.brand}>Visual studio</Text>
                 </View>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+                  {workspace !== "history" && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Start a new chat" disabled={isLoading}
+                      onPress={() => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey((value) => value + 1); }}
+                      style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}>
+                      <Icon color="#fff" name="wand" size={16} /><Text style={styles.floatingNewPromptText}>New chat</Text>
+                    </Pressable>
+                  )}
                 <Pressable
                   accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
                   onPress={toggleTheme}
@@ -1159,7 +1155,7 @@ function Home({ accessToken, userId }: AppProps) {
                 >
                   <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={15} />
                   <Text style={styles.themeToggleText}>{themeMode === "dark" ? "Light mode" : "Dark mode"}</Text>
-                </Pressable>
+                </Pressable></View>
               </View>
               <View style={styles.heroGrid}>
                 <View style={styles.heroCopy}>
@@ -1169,7 +1165,7 @@ function Home({ accessToken, userId }: AppProps) {
                     Create thoughtful educational imagery, explore human anatomy, and turn flat visuals into interactive learning experiences.
                   </Text>
                 </View>
-                <View style={styles.systemGlass}>
+                <View style={styles.systemPanel}>
                   <View style={styles.systemHeader}>
                     <View><Text style={styles.systemKicker}>STUDIO STATUS</Text><Text style={styles.systemTitle}>Creative engine</Text></View>
                     <View style={styles.liveBadge}><StatusDot color={[promptHealth, imageHealth, evalHealth, interactiveHealth, threedHealth].every(value => value === "ok") ? colors.success : colors.warning} /><Text style={styles.liveBadgeText}>{[promptHealth, imageHealth, evalHealth, interactiveHealth, threedHealth].every(value => value === "ok") ? "Ready" : "Check status"}</Text></View>
@@ -1561,58 +1557,56 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: { backgroundColor: colors.background, overflow: "hidden", borderRadius: 22 },
-  floatingNewPrompt: { position: "absolute", zIndex: 100, top: 18, right: 22, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 50, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
-  floatingNewPromptText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },
-  ambientBottom: { position: "absolute", width: 520, height: 520, borderRadius: 260, left: -230, bottom: -170, backgroundColor: "rgba(175, 125, 73, 0.16)" },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 44 },
+  safeArea: { backgroundColor: colors.background, overflow: "hidden", borderRadius: 12 },
+  floatingNewPrompt: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, borderRadius: 8, backgroundColor: colors.primary },
+  floatingNewPromptText: { fontFamily: fonts.body, color: "#fff", fontSize: 12, fontWeight: "600" },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 0, paddingTop: 0, paddingBottom: 44 },
   container: { width: "100%", maxWidth: 1040, alignSelf: "center", gap: 20 },
-  header: { paddingVertical: 8, gap: 40 },
-  topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
-  themeToggle: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 50, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, ...Platform.select({ web: { boxShadow: `0 12px 35px ${colors.shadow}`, backdropFilter: "blur(20px)" } as object }) },
-  themeToggleText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  header: { paddingVertical: 8, gap: 24 },
+  topBar: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  themeToggle: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42 },
+  themeToggleText: { fontFamily: fonts.body, color: colors.text, fontSize: 12, fontWeight: "600" },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
-  brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
-  brand: { color: colors.primaryBright, fontSize: 17, fontWeight: "900", letterSpacing: 2.4, textTransform: "uppercase" },
+  brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "600", fontSize: 18 },
+  brand: { fontFamily: fonts.body, color: colors.primaryBright, fontSize: 14, fontWeight: "600", letterSpacing: 0 },
   heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 34 },
-  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 500, minWidth: 280, maxWidth: "100%" as unknown as number },
-  eyebrow: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 2.6, marginBottom: 12 },
-  title: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, 'Times New Roman', serif", default: "serif" }), fontSize: 58, lineHeight: 63, fontWeight: "700", textAlign: "left", letterSpacing: -2 },
+  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 440, minWidth: 240, maxWidth: "100%" as unknown as number },
+  eyebrow: { fontFamily: fonts.body, color: colors.textDim, fontSize: 11, fontWeight: "600", letterSpacing: 2.6, marginBottom: 12 },
+  title: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, 'Times New Roman', serif", default: "serif" }), fontSize: 38, lineHeight: 46, fontWeight: "400", textAlign: "left", letterSpacing: -2 },
   titleAccent: { color: colors.primaryBright },
-  subtitle: { color: colors.textMuted, textAlign: "left", fontSize: 16, lineHeight: 26, maxWidth: 610, marginTop: 16 },
-  systemGlass: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 290, maxWidth: "100%" as unknown as number, padding: 20, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 28px 80px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.86)`, backdropFilter: "blur(28px) saturate(130%)" } as object }) },
+  subtitle: { fontFamily: fonts.body, color: colors.textMuted, textAlign: "left", fontSize: 14, lineHeight: 23, maxWidth: 610, marginTop: 16 },
+  systemPanel: { flexGrow: 1, flexShrink: 1, flexBasis: 320, minWidth: 240, maxWidth: "100%" as unknown as number, padding: 20, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   systemHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  systemKicker: { color: colors.textDim, fontSize: 9, fontWeight: "900", letterSpacing: 1.8 },
+  systemKicker: { fontFamily: fonts.body, color: colors.textDim, fontSize: 9, fontWeight: "600", letterSpacing: 1.8 },
   systemTitle: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontSize: 22, fontWeight: "700", marginTop: 3 },
   liveBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 50, backgroundColor: "rgba(100,122,81,0.10)" },
-  liveBadgeText: { color: colors.success, fontWeight: "800", fontSize: 11 },
+  liveBadgeText: { fontFamily: fonts.body, color: colors.success, fontWeight: "600", fontSize: 11 },
   healthWrap: { gap: 7 },
   healthPill: { flexGrow: 1, minWidth: 86, gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   agentSignals: { flexDirection: "row", alignItems: "center", gap: 10 },
   signal: { flexDirection: "row", alignItems: "center", gap: 5 },
-  healthLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
-  healthState: { color: colors.textDim, fontSize: 12 },
-  warmNote: { color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
-  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 6, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 22px 65px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.88)`, backdropFilter: "blur(26px) saturate(125%)" } as object }) },
-  workspaceTab: { flex: 1, minWidth: 260, minHeight: 74, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: "transparent" },
-  workspaceTabActive: { borderColor: "rgba(185,79,39,0.38)", backgroundColor: "rgba(201,95,50,0.13)" },
+  healthLabel: { fontFamily: fonts.body, color: colors.textMuted, fontSize: 12, fontWeight: "600" },
+  healthState: { fontFamily: fonts.body, color: colors.textDim, fontSize: 12 },
+  warmNote: { fontFamily: fonts.body, color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
+  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 6, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  workspaceTab: { flex: 1, minWidth: 220, minHeight: 64, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: "transparent" },
+  workspaceTabActive: { borderColor: colors.primary, backgroundColor: colors.surfaceSoft },
   workspaceTabCopy: { flex: 1, gap: 3 },
-  workspaceTabTitle: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
+  workspaceTabTitle: { fontFamily: fonts.body, color: colors.textMuted, fontWeight: "600", fontSize: 14 },
   workspaceTabTitleActive: { color: colors.text },
-  workspaceTabDescription: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
-  speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 24, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { backdropFilter: "blur(18px)", boxShadow: `0 18px 50px ${colors.shadow}` } as object }) },
+  workspaceTabDescription: { fontFamily: fonts.body, color: colors.textDim, fontSize: 11, lineHeight: 16 },
+  speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 12, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   centerText: { textAlign: "center" },
   speedPicker: { justifyContent: "center", gap: 10 },
-  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 15, borderRadius: 20, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 15, borderRadius: 12, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
   speedPillActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(201,95,50,0.12)" },
-  speedName: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
+  speedName: { fontFamily: fonts.body, color: colors.textMuted, fontWeight: "600", fontSize: 14 },
   speedNameActive: { color: colors.text },
-  speedDesc: { color: colors.textDim, fontSize: 12, marginTop: 4 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
+  speedDesc: { fontFamily: fonts.body, color: colors.textDim, fontSize: 12, marginTop: 4 },
+  hint: { fontFamily: fonts.body, color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
   promptCard: { gap: 14 },
-  promptInput: { minHeight: 124, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 17, fontSize: 15, lineHeight: 23 },
+  promptInput: { fontFamily: fonts.body, minHeight: 124, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 17, fontSize: 15, lineHeight: 23 },
   promptFooter: { gap: 14 },
   actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 10 },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -1622,32 +1616,32 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   loadingText: { color: colors.text, fontWeight: "700", textAlign: "center" },
   stageRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   stagePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.surfaceSoft, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 50, overflow: "hidden" },
-  stagePillText: { color: colors.textDim, fontSize: 11 },
+  stagePillText: { fontFamily: fonts.body, color: colors.textDim, fontSize: 11 },
   stagePillActive: { backgroundColor: "rgba(201,95,50,0.18)" },
   stagePillActiveText: { color: colors.text },
   stagePillDone: { color: colors.success },
-  gpuText: { color: colors.textMuted, fontSize: 11 },
-  errorTitle: { color: colors.danger, fontWeight: "800", marginBottom: 4 },
+  gpuText: { fontFamily: fonts.body, color: colors.textMuted, fontSize: 11 },
+  errorTitle: { color: colors.danger, fontWeight: "600", marginBottom: 4 },
   errorMessage: { color: colors.textMuted, lineHeight: 20 },
   cardHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
-  modelTag: { color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, overflow: "hidden" },
+  badge: { fontFamily: fonts.body, color: colors.primaryBright, fontSize: 12, fontWeight: "600" },
+  modelTag: { fontFamily: fonts.body, color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 12, overflow: "hidden" },
   enhancedPrompt: { color: colors.textMuted, fontStyle: "italic", lineHeight: 22, marginTop: 14 },
   resultSection: { gap: 16 },
   qualityCard: { gap: 10 },
-  qualityScore: { color: colors.text, fontSize: 14, fontWeight: "800", lineHeight: 21 },
+  qualityScore: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 21 },
   sectionTitle: { alignItems: "center", gap: 5, marginTop: 4 },
-  sectionHeading: { color: colors.text, fontWeight: "900", fontSize: 22, textAlign: "center" },
-  sectionSubtitle: { color: colors.textMuted, textAlign: "center", lineHeight: 20, fontSize: 13 },
+  sectionHeading: { fontFamily: fonts.body, color: colors.text, fontWeight: "600", fontSize: 22, textAlign: "center" },
+  sectionSubtitle: { fontFamily: fonts.body, color: colors.textMuted, textAlign: "center", lineHeight: 20, fontSize: 13 },
   threeDSection: { gap: 16, marginTop: 10 },
   centeredBlock: { alignItems: "center", gap: 10 },
   ghostButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 18, paddingVertical: 12 },
   ghostText: { color: colors.textMuted, fontWeight: "700" },
   insightsCard: { gap: 14 },
   insightsHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  insightsTitle: { color: colors.text, fontWeight: "800", fontSize: 14 },
+  insightsTitle: { fontFamily: fonts.body, color: colors.text, fontWeight: "600", fontSize: 14 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metricItem: { flexGrow: 1, flexBasis: 180, maxWidth: "50%" as unknown as number, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12, gap: 5 },
-  metricLabel: { color: colors.textDim, fontSize: 11 },
-  metricValue: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  metricLabel: { fontFamily: fonts.body, color: colors.textDim, fontSize: 11 },
+  metricValue: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600" },
 });

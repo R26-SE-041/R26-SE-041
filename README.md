@@ -13,8 +13,8 @@ BioLearnX combines four learning experiences. Specialized agents process learnin
 | Component | Capabilities | Documentation |
 | --- | --- | --- |
 | Interactive visualizations | Prompt and sketch generation, anatomy diagrams, region analysis, editable labels, history, and optional 3D conversion | [Visualization](koji-interactive-infographic-generator/README.md) |
-| Adaptive assessment | Document-grounded quizzes, answer evaluation, difficulty adaptation, analytics, and topic recommendations | [Assessment](nishy-adaptive-quiz-recommender/README.md) |
 | Multilingual audio review | Voice questions about lecture material, retrieval-based answers, speech synthesis, and document-to-audio revision | [Audio review](baskaran-interactive-audio-communication/README.md) |
+| Adaptive assessment | Document-grounded quizzes, answer evaluation, difficulty adaptation, analytics, and topic recommendations | [Assessment](nishy-adaptive-quiz-recommender/README.md) |
 | Intelligent note generation | Handwritten-image enhancement, Sinhala OCR, and Tamil/English translation | [Image-to-notes](sarmitha-image-text-extractor-study-gen/) |
 
 ## Architecture
@@ -22,8 +22,8 @@ BioLearnX combines four learning experiences. Specialized agents process learnin
 ```mermaid
 flowchart LR
     Learner[Learning requests and source material] --> Visual[Interactive visualizations]
-    Learner --> Assessment[Adaptive assessment]
     Learner --> Audio[Multilingual audio review]
+    Learner --> Assessment[Adaptive assessment]
     Learner --> Notes[Image-to-notes processing]
     Curriculum[(Curriculum and uploaded documents)] --> Retrieval[Retrieval layer]
     Retrieval --> Visual
@@ -44,8 +44,8 @@ The visualization pipeline combines prompt enhancement, generation, evaluation, 
 | Directory | Contents |
 | --- | --- |
 | `koji-interactive-infographic-generator/` | Visualization frontend, Studio API, worker, model agents, and evaluation tools |
-| `nishy-adaptive-quiz-recommender/` | Assessment backend and frontend |
 | `baskaran-interactive-audio-communication/` | Audio-review backend, frontend, and benchmarks |
+| `nishy-adaptive-quiz-recommender/` | Assessment backend and frontend |
 | `sarmitha-image-text-extractor-study-gen/` | Image enhancement, OCR, translation, and client interface |
 | `common-frontend/` | Shared learning interface and integration documentation |
 | `learnx-project-website/` | Research website, presentations, and component reports |
@@ -70,8 +70,8 @@ cd R26-SE-041
 Follow the relevant component's setup guide for dependencies, environment variables, database configuration, and local commands. Components use separate environments and deployment settings.
 
 - [Visualization setup and validation](koji-interactive-infographic-generator/README.md)
-- [Assessment setup](nishy-adaptive-quiz-recommender/README.md)
 - [Audio-review setup](baskaran-interactive-audio-communication/README.md)
+- [Assessment setup](nishy-adaptive-quiz-recommender/README.md)
 - [Image-to-notes source and configuration](sarmitha-image-text-extractor-study-gen/)
 - [Shared interface setup](common-frontend/README.md)
 - [Research website preview and hosting](learnx-project-website/README.md)

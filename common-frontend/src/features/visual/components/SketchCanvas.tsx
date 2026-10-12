@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { GestureResponderEvent, Pressable, Text, View } from "react-native";
+import { useAppTheme } from "../theme";
 import Svg, { Circle, Polyline, Rect } from "react-native-svg";
 import { SketchStroke } from "../historyStorage";
 
@@ -12,6 +13,7 @@ interface Props {
 
 /** Normalized vector strokes preserve the drawing across screen sizes and history. */
 export default function SketchCanvas({ strokes, onChange, disabled = false, previewOnly = false }: Props) {
+  const { colors } = useAppTheme();
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [redo, setRedo] = useState<SketchStroke[]>([]);
   const [draft, setDraft] = useState<SketchStroke | null>(null);
@@ -31,8 +33,8 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
   };
   const button = (label: string, action: () => void, unavailable = false) => (
     <Pressable key={label} disabled={disabled || unavailable} accessibilityRole="button"
-      onPress={action} style={{ padding: 10, borderRadius: 8, backgroundColor: "#e2e8f0", opacity: disabled || unavailable ? 0.4 : 1 }}>
-      <Text style={{ color: "#0f172a", fontWeight: "600" }}>{label}</Text>
+      onPress={action} style={{ padding: 10, borderRadius: 8, backgroundColor: colors.surfaceSoft, opacity: disabled || unavailable ? 0.4 : 1 }}>
+      <Text style={{ color: colors.text, fontWeight: "600" }}>{label}</Text>
     </Pressable>
   );
   return <View style={{ gap: 10 }}>
@@ -43,7 +45,7 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
       {button("Redo", () => { onChange([...strokes, redo[redo.length - 1]]); setRedo(redo.slice(0, -1)); }, !redo.length)}
       {button("Clear", () => { onChange([]); setRedo([]); }, !strokes.length)}
     </View>}
-    <View accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: "#94a3b8", overflow: "hidden", touchAction: "none" } as any}
+    <View accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: colors.border, overflow: "hidden", touchAction: "none" } as any}
       onLayout={(event) => { size.current = event.nativeEvent.layout.width; }}
       onStartShouldSetResponder={() => !disabled}
       onMoveShouldSetResponder={() => !disabled}

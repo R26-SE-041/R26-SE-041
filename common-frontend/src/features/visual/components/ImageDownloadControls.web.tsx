@@ -1,3 +1,4 @@
+import { fonts } from "../../../theme";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { AnatomyAnnotation } from "../App";
@@ -38,7 +39,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   button: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9 },
   secondary: { backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.primaryBright },
-  text: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  text: { fontFamily: fonts.body, color: "#fff", fontSize: 12, fontWeight: "600" },
   secondaryText: { color: colors.primaryBright },
   disabled: { opacity: 0.45 },
 });

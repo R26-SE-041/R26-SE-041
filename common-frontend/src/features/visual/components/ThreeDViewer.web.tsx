@@ -1,3 +1,4 @@
+import { fonts } from "../../../theme";
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
@@ -87,12 +88,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 5 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
-  badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
-  tag: { color: colors.textDim, fontSize: 10 },
+  badge: { fontFamily: fonts.body, color: colors.primaryBright, fontSize: 12, fontWeight: "600" },
+  tag: { fontFamily: fonts.body, color: colors.textDim, fontSize: 10 },
   download: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
-  downloadText: { color: "white", fontSize: 11, fontWeight: "800" },
+  downloadText: { fontFamily: fonts.body, color: "white", fontSize: 11, fontWeight: "600" },
   canvas: { width: "100%", height: 480, borderRadius: 14, overflow: "hidden", backgroundColor: colors.canvas },
   canvasFill: { width: "100%", height: "100%" },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  hint: { color: colors.textDim, textAlign: "center", fontSize: 11 },
+  hint: { fontFamily: fonts.body, color: colors.textDim, textAlign: "center", fontSize: 11 },
 });

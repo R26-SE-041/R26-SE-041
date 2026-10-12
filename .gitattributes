@@ -1,5 +1,3 @@
 # Research documents are excluded from GitHub source-language statistics.
 /research-paper/** linguist-documentation
-/research_paper.html linguist-documentation
-/research_paper.pdf linguist-documentation
 /output/paper/** linguist-documentation

@@ -1,13 +1,29 @@
-import React from 'react';
-import { Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
+﻿import React from 'react';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { modules, type Page } from '../navigation';
+import Icon from '../features/visual/components/Icon';
+import { fonts, webTransition } from '../theme';
 import { Button, Card, colors, styles } from '../ui';
 
 export default function Dashboard({ name, open }: { name: string; open: (page: Page) => void }) {
   const { width } = useWindowDimensions();
-  return <View style={styles.page}><View style={styles.row}><Text style={styles.label}>YOUR PERSONAL BIOLOGY WORKSPACE</Text><View style={{ flex: 1 }} /><Text style={styles.subtitle}>G.C.E. A/L Biology</Text></View><View style={{ gap: 12, paddingVertical: 12 }}><Text style={[styles.title, { fontSize: width > 700 ? 46 : 34, fontFamily: Platform.OS === 'web' ? 'Georgia, serif' : undefined, fontWeight: '400' }]}>A little curiosity.{'\n'} A deeper understanding.</Text><Text style={[styles.subtitle, { maxWidth: 570 }]}>Welcome{name ? `, ${name}` : ''}. Explore a concept, test what you know, or give your study notes a fresh perspective.</Text></View>
-    <Card style={{ backgroundColor: '#EBE4D7B0', padding: 28 }}><View style={styles.row}><View style={{ flex: 1, minWidth: 210, gap: 10 }}><Text style={styles.label}>YOUR NEXT LEARNING MOMENT</Text><Text style={[styles.heading, { fontSize: 24 }]}>How would you like to learn today?</Text><Text style={styles.subtitle}>Four ways to explore. One connected experience.</Text></View><Button label="Explore a concept ↗" onPress={() => open('visual')} /></View></Card>
-    <View style={styles.row}><Text style={styles.heading}>Your learning toolkit</Text><View style={{ flex: 1 }} /><Text style={styles.subtitle}>04 connected experiences</Text></View>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>{modules.map(module => <Pressable key={module.id} accessibilityRole="button" accessibilityLabel={`Open ${module.label}`} onPress={() => open(module.id)} style={(state) => ({ width: width >= 1000 ? '48.8%' : '100%', transform: [{ translateY: ('hovered' in state && state.hovered) ? -3 : 0 }] })}><Card style={{ height: '100%', minHeight: 236 }}><View style={styles.row}><View style={{ backgroundColor: module.tint, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 30, color: colors.ink }}>{module.icon}</Text></View><View style={{ flex: 1 }} /><Text style={{ fontSize: 23, color: colors.muted }}>↗</Text></View><Text style={styles.label}>{module.subtitle}</Text><Text style={[styles.heading, { fontSize: 23 }]}>{module.label}</Text><Text style={styles.subtitle}>{module.description}</Text><Text style={{ color: '#9A7260', fontSize: 12 }}>{module.tag}</Text></Card></Pressable>)}</View>
-    <Text style={[styles.subtitle, { textAlign: 'center', fontSize: 12 }]}>Built for thoughtful learning · BioLearnX · R26-SE-041</Text></View>;
+  return <View style={styles.page}>
+    <View style={styles.row}><Text style={styles.label}>A SPACE TO THINK, EXPLORE & LEARN</Text><View style={{ flex: 1 }} /><Text style={[styles.subtitle, { fontSize: 12 }]}>G.C.E. A/L Biology</Text></View>
+    <View style={{ gap: 16, paddingTop: 24, paddingBottom: 32 }}>
+      <Text accessibilityRole="header" style={[styles.title, { fontSize: width > 700 ? 54 : 36, lineHeight: width > 700 ? 62 : 44 }]}>A little curiosity.{'\n'}A deeper understanding.</Text>
+      <Text style={[styles.subtitle, { maxWidth: 560, fontSize: 15, lineHeight: 25 }]}>Welcome{name ? `, ${name}` : ''}. Make sense of a concept, find your next question, or see your study material in a new light.</Text>
+    </View>
+    <Card style={{ backgroundColor: colors.soft, padding: 26 }}><View style={[styles.row, { gap: 24 }]}><View style={{ flex: 1, minWidth: 180, gap: 8 }}><Text style={styles.label}>WHERE WOULD YOU LIKE TO BEGIN?</Text><Text style={[styles.heading, { fontSize: 27, lineHeight: 35 }]}>Follow your curiosity.</Text><Text style={styles.subtitle}>Start with a biology concept. Explore it visually, then go a little deeper.</Text></View><Button label="Open visual studio ↗" onPress={() => open('visual')} /></View></Card>
+    <View style={[styles.row, { paddingTop: 14 }]}><Text style={styles.heading}>Four ways to understand.</Text><View style={{ flex: 1 }} /><Text style={[styles.subtitle, { fontSize: 12 }]}>Your learning toolkit</Text></View>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>{modules.map((module, index) => <Pressable key={module.id} accessibilityRole="button" accessibilityLabel={`Open ${module.label}`} onPress={() => open(module.id)} style={state => ({ flexBasis: width >= 1000 ? '47%' : '100%', flexGrow: 1, minWidth: 0, borderWidth: 1, borderColor: 'hovered' in state && state.hovered ? '#C8C4B8' : colors.line, backgroundColor: 'hovered' in state && state.hovered ? '#FDFCFA' : colors.surface, borderRadius: 12, opacity: state.pressed ? 0.8 : 1, ...webTransition })}>
+      <View style={{ padding: 26, gap: 16, height: '100%' }}>
+        <View style={styles.row}><View style={{ backgroundColor: module.tint, width: 42, height: 42, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }}><Icon name={module.icon} size={22} color={colors.ink} /></View><View style={{ flex: 1 }} /><Text style={styles.label}>0{index + 1}</Text></View>
+        <View style={{ gap: 7 }}><Text style={[styles.heading, { fontSize: 27, lineHeight: 34 }]}>{module.label}</Text><Text style={styles.subtitle}>{module.description}</Text></View>
+        <View style={styles.divider} /><Text style={[styles.subtitle, { fontSize: 12 }]}>{module.tag}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>{module.capabilities.map(label => <Text key={label} style={{ fontFamily: fonts.body, fontSize: 11, color: colors.muted, backgroundColor: colors.bg, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 5 }}>{label}</Text>)}</View>
+        <Text style={{ fontFamily: fonts.body, color: colors.accentHover, fontSize: 13, marginTop: 'auto', paddingTop: 4 }}>Open workspace ↗</Text>
+      </View>
+    </Pressable>)}</View>
+    <Text style={[styles.subtitle, { textAlign: 'center', fontSize: 11, paddingTop: 16 }]}>Thoughtful tools. Your own pace. · BioLearnX</Text>
+  </View>;
 }

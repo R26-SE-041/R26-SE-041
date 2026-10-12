@@ -17,7 +17,11 @@ The [LearnX research website](https://learnx-research.vercel.app) provides the t
 - [BioLearnX Final PDF](archive/BioLearnX_Final.pdf)
 - [BioLearnX Final Paper PDF](archive/BioLearnX_Final_Paper.pdf)
 - [Earlier Markdown paper](archive/research_paper.md)
-- [ICAC Markdown draft](BioLearnX_ICAC2026_Draft.md)
+- [ICAC Markdown draft](archive/BioLearnX_ICAC2026_Draft.md)
+- [Earlier paper (PDF)](archive/research_paper.pdf)
+- [Earlier paper (HTML)](archive/research_paper.html)
+- [ICAC HTML export](archive/BioLearnX_ICAC2026.html)
+- [Bibliography collection (BibTeX)](archive/references.bib)
 - [Editable manuscript draft (Word)](../output/paper/BioLearnX_ICAC_2026_Manuscript_Draft.docx)
 - [Manuscript draft (PDF)](../output/paper/BioLearnX_ICAC_2026_Manuscript_Draft.pdf)
 

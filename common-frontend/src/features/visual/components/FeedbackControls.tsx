@@ -1,3 +1,4 @@
+import { fonts } from "../../../theme";
 import { authenticatedFetch as fetch } from "../../../api";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -167,27 +168,27 @@ export default function FeedbackControls(props: FeedbackControlsProps) {
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { marginTop: 14, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
-  question: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
+  question: { fontFamily: fonts.body, color: colors.textDim, fontSize: 12, fontWeight: "700" },
   row: { flexDirection: "row", gap: 8 },
   ratingButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
   likeActive: { borderColor: colors.success },
   dislikeActive: { borderColor: colors.danger },
-  buttonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
+  buttonText: { fontFamily: fonts.body, color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   panel: { gap: 10, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12 },
-  panelLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  panelLabel: { fontFamily: fonts.body, color: colors.text, fontSize: 12, fontWeight: "600" },
   reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   reason: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
-  reasonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.18)" },
-  reasonText: { color: colors.textDim, fontSize: 11 },
+  reasonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(201,100,66,0.18)" },
+  reasonText: { fontFamily: fonts.body, color: colors.textDim, fontSize: 11 },
   reasonTextActive: { color: colors.text },
-  comment: { minHeight: 54, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 12 },
+  comment: { fontFamily: fonts.body, minHeight: 54, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 12 },
   submit: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
   submitRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   submitSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBright },
-  submitText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  submitText: { fontFamily: fonts.body, color: "#fff", fontWeight: "600", fontSize: 12 },
   submitSecondaryText: { color: colors.text },
-  error: { color: colors.danger, fontSize: 11 },
+  error: { fontFamily: fonts.body, color: colors.danger, fontSize: 11 },
   disabled: { opacity: 0.55 },
   saved: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 7 },
-  savedText: { color: colors.success, fontSize: 12, fontWeight: "700" },
+  savedText: { fontFamily: fonts.body, color: colors.success, fontSize: 12, fontWeight: "700" },
 });

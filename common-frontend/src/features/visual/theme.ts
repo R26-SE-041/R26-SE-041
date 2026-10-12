@@ -1,42 +1,21 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { Platform, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { colors as sharedColors, fonts, webTransition } from "../../theme";
 
 export type ThemeMode = "dark" | "light";
 
 export const darkColors = {
-  background: "#201914",
-  surface: "rgba(53, 41, 32, 0.78)",
-  surfaceSoft: "rgba(255, 244, 226, 0.08)",
-  border: "rgba(255, 232, 202, 0.18)",
-  primary: "#d97745",
-  primaryBright: "#f2a06f",
-  cyan: "#d8a56d",
-  text: "#fff7ea",
-  textMuted: "#d9c7b2",
-  textDim: "#a99580",
-  success: "#91a878",
-  warning: "#e9ad5c",
-  danger: "#e27661",
-  canvas: "#17120f",
-  shadow: "rgba(8,4,2,0.36)",
+  background: "#262624", surface: "#30302E", surfaceSoft: "#383835", border: "#484841",
+  primary: "#C96442", primaryBright: "#E29B7E", cyan: "#C7A77C", text: "#FAF9F5",
+  textMuted: "#C5C2B8", textDim: "#ABA79D", success: "#A6B59A", warning: "#D7B474",
+  danger: "#E99586", canvas: "#222220", shadow: "rgba(0,0,0,0.12)",
 } as const;
-
 export const lightColors: ColorPalette = {
-  background: "#F6F3ED",
-  surface: "rgba(255, 255, 255, 0.48)",
-  surfaceSoft: "rgba(255, 253, 247, 0.36)",
-  border: "rgba(255, 255, 255, 0.68)",
-  primary: "#BD654D",
-  primaryBright: "#984F3B",
-  cyan: "#a5683f",
-  text: "#302E2A",
-  textMuted: "#77736A",
-  textDim: "#927b6c",
-  success: "#647a51",
-  warning: "#c88935",
-  danger: "#b84c3d",
-  canvas: "#e8dac6",
-  shadow: "rgba(91,54,29,0.14)",
+  background: sharedColors.bg, surface: sharedColors.surface, surfaceSoft: sharedColors.soft,
+  border: sharedColors.line, primary: sharedColors.accent, primaryBright: sharedColors.accentHover,
+  cyan: "#96754B", text: sharedColors.ink, textMuted: sharedColors.muted, textDim: sharedColors.muted,
+  success: sharedColors.sage, warning: "#956A2C", danger: sharedColors.danger,
+  canvas: sharedColors.canvas, shadow: "rgba(20,20,19,0.04)",
 };
 
 export type ColorPalette = { [Key in keyof typeof darkColors]: string };
@@ -48,8 +27,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  colors: darkColors,
-  mode: "dark",
+  colors: lightColors,
+  mode: "light",
   toggleTheme: () => undefined,
 });
 
@@ -70,26 +49,25 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 24,
-    padding: 22,
-    ...Platform.select({
-      web: { boxShadow: `0 24px 70px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.82)`, backdropFilter: "blur(24px) saturate(125%)", WebkitBackdropFilter: "blur(24px) saturate(125%)" } as object,
-      default: { elevation: 5 },
-    }),
+    borderRadius: 12,
+    padding: 24,
+
   },
   label: {
+    fontFamily: fonts.body,
     color: colors.textMuted,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
     letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   row: { flexDirection: "row", alignItems: "center" },
   wrap: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   button: {
-    minHeight: 46,
+    ...webTransition,
+    minHeight: 44,
     paddingHorizontal: 18,
-    borderRadius: 13,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -101,8 +79,8 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
   },
-  buttonText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
-  secondaryButtonText: { color: colors.text, fontWeight: "700", fontSize: 14 },
+  buttonText: { fontFamily: fonts.body, color: "#ffffff", fontWeight: "700", fontSize: 14 },
+  secondaryButtonText: { fontFamily: fonts.body, color: colors.text, fontWeight: "700", fontSize: 14 },
   disabled: { opacity: 0.45 },
   error: {
     backgroundColor: colors.surface,
