@@ -59,6 +59,24 @@ class RepositoryIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.repo.create_job(self.owner,{**payload,"prompt":"fish"},{})
 
+    def test_archive_groups_versions_and_filters_without_crossing_owners(self):
+        from datetime import datetime, timezone, timedelta
+        first, latest, foreign = (str(uuid4()) for _ in range(3))
+        self.repo.save_history(self.owner,first,{"chatId":"heart-study","prompt":"Heart study","mode":"anatomy"},self.owner+"/first.png")
+        self.repo.save_history(self.owner,latest,{"chatId":"heart-study","prompt":"Heart study","mode":"anatomy"},self.owner+"/latest.png")
+        self.repo.save_history(self.other,foreign,{"chatId":"heart-study","mode":"sketch"},self.other+"/private.png")
+        self.repo.append_chat_event(self.owner,"heart-study","prompt.test","prompt",{"prompt":"Heart study","mode":"anatomy"})
+        self.repo.append_chat_event(self.other,"heart-study","prompt.test","prompt",{"prompt":"Private drawing","mode":"sketch"})
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("update koji_generations set created_at=now()-interval '1 day' where id=%s",(first,))
+        rows=self.repo.list_chats(self.owner,query="heart",mode="anatomy",since=datetime.now(timezone.utc)-timedelta(days=7))
+        self.assertEqual(len(rows),1)
+        self.assertEqual(str(rows[0]["latest_generation_id"]),latest)
+        self.assertEqual(rows[0]["version_count"],2)
+        self.assertEqual(rows[0]["preview_path"],self.owner+"/latest.png")
+        self.assertEqual(self.repo.list_chats(self.owner,mode="sketch"),[])
+        self.assertEqual(self.repo.list_chats(self.owner,since=datetime.now(timezone.utc)+timedelta(days=1)),[])
+
     def test_owner_cannot_read_another_users_job_or_source_generation(self):
         job=self.repo.create_job(self.owner,self.payload(),{})
         self.assertIsNone(self.repo.get_job(self.other,str(job["id"])))

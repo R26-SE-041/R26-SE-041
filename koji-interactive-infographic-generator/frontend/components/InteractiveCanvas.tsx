@@ -330,8 +330,8 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
             onPress={() => void runAnalysis()}
             style={({ pressed }) => [shared.button, shared.primaryButton, pressed && styles.pressed, (isLoading || (analysisMode === "ask" && !customQuestion.trim())) && shared.disabled]}
           >
-            {isLoading && <ActivityIndicator color="#fff" size="small" style={styles.spinner} />}
-            {!isLoading && <Icon color="#ffffff" name="search" size={17} />}
+            {isLoading && <ActivityIndicator color={colors.onButton} size="small" style={styles.spinner} />}
+            {!isLoading && <Icon color={colors.onButton} name="search" size={17} />}
             <Text style={shared.buttonText}>
               {isLoading
                 ? selectionType === "point" ? "SAM 2 and Qwen2.5-VL analyzing..." : "Qwen2.5-VL analyzing selected region..."
@@ -406,23 +406,23 @@ function ModeButton({ active, icon, label, onPress }: { active: boolean; icon: I
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { gap: 16 },
-  toolbar: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 13, gap: 10 },
+  toolbar: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 13, gap: 10 },
   toolbarModes: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   toolbarLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginRight: 2, alignSelf: "center" },
   toolbarHint: { color: colors.textDim, fontSize: 11 },
   labelToggle: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.cyan, borderRadius: 50, paddingHorizontal: 12, paddingVertical: 7 },
   labelToggleText: { color: colors.cyan, fontSize: 12, fontWeight: "800" },
-  modeButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
-  modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.22)" },
+  modeButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
   modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   modeButtonTextActive: { color: colors.text },
-  canvas: { width: "100%", minHeight: 200, maxHeight: 720, backgroundColor: colors.canvas, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
-  pointMarker: { position: "absolute", width: 32, height: 32, borderRadius: 16, marginLeft: -16, marginTop: -16, backgroundColor: "rgba(139,92,246,0.42)", borderWidth: 3, borderColor: "#fff" },
-  boxMarker: { position: "absolute", borderWidth: 3, borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.15)" },
-  boxDrawing: { borderColor: colors.cyan, borderStyle: "dashed", backgroundColor: "rgba(34,211,238,0.12)" },
+  canvas: { width: "100%", minHeight: 200, maxHeight: 720, backgroundColor: colors.canvas, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  pointMarker: { position: "absolute", width: 32, height: 32, borderRadius: 16, marginLeft: -16, marginTop: -16, backgroundColor: colors.markerFill, borderWidth: 3, borderColor: "#fff" },
+  boxMarker: { position: "absolute", borderWidth: 3, borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
+  boxDrawing: { borderColor: colors.cyan, borderStyle: "dashed", backgroundColor: colors.accentSoft },
   actionPanel: { gap: 14 },
   modeSelector: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  questionInput: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surfaceSoft, color: colors.text, paddingHorizontal: 13, fontSize: 14 },
+  questionInput: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceSoft, color: colors.text, paddingHorizontal: 13, fontSize: 14 },
   pressed: { opacity: 0.76 },
   spinner: { marginRight: 8 },
   errorTitle: { color: colors.danger, fontWeight: "800", marginBottom: 4 },

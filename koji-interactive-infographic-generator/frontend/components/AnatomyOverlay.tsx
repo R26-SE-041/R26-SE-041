@@ -2,6 +2,7 @@ import React from "react";
 import Svg, { Circle, Line, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import { StyleSheet, View } from "react-native";
 import type { AnatomyAnnotation } from "../App";
+import { annotationColors } from "./annotationColors";
 import { annotationGeometry } from "./annotationGeometry";
 
 interface AnatomyOverlayProps {
@@ -43,8 +44,8 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
           const position = index / 6 * SCALE;
           return (
             <React.Fragment key={`grid-line-${index}`}>
-              <Line stroke="#0ea5e9" strokeOpacity={0.18} strokeWidth={1} x1={position} x2={position} y1={0} y2={SCALE} />
-              <Line stroke="#0ea5e9" strokeOpacity={0.18} strokeWidth={1} x1={0} x2={SCALE} y1={position} y2={position} />
+              <Line stroke={annotationColors.grid} strokeOpacity={0.18} strokeWidth={1} x1={position} x2={position} y1={0} y2={SCALE} />
+              <Line stroke={annotationColors.grid} strokeOpacity={0.18} strokeWidth={1} x1={0} x2={SCALE} y1={position} y2={position} />
             </React.Fragment>
           );
         })}
@@ -55,8 +56,8 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
           const y = (row + 0.5) / 6 * SCALE;
           return (
             <React.Fragment key={`grid-prompt-${index}`}>
-              <Circle cx={x} cy={y} fill="#0ea5e9" fillOpacity={0.28} r={7} stroke="#ffffff" strokeWidth={1.5} />
-              <Polygon fill="#0ea5e9" fillOpacity={0.9} points={`${x},${y - 16} ${x - 6},${y - 5} ${x + 6},${y - 5}`} />
+              <Circle cx={x} cy={y} fill={annotationColors.line} fillOpacity={0.28} r={7} stroke={annotationColors.text} strokeWidth={1.5} />
+              <Polygon fill={annotationColors.line} fillOpacity={0.9} points={`${x},${y - 16} ${x - 6},${y - 5} ${x + 6},${y - 5}`} />
             </React.Fragment>
           );
         })}
@@ -82,7 +83,7 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
             <React.Fragment key={item.structure_id}>
               {/* Callout line from anchor dot on organ to center of label box edge */}
               <Line
-                stroke={selected ? "#f59e0b" : "#0891b2"}
+                stroke={selected ? annotationColors.selected : annotationColors.line}
                 strokeWidth={selected ? 4 : 2}
                 strokeDasharray={selected ? undefined : undefined}
                 x1={anchorX}
@@ -90,26 +91,26 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
                 y1={anchorY}
                 y2={lineY2}
               />
-              <Polygon points={geometry.arrow} fill={selected ? "#f59e0b" : "#0891b2"} />
+              <Polygon points={geometry.arrow} fill={selected ? annotationColors.selected : annotationColors.line} />
               {/* Anchor dot over the anatomical structure */}
               <Circle
                 cx={anchorX}
                 cy={anchorY}
-                fill={selected ? "#f59e0b" : "#06b6d4"}
+                fill={selected ? annotationColors.selected : annotationColors.line}
                 r={selected ? 5 : 3}
-                stroke="#ffffff"
+                stroke={annotationColors.text}
                 strokeWidth={selected ? 2.5 : 1.5}
               />
               {/* Small connection dot at label box edge */}
               <Circle
                 cx={lineX2}
                 cy={lineY2}
-                fill={selected ? "#f59e0b" : "#0891b2"}
+                fill={selected ? annotationColors.selected : annotationColors.line}
                 r={selected ? 4 : 3}
               />
               {/* Label background box */}
               <Rect
-                fill={selected ? "#78350f" : "#083344"}
+                fill={selected ? annotationColors.selectedLabel : annotationColors.label}
                 height={LABEL_BOX_HEIGHT}
                 opacity={0.94}
                 rx={8}
@@ -119,7 +120,7 @@ export default function AnatomyOverlay({ annotations, selectedStructureId, showG
               />
               {/* Label text */}
               <SvgText
-                fill="#ffffff"
+                fill={annotationColors.text}
                 fontSize={LABEL_FONT_SIZE}
                 fontWeight="700"
                 x={labelCX + LABEL_PADDING_X}

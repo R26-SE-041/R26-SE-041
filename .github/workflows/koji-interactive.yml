@@ -81,6 +81,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: koji-production
     env:
+      EXPO_PUBLIC_STUDIO_API_URL: ${{ vars.KOJI_STUDIO_API_URL }}
+      EXPO_PUBLIC_STUDIO_PROXY_PATH: ${{ vars.KOJI_STUDIO_PROXY_PATH || '/studio-api' }}
       RENDER_API_KEY: ${{ secrets.KOJI_RENDER_API_KEY }}
       RENDER_API_SERVICE_ID: ${{ vars.KOJI_RENDER_API_SERVICE_ID }}
       RENDER_WORKER_SERVICE_ID: ${{ vars.KOJI_RENDER_WORKER_SERVICE_ID }}

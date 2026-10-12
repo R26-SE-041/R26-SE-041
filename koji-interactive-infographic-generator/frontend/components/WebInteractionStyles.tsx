@@ -7,13 +7,28 @@ export default function WebInteractionStyles({ colors, mode }: { colors: ColorPa
   if (Platform.OS !== "web") return null;
   const controls = ':is(button, [role="button"], [role="tab"], [tabindex="0"]):not(input):not(textarea):not([aria-label="Dismiss account menu"])';
   return React.createElement("style", null, `
-    ${controls} { transition: filter 140ms ease, box-shadow 140ms ease, background-color 140ms ease; -webkit-tap-highlight-color: transparent; }
+    html, body, #root { background-color: ${colors.background}; font-family: Arial, Helvetica, sans-serif; }
+    ::selection { background-color: ${colors.primary}; color: white; }
+    input, textarea { caret-color: ${colors.primaryBright}; transition: border-color 200ms ease; }
+    input:focus-visible, textarea:focus-visible { outline: 2px solid ${colors.primaryBright}; outline-offset: 2px; }
+    ${controls} { transition: border-color 200ms ease, color 200ms ease, background-color 200ms ease, opacity 200ms ease; -webkit-tap-highlight-color: transparent; }
     ${controls}:focus:not(:focus-visible) { outline: none !important; }
     ${controls}:focus-visible { outline: 2px solid ${colors.primaryBright} !important; outline-offset: 3px; }
     svg:focus { outline: none; }
     @media (hover: hover) and (pointer: fine) {
-      ${controls}:not(:disabled):not([aria-disabled="true"]):hover { cursor: pointer; filter: brightness(${mode === "dark" ? "1.16" : ".95"}); box-shadow: inset 0 0 0 1px ${colors.primaryBright}; }
+      ${controls}:not(:disabled):not([aria-disabled="true"]):hover { cursor: pointer; opacity: .86; }
+      [data-theme-button="primary"]:not(:disabled):not([aria-disabled="true"]):hover { background-color: ${colors.buttonHover} !important; opacity: 1; }
+      [data-theme-button="secondary"]:not(:disabled):not([aria-disabled="true"]):hover { background-color: ${colors.buttonBackground} !important; opacity: 1; }
+      [data-theme-button="secondary"]:not(:disabled):not([aria-disabled="true"]):hover > * { color: ${colors.onButton} !important; }
+      [role="tab"]:not([aria-selected="true"]):not([aria-disabled="true"]):hover { background-color: ${colors.surfaceSoft} !important; border-color: ${colors.textDim} !important; opacity: 1; }
     }
-    @media (prefers-reduced-motion: reduce) { ${controls} { transition: none; } }
+    @keyframes studio-word-reveal { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: no-preference) {
+      [data-reveal-word="true"] { display: inline-block; animation: studio-word-reveal 800ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      ${controls}, input, textarea { transition: none; }
+      [data-reveal-word="true"] { animation: none; transform: none; opacity: 1; }
+    }
   `);
 }

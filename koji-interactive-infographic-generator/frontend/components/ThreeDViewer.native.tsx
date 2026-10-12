@@ -100,7 +100,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         <Text style={styles.hint}>Drag to orbit. Model auto-rotates.</Text>
         <Pressable accessibilityLabel="Zoom in" onPress={() => { zoom.current = Math.min(2.5, zoom.current + 0.15); }} style={styles.controlButton}><Icon color={colors.text} name="plus" size={18} /></Pressable>
       </View>
-      <Pressable onPress={download} style={[shared.button, shared.primaryButton]}><Icon color="#ffffff" name="download" size={17} /><Text style={shared.buttonText}>Save or Share GLB</Text></Pressable>
+      <Pressable onPress={download} style={[shared.button, shared.primaryButton]}><Icon color={colors.onButton} name="download" size={17} /><Text style={shared.buttonText}>Save or Share GLB</Text></Pressable>
       {!!loadError && <Text style={styles.error}>{loadError}</Text>}
     </View>
   );
@@ -112,11 +112,11 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
   tag: { color: colors.textDim, fontSize: 10 },
-  canvas: { width: "100%", height: 420, borderRadius: 14, overflow: "hidden", backgroundColor: colors.canvas },
+  canvas: { width: "100%", height: 420, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas },
   canvasFill: { width: "100%", height: "100%" },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16 },
-  controlButton: { width: 38, height: 34, borderRadius: 10, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  controlButton: { width: 38, height: 34, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   hint: { color: colors.textDim, textAlign: "center", fontSize: 11 },
   error: { color: colors.danger, fontSize: 12, textAlign: "center" },
 });

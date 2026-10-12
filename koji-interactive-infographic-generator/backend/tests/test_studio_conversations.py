@@ -18,6 +18,26 @@ class ConversationTests(TestCase):
         return {"id": "question.test", "mode": "ask", "question": "What does this part do?",
                 "interaction": {"type": "point", "coords": [.4, .6]}}
 
+    def test_archive_signs_preview_and_validates_filters(self):
+        app.dependency_overrides[require_user] = lambda: self.owner
+        try:
+            with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+                repo.list_chats.return_value = [{"id": "chat", "preview_path": self.owner+"/thumb.png", "version_count": 2}]
+                storage.return_value.signed_url.return_value = "https://storage.example/signed"
+                client = TestClient(app)
+                response = client.get("/studio/chats?mode=anatomy&query=heart&since=2026-10-01T00:00:00Z")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()[0]["imageUrl"], "https://storage.example/signed")
+                self.assertNotIn("preview_path", response.json()[0])
+                self.assertEqual(repo.list_chats.call_args.args[0], self.owner)
+                self.assertEqual(repo.list_chats.call_args.args[3:5], ("heart", "anatomy"))
+                repo.list_chats.reset_mock()
+                self.assertEqual(client.get("/studio/chats?mode=unknown").status_code, 422)
+                self.assertEqual(client.get("/studio/chats?since=invalid").status_code, 422)
+                repo.list_chats.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
     def test_question_requires_a_source_image_and_valid_coordinates(self):
         with self.assertRaises(ValueError):
             JobRequest(request_id=uuid4(), kind="analysis", analysis=self.analysis())

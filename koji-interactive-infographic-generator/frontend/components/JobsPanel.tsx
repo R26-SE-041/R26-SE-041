@@ -44,7 +44,7 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
   };
   const running = jobs.filter(job => job.status === "queued" || job.status === "running").length;
   const status = loading ? "Checking..." : error ? "Connection unavailable" : running ? running + " in progress" : jobs.length ? jobs.length + " recent" : "No recent activity";
-  return <View style={{ gap: 10, padding: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.surfaceSoft }}>
+  return <View style={{ gap: 10, padding: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceSoft }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Toggle background activity" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)}
       style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 32 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}><Icon name="activity" color={colors.primaryBright} /><Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>Activity</Text></View>

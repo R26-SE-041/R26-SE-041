@@ -11,7 +11,7 @@ import { configureModelRenderer } from "./configureModelRenderer";
 
 interface Props { glbBase64: string; sizeKb?: number }
 
-function Model({ url }: { url: string }) {
+function Model({ url, rotate }: { url: string; rotate: boolean }) {
   const gltf = useLoader(GLTFLoader, url);
   const group = useRef<THREE.Group>(null);
   useEffect(() => {
@@ -22,12 +22,13 @@ function Model({ url }: { url: string }) {
     gltf.scene.scale.setScalar(scale);
     gltf.scene.position.sub(center.multiplyScalar(scale));
   }, [gltf]);
-  useFrame((_, delta) => { if (group.current) group.current.rotation.y += delta * 0.25; });
+  useFrame((_, delta) => { if (rotate && group.current) group.current.rotation.y += delta * 0.25; });
   return <group ref={group}><primitive object={gltf.scene} /></group>;
 }
 
 function Fallback() {
-  return <mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#8b5cf6" wireframe /></mesh>;
+  const { colors } = useAppTheme();
+  return <mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color={colors.primary} wireframe /></mesh>;
 }
 
 export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
@@ -35,6 +36,13 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const shared = React.useMemo(() => makeSharedStyles(colors), [colors]);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(preference.matches);
+    preference.addEventListener("change", update);
+    return () => preference.removeEventListener("change", update);
+  }, []);
   useEffect(() => {
     const binary = atob(glbBase64);
     const bytes = new Uint8Array(binary.length);
@@ -58,7 +66,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="cube" size={16} /><Text style={styles.badge}>3D Model - Hunyuan3D-2</Text></View>
         <View style={styles.headerActions}>
           {!!sizeKb && <Text style={styles.tag}>{sizeKb} KB GLB</Text>}
-          <Pressable onPress={download} style={styles.download}><Icon color="#ffffff" name="download" size={15} /><Text style={styles.downloadText}>Download</Text></Pressable>
+          <Pressable onPress={download} style={styles.download}><Icon color={colors.onButton} name="download" size={15} /><Text style={styles.downloadText}>Download</Text></Pressable>
         </View>
       </View>
       <View style={styles.canvas}>
@@ -67,12 +75,12 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         ) : (
           <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)} style={styles.canvasFill}>
             <ModelLighting />
-            <Suspense fallback={<Fallback />}><Model url={objectUrl} /></Suspense>
+            <Suspense fallback={<Fallback />}><Model url={objectUrl} rotate={!reducedMotion} /></Suspense>
             <OrbitControls enablePan={false} minDistance={1.5} maxDistance={8} />
           </Canvas>
         )}
       </View>
-      <Text style={styles.hint}>Drag to orbit. Scroll to zoom. Model auto-rotates.</Text>
+      <Text style={styles.hint}>Drag to orbit. Scroll to zoom.{!reducedMotion && " Model auto-rotates."}</Text>
     </View>
   );
 }
@@ -84,9 +92,9 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
   tag: { color: colors.textDim, fontSize: 10 },
-  download: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
-  downloadText: { color: "white", fontSize: 11, fontWeight: "800" },
-  canvas: { width: "100%", height: 480, borderRadius: 14, overflow: "hidden", backgroundColor: colors.canvas },
+  download: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 },
+  downloadText: { color: colors.onButton, fontSize: 11, fontWeight: "800" },
+  canvas: { width: "100%", height: 480, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas },
   canvasFill: { width: "100%", height: "100%" },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   hint: { color: colors.textDim, textAlign: "center", fontSize: 11 },

@@ -72,33 +72,40 @@ export default function PersonalMemoryPanel({ accessToken, apiUrl }: Props) {
   };
 
   const revoke = async (id: string) => {
-    const response = await fetch(`${apiUrl}/memory/preferences/${encodeURIComponent(id)}/revoke`, { method: "POST", headers });
-    if (response.ok) setPreferences((current) => current.map((item) => item.id === id ? { ...item, status: "revoked" } : item));
-    else setError("Preference could not be revoked");
+    setLoading(true); setError(null);
+    try {
+      const response = await fetch(`${apiUrl}/memory/preferences/${encodeURIComponent(id)}/revoke`, { method: "POST", headers });
+      if (!response.ok) throw new Error("Preference could not be forgotten. Please retry.");
+      setPreferences((current) => current.map((item) => item.id === id ? { ...item, status: "revoked" } : item));
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to reach your learning preferences."); }
+    finally { setLoading(false); }
   };
 
   const clear = async () => {
     if (!confirmClear) { setConfirmClear(true); return; }
     setLoading(true);
-    const response = await fetch(`${apiUrl}/memory/clear`, { method: "POST", headers });
-    if (response.ok) { setPreferences([]); setConfirmClear(false); }
-    else setError("Personal memory could not be cleared");
-    setLoading(false);
+    setError(null);
+    try {
+      const response = await fetch(`${apiUrl}/memory/clear`, { method: "POST", headers });
+      if (!response.ok) throw new Error("Learning preferences could not be cleared. Please retry.");
+      setPreferences([]); setConfirmClear(false);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to reach your learning preferences."); }
+    finally { setLoading(false); }
   };
 
   return (
     <View style={[shared.card, styles.container]}>
       <View style={styles.header}>
-        <View style={styles.titleRow}><Icon color={colors.primaryBright} name="layers" size={18} /><Text style={styles.title}>Personal memory</Text></View>
-        <Pressable disabled={loading} onPress={updateEnabled} style={[styles.toggle, enabled && styles.toggleEnabled]}>
+        <View style={styles.titleRow}><Icon color={colors.primaryBright} name="layers" size={18} /><Text style={styles.title}>Learning preferences</Text></View>
+        <Pressable accessibilityRole="switch" accessibilityLabel="Remember learning preferences" accessibilityState={{ checked: enabled, disabled: loading }} disabled={loading} onPress={updateEnabled} style={[styles.toggle, enabled && styles.toggleEnabled]}>
           {loading && <ActivityIndicator color={colors.text} size="small" />}
           <Text style={styles.toggleText}>{enabled ? "Enabled" : "Disabled"}</Text>
         </Pressable>
       </View>
-      <Text style={styles.description}>Opt-in memory activates a preference only after three accepted corrections. It never overrides safety rules.</Text>
+      <Text style={styles.description}>With your permission, learn from repeated feedback to tailor future anatomy visuals. You can review and forget preferences at any time.</Text>
       {error && <Text style={styles.error}>{error}</Text>}
-      <Pressable onPress={() => setExpanded((value) => !value)} style={styles.linkButton}>
-        <Text style={styles.linkText}>{expanded ? "Hide remembered preferences" : `Review remembered preferences (${preferences.length})`}</Text>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded((value) => !value)} style={styles.linkButton}>
+        <Text style={styles.linkText}>{expanded ? "Hide preferences" : `Review preferences (${preferences.filter(item => item.status !== "revoked").length})`}</Text>
       </Pressable>
       {expanded && (
         <View style={styles.list}>
@@ -106,16 +113,15 @@ export default function PersonalMemoryPanel({ accessToken, apiUrl }: Props) {
           {preferences.map((preference) => (
             <View key={preference.id} style={styles.preference}>
               <View style={styles.preferenceContent}>
-                <Text style={styles.agent}>{preference.agent_name.replace("-agent", "")}</Text>
                 <Text style={[styles.preferenceText, preference.status === "revoked" && styles.revoked]}>{preference.content}</Text>
-                <Text style={styles.meta}>{preference.status} · {preference.evidence_count} evidences · {Math.round(preference.confidence * 100)}% confidence</Text>
+                <Text style={styles.meta}>{preference.status === "active" ? "Remembered" : preference.status === "revoked" ? "Forgotten" : "Learning from your feedback"}</Text>
               </View>
-              {preference.status !== "revoked" && <Pressable onPress={() => void revoke(preference.id)} style={styles.revoke}><Text style={styles.revokeText}>Forget</Text></Pressable>}
+              {preference.status !== "revoked" && <Pressable accessibilityRole="button" disabled={loading} onPress={() => void revoke(preference.id)} style={styles.revoke}><Text style={styles.revokeText}>Forget</Text></Pressable>}
             </View>
           ))}
           {preferences.length > 0 && (
-            <Pressable onPress={() => void clear()} style={styles.clear}>
-              <Text style={styles.clearText}>{confirmClear ? "Press again to permanently clear" : "Clear all personal memory"}</Text>
+            <Pressable accessibilityRole="button" disabled={loading} onPress={() => void clear()} style={styles.clear}>
+              <Text style={styles.clearText}>{confirmClear ? "Confirm: forget all preferences" : "Forget all preferences"}</Text>
             </Pressable>
           )}
         </View>
@@ -126,23 +132,23 @@ export default function PersonalMemoryPanel({ accessToken, apiUrl }: Props) {
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { gap: 12 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { color: colors.text, fontWeight: "900", fontSize: 15 },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
+  toggle: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   toggleEnabled: { borderColor: colors.success },
   toggleText: { color: colors.text, fontSize: 12, fontWeight: "800" },
   description: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
   linkButton: { alignSelf: "flex-start", paddingVertical: 4 },
   linkText: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
   list: { gap: 9 },
-  preference: { flexDirection: "row", gap: 10, alignItems: "center", backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12 },
+  preference: { flexDirection: "row", gap: 10, alignItems: "center", backgroundColor: colors.surfaceSoft, borderRadius: 8, padding: 12 },
   preferenceContent: { flex: 1, gap: 4 },
   agent: { color: colors.primaryBright, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   preferenceText: { color: colors.text, fontSize: 12, lineHeight: 18 },
   revoked: { color: colors.textDim, textDecorationLine: "line-through" },
   meta: { color: colors.textDim, fontSize: 10 },
-  revoke: { borderWidth: 1, borderColor: colors.danger, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
+  revoke: { borderWidth: 1, borderColor: colors.danger, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   revokeText: { color: colors.danger, fontSize: 11, fontWeight: "800" },
   clear: { alignSelf: "flex-start", paddingVertical: 8 },
   clearText: { color: colors.danger, fontSize: 11, fontWeight: "800" },

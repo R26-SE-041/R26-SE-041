@@ -28,17 +28,17 @@ export default function ImageDownloadControls({ annotations, imageBase64, organ 
 
   return (
     <View style={styles.row}>
-      <Pressable onPress={downloadImage} style={styles.button}><Icon color="#fff" name="download" size={15} /><Text style={styles.text}>Image only (PNG)</Text></Pressable>
-      <Pressable disabled={!annotations.length} onPress={downloadLabeled} style={[styles.button, styles.secondary, !annotations.length && styles.disabled]}><Icon color={colors.primaryBright} name="download" size={15} /><Text style={[styles.text, styles.secondaryText]}>Image + SVG labels</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={downloadImage} style={styles.button}><Icon color={colors.onButton} name="download" size={15} /><Text style={styles.text}>Image only (PNG)</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityState={{ disabled: !annotations.length }} disabled={!annotations.length} onPress={downloadLabeled} style={[styles.button, styles.secondary, !annotations.length && styles.disabled]}><Icon color={colors.primaryBright} name="download" size={15} /><Text style={[styles.text, styles.secondaryText]}>Image + SVG labels</Text></Pressable>
     </View>
   );
 }
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  button: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9 },
+  button: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 13, paddingVertical: 9 },
   secondary: { backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.primaryBright },
-  text: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  text: { color: colors.onButton, fontSize: 12, fontWeight: "800" },
   secondaryText: { color: colors.primaryBright },
   disabled: { opacity: 0.45 },
 });

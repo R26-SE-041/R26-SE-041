@@ -149,7 +149,7 @@ export default function FeedbackControls(props: FeedbackControlsProps) {
           {error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.submitRow}>
             <Pressable disabled={status === "saving"} onPress={() => submit(false)} style={[styles.submit, rating === -1 && props.onRegenerate && styles.submitSecondary, status === "saving" && styles.disabled]}>
-              {status === "saving" && <ActivityIndicator color={rating === -1 && props.onRegenerate ? colors.text : "#fff"} size="small" />}
+              {status === "saving" && <ActivityIndicator color={rating === -1 && props.onRegenerate ? colors.text : colors.onButton} size="small" />}
               <Text style={[styles.submitText, rating === -1 && props.onRegenerate && styles.submitSecondaryText]}>Submit</Text>
             </Pressable>
             {rating === -1 && props.onRegenerate && (
@@ -168,22 +168,22 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { marginTop: 14, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
   question: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
   row: { flexDirection: "row", gap: 8 },
-  ratingButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  ratingButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
   likeActive: { borderColor: colors.success },
   dislikeActive: { borderColor: colors.danger },
   buttonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
-  panel: { gap: 10, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12 },
+  panel: { gap: 10, backgroundColor: colors.surfaceSoft, borderRadius: 8, padding: 12 },
   panelLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
   reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  reason: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
-  reasonActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(139,92,246,0.18)" },
+  reason: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
+  reasonActive: { borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
   reasonText: { color: colors.textDim, fontSize: 11 },
   reasonTextActive: { color: colors.text },
-  comment: { minHeight: 54, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 12 },
-  submit: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  comment: { minHeight: 54, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, fontSize: 12 },
+  submit: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
   submitRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   submitSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBright },
-  submitText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  submitText: { color: colors.onButton, fontWeight: "800", fontSize: 12 },
   submitSecondaryText: { color: colors.text },
   error: { color: colors.danger, fontSize: 11 },
   disabled: { opacity: 0.55 },

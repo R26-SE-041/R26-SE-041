@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
 import type { useStudioSession } from "../studioAuth";
 import Icon from "./Icon";
+import EditorialHeadline from "./EditorialHeadline";
 import { authErrorCode } from "../authActions";
-import { useAppTheme } from "../theme";
+import { displayFont, headingFont, useAppTheme } from "../theme";
 
 type Mode = "signin" | "signup" | "forgot" | "verify" | "password";
 const paths: Record<Mode, string> = { signin: "/signin", signup: "/signup", forgot: "/forgot-password", verify: "/verify-email", password: "/reset-password" };
@@ -90,7 +91,7 @@ export default function AuthScreen({ session }: Props) {
     password: ["Choose a new password.", "Set a new password for your account."],
   } as const;
   const label = { color: colors.text, fontSize: 13, fontWeight: "600" as const, marginBottom: 7 };
-  const input = { color: colors.text, backgroundColor: colors.surfaceSoft, borderColor: colors.textDim, borderWidth: 1, borderRadius: 12, minHeight: 50, paddingHorizontal: 14, fontSize: 15 };
+  const input = { color: colors.text, backgroundColor: colors.surfaceSoft, borderColor: colors.textDim, borderWidth: 1, borderRadius: 8, minHeight: 50, paddingHorizontal: 14, fontSize: 15 };
   const link = { color: colors.primaryBright, fontWeight: "600" as const, fontSize: 13 };
   const button = { padding: 12, minHeight: 44, justifyContent: "center" as const };
   const passwordInput = (confirm = false) => <View style={{ marginTop: 18 }}>
@@ -113,31 +114,31 @@ export default function AuthScreen({ session }: Props) {
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, padding: wide ? 48 : 22 }} keyboardShouldPersistTaps="handled">
       <View style={{ width: "100%", maxWidth: 1240, alignSelf: "center", flex: 1 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: wide ? 64 : 30 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: wide ? 64 : 30 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={{ backgroundColor: colors.primary, borderRadius: 12, width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#fff", fontWeight: "800", fontSize: 22 }}>L</Text></View>
-            <Text style={{ color: colors.text, fontWeight: "800", fontSize: 23 }}>learnX</Text>
+            <View style={{ backgroundColor: colors.text, borderRadius: 4, width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.onBrand, fontWeight: "800", fontSize: 22 }}>L</Text></View>
+            <Text style={{ color: colors.text, fontWeight: "700", fontSize: 24, letterSpacing: -0.8 }}>learnX</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={theme === "light" ? "Switch to dark mode" : "Switch to light mode"} onPress={toggleTheme} style={[button, { width: 44, alignItems: "center" }]}><Icon name={theme === "light" ? "moon" : "sun"} color={colors.textMuted} size={21} /></Pressable>
         </View>
         <View style={{ flexDirection: wide ? "row" : "column", gap: wide ? 80 : 28, alignItems: wide ? "center" : "stretch", flex: 1, paddingBottom: 40 }}>
-          <View style={{ flex: 1, gap: 20 }}>
+          <View nativeID="auth-hero" style={{ flex: 1, gap: 20 }}>
             <Text style={{ color: colors.primaryBright, letterSpacing: 2.5, fontSize: 11, fontWeight: "700" }}>YOUR VISUAL LEARNING STUDIO</Text>
-            <Text style={{ color: colors.text, fontSize: wide ? 62 : 36, lineHeight: wide ? 68 : 42, fontWeight: "800", maxWidth: 550 }}>An idea. A drawing.{"\n"}A whole new perspective.</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 17, lineHeight: 27, maxWidth: 450 }}>Bring your ideas to life, explore the details, and pick up exactly where you left off.</Text>
+            <EditorialHeadline accessibilityRole="header" style={{ color: colors.text, fontFamily: displayFont, fontSize: wide ? 64 : 40, lineHeight: wide ? 72 : 48, letterSpacing: -1.2, fontWeight: "700", maxWidth: 550 }}>{"An idea. A drawing.\nA whole new perspective."}</EditorialHeadline>
+            <Text style={{ color: colors.textMuted, fontFamily: headingFont, fontSize: 20, lineHeight: 28, maxWidth: 450 }}>Bring your ideas to life, explore the details, and pick up exactly where you left off.</Text>
             {wide && <View style={{ gap: 12, marginTop: 18 }}>
               {[
                 ["01", "Create", "Turn a prompt or sketch into a visual."],
                 ["02", "Explore", "Ask questions, edit labels, and discover in 3D."],
                 ["03", "Continue", "Your images and conversations, saved together."],
-              ].map(([number, title, body]) => <View key={number} style={{ flexDirection: "row", gap: 16, padding: 18, backgroundColor: colors.surface, borderRadius: 18, maxWidth: 450 }}>
+              ].map(([number, title, body]) => <View key={number} style={{ flexDirection: "row", gap: 16, paddingVertical: 18, borderTopWidth: 1, borderTopColor: colors.border, maxWidth: 450 }}>
                 <Text style={{ color: colors.primaryBright, fontSize: 14, fontWeight: "700", paddingTop: 2 }}>{number}</Text>
                 <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 16, fontWeight: "700" }}>{title}</Text><Text style={{ color: colors.textMuted, lineHeight: 21, marginTop: 3 }}>{body}</Text></View>
               </View>)}
             </View>}
           </View>
-          <View style={{ width: wide ? 440 : "100%", maxWidth: 520, alignSelf: wide ? "center" : "stretch", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 28, padding: wide ? 32 : 24 }}>
-            <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 29, fontWeight: "800", lineHeight: 35 }}>{headings[mode][0]}</Text>
+          <View style={{ width: wide ? 440 : "100%", maxWidth: 520, alignSelf: wide ? "center" : "stretch", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: wide ? 36 : 24 }}>
+            <Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 32, fontWeight: "400", lineHeight: 40 }}>{headings[mode][0]}</Text>
             <Text style={{ color: colors.textMuted, lineHeight: 22, marginTop: 10, marginBottom: 24 }}>{headings[mode][1]}</Text>
             {session.loading && <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 12 }}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Checking your session…</Text></View>}
             {!session.configured && <Text accessibilityRole="alert" style={{ color: colors.danger }}>Account services are unavailable. Please contact the project administrator.</Text>}
@@ -152,10 +153,10 @@ export default function AuthScreen({ session }: Props) {
               {(mode === "signup" || mode === "password") && passwordInput(true)}
               {mode === "signup" && <Text style={{ color: colors.textDim, fontSize: 12, lineHeight: 18, marginTop: 10 }}>Use at least 8 characters. We'll send an email to verify your account.</Text>}
               {mode === "signin" && <Pressable accessibilityRole="button" disabled={busy} onPress={() => switchMode("forgot")} style={[button, { alignSelf: "flex-end" }]}><Text style={link}>Forgot password?</Text></Pressable>}
-              <Pressable accessibilityRole="button" accessibilityLabel={mode === "signin" ? "Sign in to studio" : mode === "signup" ? "Create your account" : mode === "forgot" ? "Send reset link" : "Save new password"}
+              <Pressable {...(Platform.OS === "web" ? { dataSet: { themeButton: "primary" } } : {})} accessibilityRole="button" accessibilityLabel={mode === "signin" ? "Sign in to studio" : mode === "signup" ? "Create your account" : mode === "forgot" ? "Send reset link" : "Save new password"}
                 accessibilityState={{ disabled, busy }} disabled={disabled} onPress={() => void submit()}
-                style={{ backgroundColor: colors.primary, minHeight: 52, borderRadius: 12, marginTop: 22, padding: 14, alignItems: "center", justifyContent: "center", opacity: disabled ? .6 : 1 }}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>{mode === "signin" ? "Sign in to studio" : mode === "signup" ? "Create your account" : mode === "forgot" ? "Send reset link" : "Save new password"}</Text>}
+                style={{ backgroundColor: colors.buttonBackground, minHeight: 52, borderRadius: 8, marginTop: 22, padding: 14, alignItems: "center", justifyContent: "center", opacity: disabled ? .6 : 1 }}>
+                {busy ? <ActivityIndicator color={colors.onButton} /> : <Text style={{ color: colors.onButton, fontWeight: "700", fontSize: 15 }}>{mode === "signin" ? "Sign in to studio" : mode === "signup" ? "Create your account" : mode === "forgot" ? "Send reset link" : "Save new password"}</Text>}
               </Pressable>
             </>}
             {(error || session.error) && <Text accessibilityRole="alert" style={{ color: colors.danger, lineHeight: 22, marginTop: 16 }}>{error || session.error}</Text>}

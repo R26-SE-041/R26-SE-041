@@ -2,10 +2,12 @@ import { cloudEnabled, configureStudio, studioOwner, runJob, waitJob, getCloudHi
 import { useStudioSession } from "./studioAuth";
 import StudioSessionPanel from "./components/StudioSessionPanel";
 import AuthScreen from "./components/AuthScreen";
+import EditorialHeadline from "./components/EditorialHeadline";
 import JobsPanel from "./components/JobsPanel";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,12 +24,12 @@ import SketchCanvas from "./components/SketchCanvas";
 import { SketchStroke, SketchGenerationMetadata } from "./historyStorage";
 import InteractiveCanvas from "./components/InteractiveCanvas";
 import FeedbackControls, { createOutputId, FeedbackReason } from "./components/FeedbackControls";
-import PersonalMemoryPanel from "./components/PersonalMemoryPanel";
+import StudioSettings from "./components/StudioSettings";
 import ThreeDViewer from "./components/ThreeDViewer";
 import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
 import { appendHistoryInteraction, GenerationHistoryItem, GenerationInteraction, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
-import { ColorPalette, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
+import { ColorPalette, displayFont, headingFont, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
 import {
   STUDIO_API_URL,
   PROMPT_AGENT_URL,
@@ -207,10 +209,19 @@ const SPEED_MODES: Array<{
   imageGpu: string;
   interactiveGpu: string;
 }> = [
-  { id: "normal", label: "Normal", icon: "bolt", desc: "A10G / A10G / A10G", promptGpu: "A10G", imageGpu: "A10G", interactiveGpu: "A10G" },
-  { id: "pro", label: "Pro", icon: "rocket", desc: "A10G / A100 / A100", promptGpu: "A10G", imageGpu: "A100", interactiveGpu: "A100" },
-  { id: "promax", label: "Pro Max", icon: "layers", desc: "A10G / H100 / H100", promptGpu: "A10G", imageGpu: "H100", interactiveGpu: "H100" },
+  { id: "normal", label: "Standard", icon: "bolt", desc: "Everyday generation", promptGpu: "A10G", imageGpu: "A10G", interactiveGpu: "A10G" },
+  { id: "pro", label: "Fast", icon: "rocket", desc: "Higher GPU capacity", promptGpu: "A10G", imageGpu: "A100", interactiveGpu: "A100" },
 ];
+
+function friendlyPhase(phase: string, fallback: string): string {
+  const labels: Record<string, string> = {
+    queued: "Waiting for a generation worker…", enhancing: "Preparing your instruction…",
+    generating: "Creating your image…", evaluating: "Checking image quality…",
+    labeling: "Finding and labeling structures…", analyzing: "Exploring your selected region…",
+    converting: "Creating your 3D model…", saving: "Saving your creation…",
+  };
+  return phase.startsWith("retrying") ? "Refining the image after its quality check…" : labels[phase] || fallback;
+}
 
 function formatDuration(milliseconds: number): string {
   if (milliseconds < 1_000) return `${Math.max(1, Math.round(milliseconds))} ms`;
@@ -277,10 +288,14 @@ export default function App({ accessToken }: AppProps) {
 
 function Home({ accessToken, studioSession }: AppProps) {
   const screenWidth = useWindowDimensions().width;
-  const workspaceGridStyle = Platform.OS === "web" ? { display: "grid", gridTemplateColumns: screenWidth >= 1000 ? "repeat(4, minmax(0, 1fr))" : screenWidth >= 560 ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)" } as any : undefined;
+  const workspaceGridStyle = Platform.OS === "web" ? { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" } as any : undefined;
   const { colors, mode: themeMode, toggleTheme } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const [jobPhase, setJobPhase] = useState<string | null>(null);
   const [labelBusy, setLabelBusy] = useState(false);
   const visibleImage = useRef<string | null>(null);
@@ -337,6 +352,14 @@ function Home({ accessToken, studioSession }: AppProps) {
     glbSizeKb?: number; threedStage: ThreeDStage; historyId: string | null; chatId: string | null;
   }>>>({});
 
+  useEffect(() => { setStartedAt(stage === "enhancing" || stage === "generating" ? Date.now() : null); }, [stage]);
+  const unsavedDraft = !currentHistoryId && Boolean(prompt.trim() || sketchStrokes.length);
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined" || !unsavedDraft) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsavedDraft]);
   const isLoading = stage === "enhancing" || stage === "generating" || threedStage === "converting";
   // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
   // must not incorrectly mark a healthy 3D service as offline.
@@ -534,7 +557,7 @@ function Home({ accessToken, studioSession }: AppProps) {
     }
     setSketchStrokes(item.sketchStrokes ?? []); setSketchMetadata(item.sketchMetadata);
     setSketchStrength(item.sketchStrength ?? item.sketchMetadata?.control_strength ?? 0.85);
-    setSpeedMode(item.speedMode);
+    setSpeedMode(item.speedMode === "promax" ? "pro" : item.speedMode);
     setEnhancedPrompt(item.enhancedPrompt);
     setEnhancedPromptJson((item.enhancedPayload as EnhancedPromptPayload) ?? (item.mode === "anatomy" ? {
       schema_version: "1.0", final_prompt: item.enhancedPrompt, anatomy_spec: restoredAnatomy,
@@ -1201,25 +1224,29 @@ function Home({ accessToken, studioSession }: AppProps) {
   };
 
   const loadingLabel = stage === "enhancing"
-    ? `Enhancing with Qwen3.5-9B on ${speed.promptGpu}...`
-    : workspace === "sketch" ? "Generating from your drawing with SDXL + Xinsir Scribble on A10G..." : workspace === "general"
-      ? `Sending your raw prompt directly to FLUX.1-dev on ${speed.imageGpu}...`
-      : `Generating, evaluating, and retrying when needed on ${speed.imageGpu}...`;
+    ? "Preparing your anatomy instruction…"
+    : workspace === "sketch" ? "Turning your drawing into an image…" : workspace === "general"
+      ? "Creating your educational image…"
+      : "Creating and checking your anatomy image…";
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StudioSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
-      <View pointerEvents="none" style={styles.ambientTop} />
-      <View pointerEvents="none" style={styles.ambientBottom} />
       {workspace !== "history" && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Start a new chat"
           disabled={isLoading}
-          onPress={() => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey((value) => value + 1); }}
+          onPress={() => {
+            const clear = () => { reset(); setPrompt(""); setSketchStrokes([]); setSketchMetadata(undefined); setSketchCanvasKey(value => value + 1); };
+            if (!unsavedDraft) { clear(); return; }
+            if (Platform.OS === "web") { if (window.confirm("Discard this unsaved prompt or drawing and start again?")) clear(); }
+            else Alert.alert("Start again?", "Your unsaved prompt or drawing will be discarded.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: clear }]);
+          }}
           style={({ pressed }) => [styles.floatingNewPrompt, pressed && styles.pressed, isLoading && shared.disabled]}
         >
-          <Icon color="#fff" name="wand" size={24} />
+          <Icon color={colors.onButton} name="wand" size={24} />
         </Pressable>
       )}
       <KeyboardAvoidingView
@@ -1231,7 +1258,7 @@ function Home({ accessToken, studioSession }: AppProps) {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
-            <View style={styles.header}>
+            <View style={[styles.header, screenWidth < 600 && { gap: 20 }]}>
               <View style={styles.topBar}>
                 <View style={styles.brandRow}>
                   <View style={styles.brandMark}><Text style={styles.brandMarkText}>L</Text></View>
@@ -1246,51 +1273,52 @@ function Home({ accessToken, studioSession }: AppProps) {
                 >
                   <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={20} />
                 </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Studio settings" onPress={() => setSettingsOpen(true)} style={styles.themeToggle}><Icon name="help" color={colors.text} size={20} /></Pressable>
                 {STUDIO_API_URL && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} />}
                 </View>
               </View>
-              <View style={styles.heroGrid}>
+              <View nativeID="studio-hero" style={[styles.heroGrid, screenWidth < 600 && { gap: 16, paddingBottom: 8 }]}>
                 <View style={styles.heroCopy}>
                   <Text style={styles.eyebrow}>A VISUAL LEARNING STUDIO</Text>
-                  <Text style={styles.title}>Make ideas <Text style={styles.titleAccent}>visible.</Text></Text>
-                  <Text style={styles.subtitle}>
+                  <EditorialHeadline accessibilityRole="header" style={[styles.title, screenWidth < 600 && styles.titleCompact]}>Make ideas visible.</EditorialHeadline>
+                  <Text style={[styles.subtitle, screenWidth < 600 && { fontSize: 16, lineHeight: 23, marginTop: 10 }]}>
                     Create thoughtful educational imagery, explore human anatomy, and turn flat visuals into interactive learning experiences.
                   </Text>
                 </View>
-                <View style={styles.systemGlass}>
-                  <View style={styles.systemHeader}>
+                <View style={[styles.systemCard, screenWidth < 600 && { padding: 12 }]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Toggle service details" accessibilityState={{ expanded: statusOpen }} onPress={() => setStatusOpen(!statusOpen)} style={[styles.systemHeader, !statusOpen && { marginBottom: 0 }]}>
                     <View><Text style={styles.systemKicker}>STUDIO STATUS</Text><Text style={styles.systemTitle}>Creative engine</Text></View>
-                    <View style={styles.liveBadge}><StatusDot color={colors.success} /><Text style={styles.liveBadgeText}>Live</Text></View>
-                  </View>
-                  <View style={[shared.wrap, styles.healthWrap]}>
+                    <View style={styles.liveBadge}><StatusDot color={backendHealth === "ok" ? colors.success : backendHealth === "error" ? colors.danger : colors.textDim} /><Text style={styles.liveBadgeText}>{backendHealth === "ok" ? "Connected" : backendHealth === "checking" ? "Checking" : "Unavailable"}</Text></View>
+                  </Pressable>
+                  {statusOpen && <><View style={[shared.wrap, styles.healthWrap]}>
                     <HealthPill label="Prompt" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
                     <HealthPill label="Image" now={now} status={imageHealth} warmUntil={warmUntil.image} />
                     <HealthPill label="Eval" now={now} status={evalHealth} warmUntil={warmUntil.eval} />
                     <HealthPill label="Interact" now={now} status={interactiveHealth} warmUntil={warmUntil.interactive} />
                     <HealthPill label="3D" now={now} status={displayedThreeDHealth} warmUntil={warmUntil.threed} />
                   </View>
-                  <Text style={styles.warmNote}>Warm-state estimates update after successful studio activity.</Text>
+                  <Text style={styles.warmNote}>Services may need time to warm up after inactivity.</Text></>}
                 </View>
               </View>
             </View>
 
             <View accessibilityRole="tablist" style={[styles.workspaceTabs, workspaceGridStyle]}>
               <Pressable accessibilityRole="tab" accessibilityState={{ selected: workspace === "sketch", disabled: isLoading }} disabled={isLoading}
-                onPress={() => selectWorkspace("sketch")} style={[styles.workspaceTab, workspace === "sketch" && styles.workspaceTabActive]}>
+                onPress={() => selectWorkspace("sketch")} style={[styles.workspaceTab, screenWidth < 600 && { padding: 8, minHeight: 66, flexDirection: "column", gap: 6 }, workspace === "sketch" && styles.workspaceTabActive]}>
                 <Icon name="pencil" color={workspace === "sketch" ? colors.primaryBright : colors.textMuted} size={20} />
-                <View style={styles.workspaceTabCopy}><Text style={[styles.workspaceTabTitle, workspace === "sketch" && styles.workspaceTabTitleActive]}>Draw to Image</Text><Text style={styles.workspaceTabDescription}>Sketch + optional instruction</Text></View>
+                <View style={[styles.workspaceTabCopy, screenWidth < 600 && { alignItems: "center" }]}><Text style={[styles.workspaceTabTitle, screenWidth < 600 && { fontSize: 11, textAlign: "center" }, workspace === "sketch" && styles.workspaceTabTitleActive]}>{screenWidth < 600 ? "Draw" : "Draw to Image"}</Text><Text style={[styles.workspaceTabDescription, screenWidth < 600 && { display: "none" }]}>Sketch + optional instruction</Text></View>
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
                 accessibilityState={{ selected: workspace === "general", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("general")}
-                style={({ pressed }) => [styles.workspaceTab, workspace === "general" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+                style={({ pressed }) => [styles.workspaceTab, screenWidth < 600 && { padding: 8, minHeight: 66, flexDirection: "column", gap: 6 }, workspace === "general" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
               >
                 <Icon color={workspace === "general" ? colors.primaryBright : colors.textMuted} name="image" size={20} />
-                <View style={styles.workspaceTabCopy}>
-                  <Text style={[styles.workspaceTabTitle, workspace === "general" && styles.workspaceTabTitleActive]}>Image Generation</Text>
-                  <Text style={styles.workspaceTabDescription}>General educational visuals and diagrams</Text>
+                <View style={[styles.workspaceTabCopy, screenWidth < 600 && { alignItems: "center" }]}>
+                  <Text style={[styles.workspaceTabTitle, screenWidth < 600 && { fontSize: 11, textAlign: "center" }, workspace === "general" && styles.workspaceTabTitleActive]}>{screenWidth < 600 ? "Image" : "Image Generation"}</Text>
+                  <Text style={[styles.workspaceTabDescription, screenWidth < 600 && { display: "none" }]}>General educational visuals and diagrams</Text>
                 </View>
               </Pressable>
               <Pressable
@@ -1298,12 +1326,12 @@ function Home({ accessToken, studioSession }: AppProps) {
                 accessibilityState={{ selected: workspace === "anatomy", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("anatomy")}
-                style={({ pressed }) => [styles.workspaceTab, workspace === "anatomy" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+                style={({ pressed }) => [styles.workspaceTab, screenWidth < 600 && { padding: 8, minHeight: 66, flexDirection: "column", gap: 6 }, workspace === "anatomy" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
               >
                 <Icon color={workspace === "anatomy" ? colors.primaryBright : colors.textMuted} name="heart" size={20} />
-                <View style={styles.workspaceTabCopy}>
-                  <Text style={[styles.workspaceTabTitle, workspace === "anatomy" && styles.workspaceTabTitleActive]}>Human Anatomy Generation</Text>
-                  <Text style={styles.workspaceTabDescription}>Validated organs, views, labels, and 3D</Text>
+                <View style={[styles.workspaceTabCopy, screenWidth < 600 && { alignItems: "center" }]}>
+                  <Text style={[styles.workspaceTabTitle, screenWidth < 600 && { fontSize: 11, textAlign: "center" }, workspace === "anatomy" && styles.workspaceTabTitleActive]}>{screenWidth < 600 ? "Anatomy" : "Human Anatomy Generation"}</Text>
+                  <Text style={[styles.workspaceTabDescription, screenWidth < 600 && { display: "none" }]}>Validated organs, views, labels, and 3D</Text>
                 </View>
               </Pressable>
               <Pressable
@@ -1311,55 +1339,18 @@ function Home({ accessToken, studioSession }: AppProps) {
                 accessibilityState={{ selected: workspace === "history", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("history")}
-                style={({ pressed }) => [styles.workspaceTab, workspace === "history" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
+                style={({ pressed }) => [styles.workspaceTab, screenWidth < 600 && { padding: 8, minHeight: 66, flexDirection: "column", gap: 6 }, workspace === "history" && styles.workspaceTabActive, pressed && styles.pressed, isLoading && shared.disabled]}
               >
                 <Icon color={workspace === "history" ? colors.primaryBright : colors.textMuted} name="layers" size={20} />
-                <View style={styles.workspaceTabCopy}>
-                  <Text style={[styles.workspaceTabTitle, workspace === "history" && styles.workspaceTabTitleActive]}>History</Text>
-                  <Text style={styles.workspaceTabDescription}>{cloudEnabled() ? "Your cloud and local creations" : "Your saved local conversations"}</Text>
+                <View style={[styles.workspaceTabCopy, screenWidth < 600 && { alignItems: "center" }]}>
+                  <Text style={[styles.workspaceTabTitle, screenWidth < 600 && { fontSize: 11, textAlign: "center" }, workspace === "history" && styles.workspaceTabTitleActive]}>History</Text>
+                  <Text style={[styles.workspaceTabDescription, screenWidth < 600 && { display: "none" }]}>{cloudEnabled() ? "Your cloud and local creations" : "Your saved local conversations"}</Text>
                 </View>
               </Pressable>
             </View>
 
             {cloudEnabled() && <JobsPanel onResume={restoreHistory} />}
             {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
-            {workspace !== "sketch" && <View style={styles.speedSection}>
-              <Text style={[shared.label, styles.centerText]}>Speed Mode</Text>
-              <View style={[shared.wrap, styles.speedPicker]}>
-                {SPEED_MODES.map((item) => {
-                  const selected = speedMode === item.id;
-                  return (
-                    <Pressable
-                      key={item.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected, disabled: isLoading }}
-                      disabled={isLoading}
-                      onPress={() => setSpeedMode(item.id)}
-                      style={({ pressed }) => [
-                        styles.speedPill,
-                        selected && styles.speedPillActive,
-                        pressed && styles.pressed,
-                        isLoading && shared.disabled,
-                      ]}
-                    >
-                      <Icon color={selected ? colors.primaryBright : colors.textMuted} name={item.icon} size={19} />
-                      <Text style={[styles.speedName, selected && styles.speedNameActive]}>{item.label}</Text>
-                      <Text style={styles.speedDesc}>{item.desc}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={styles.hint}>
-                {workspace === "general" && `${speed.label} sends the raw prompt directly to FLUX on ${speed.imageGpu}.`}
-                {workspace === "anatomy" && speedMode === "normal" && "Standard GPUs - same validated anatomy workflow, moderate wait times."}
-                {workspace === "anatomy" && speedMode === "pro" && "Upgraded GPUs - faster enhancement and interactive analysis."}
-                {workspace === "anatomy" && speedMode === "promax" && "Top-tier GPUs - maximum speed across the validated anatomy pipeline."}
-              </Text>
-            </View>
-
-            }
-            {workspace === "anatomy" && <PersonalMemoryPanel accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />}
-
             <View style={[shared.card, styles.promptCard]}>
               {workspace === "sketch" && <>
                 <Text style={shared.label}>Draw your subject</Text>
@@ -1386,11 +1377,13 @@ function Home({ accessToken, studioSession }: AppProps) {
                 textAlignVertical="top"
                 value={prompt}
               />
+              {stage === "idle" && workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 10 }]}>{(workspace === "anatomy" ? ["Anterior view of the human heart", "Human lungs and airways", "Lateral view of the human brain"] : ["Photosynthesis for eighth graders", "The water cycle with clear labels", "Animal cell structure"]).map(example => <Pressable key={example} accessibilityRole="button" disabled={isLoading} style={styles.ghostButton} onPress={() => handlePromptChange(example)}><Text style={styles.ghostText}>{example}</Text></Pressable>)}</View>}
+              {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={[styles.hint, { alignSelf: "center" }]}>Speed</Text>{SPEED_MODES.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label + ": " + item.desc} accessibilityState={{ selected: speedMode === item.id, disabled: isLoading }} disabled={isLoading} onPress={() => setSpeedMode(item.id)} style={[styles.ghostButton, speedMode === item.id && { borderColor: colors.text }]}><Text style={styles.ghostText}>{item.label}</Text></Pressable>)}</View>}
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
                   {workspace === "sketch" ? "Your drawing guides the image directly. Leave the instruction empty to use the default illustration style." : workspace === "anatomy"
-                    ? "Anatomy mode enforces a human-anatomy route and validates the requested organ and view."
-                    : "Raw mode sends your prompt directly to the base FLUX model without enhancement, memory, evaluation, or retries."}
+                    ? "Choose an organ and view. Review the enhanced instruction before creating your image."
+                    : "Describe your subject, audience and preferred visual style."}
                 </Text>
                 <View style={styles.actionButtons}>
                   <ActionButton
@@ -1407,32 +1400,32 @@ function Home({ accessToken, studioSession }: AppProps) {
             {(stage === "enhancing" || stage === "generating") && (
               <View style={[shared.card, styles.loadingCard]} accessibilityLiveRegion="polite">
                 <ActivityIndicator color={colors.primaryBright} size="large" />
-                <Text style={styles.loadingText}>{cloudEnabled() && jobPhase ? jobPhase : loadingLabel}</Text>
+                <Text style={styles.loadingText}>{cloudEnabled() && jobPhase ? friendlyPhase(jobPhase, loadingLabel) : loadingLabel}</Text>
                 <View style={styles.stageRow}>
                   {workspace === "anatomy" && <StagePill active={stage === "enhancing"} done={stage === "generating"} label="Enhance" />}
                   <StagePill active={stage === "generating"} label="Generate" />
                 </View>
-                <View style={styles.inlineInfo}><Icon color={colors.textMuted} name={speed.icon} size={14} /><Text style={styles.gpuText}>{speed.label}. GPU: {stage === "enhancing" ? speed.promptGpu : workspace === "sketch" ? "A10G" : speed.imageGpu}</Text></View>
+                <Text style={styles.hint}>{startedAt ? `${formatDuration(Math.max(0, now - startedAt))} elapsed · ` : ""}{cloudEnabled() ? "Your creation continues in the background." : "Keep this page open while your creation is processing."}</Text>
               </View>
             )}
 
             {(Object.keys(timings).length > 0 || Object.keys(activeTimers).length > 0) && (
-              <PerformanceInsights activeTimers={activeTimers} now={now} timings={timings} />
+              <View style={{ gap: 10 }}><Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} onPress={() => setDetailsOpen(!detailsOpen)} style={styles.ghostButton}><Text style={styles.ghostText}>{detailsOpen ? "Hide generation details" : "Generation details"}</Text></Pressable>{detailsOpen && <PerformanceInsights activeTimers={activeTimers} now={now} timings={timings} />}</View>
             )}
 
-            {error && <ErrorBanner title="Failed" message={error} />}
+            {error && <View style={{ gap: 10 }}><ErrorBanner title="Unable to complete this request" message={error} /><ActionButton icon="refresh" label="Retry request" disabled={isLoading} onPress={handleSubmit} /></View>}
 
             {enhancedPromptJson && stage !== "enhancing" && (
               <View style={shared.card}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="sparkles" size={15} /><Text style={styles.badge}>Enhanced Prompt JSON</Text></View>
+                  <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="sparkles" size={15} /><Text style={styles.badge}>Review your instruction</Text></View>
                   <Text style={styles.modelTag}>
                     {enhancedPromptJson.route === "anatomy"
                       ? `Anatomy · ${enhancedPromptJson.anatomy_mode === "verified" ? "verified catalog" : "general"}`
                       : "General image"}
                   </Text>
                 </View>
-                <Text style={styles.enhancedPrompt}>{JSON.stringify(enhancedPromptJson, null, 2)}</Text>
+                <Text style={styles.enhancedPrompt}>{enhancedPromptJson.final_prompt}</Text>{detailsOpen && <Text selectable style={styles.hint}>{JSON.stringify(enhancedPromptJson, null, 2)}</Text>}
                 {enhancedPromptJson.routing && (
                   <Text style={styles.hint}>
                     Selected by {enhancedPromptJson.routing.source === "qwen" ? "Qwen reasoning" : "routing rules"}
@@ -1499,7 +1492,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   </View>
                 )}
                 {workspace === "sketch" && <ActionButton icon="refresh" label="Regenerate from Drawing" disabled={isLoading} onPress={() => generateSketch()} />}
-                <SectionTitle title="Interactive Image Analysis" subtitle="Tap any object or drag a box to segment with SAM 2 and explain with Qwen2.5-VL" />
+                <SectionTitle title="Interactive Image Analysis" subtitle="Tap an object or select a region to ask questions and explore its details." />
                 {localizationError && <ErrorBanner title="Labels unavailable; clean image preserved" message={localizationError} />}
                 <View style={styles.actionButtons}>
                   <ActionButton icon="tag" label={labelBusy ? "Labeling…" : "Label image automatically"} disabled={labelBusy || isLoading} onPress={() => { const sourceImage=imageBase64,sourceId=currentHistoryId; void localizeAnatomy(sourceImage,anatomySpec,true).then(items => sourceId ? updateHistoryItem(sourceId,{anatomyAnnotations:items}).catch(e=>setLocalizationError(e.message)) : undefined); }} />
@@ -1526,17 +1519,17 @@ function Home({ accessToken, studioSession }: AppProps) {
                 />
 
                 <View style={styles.threeDSection}>
-                  <SectionTitle icon="cube" title="2D to 3D Conversion" subtitle="Convert your generated image into a textured 3D model using Hunyuan3D-2" />
+                  <SectionTitle icon="cube" title="Explore in 3D" subtitle="Turn your image into a textured model you can rotate and inspect." />
                   {threedStage === "idle" && (
                     <View style={styles.centeredBlock}>
-                      <ActionButton icon="cube" label={`Convert to 3D. ${speedMode === "promax" ? "H100" : speedMode === "pro" ? "A100" : "A10G"}`} onPress={handleConvertTo3D} />
-                      <Text style={styles.hint}>{speedMode === "promax" ? "Pro Max. H100. About 2-3 min for shape and texture." : "A10G or A100. About 3-5 min for shape and texture."}</Text>
+                      <ActionButton icon="cube" label="Convert to 3D" onPress={handleConvertTo3D} />
+                      <Text style={styles.hint}>{"Shape and texture generation can take several minutes."}</Text>
                     </View>
                   )}
                   {threedStage === "converting" && (
                     <View style={[shared.card, styles.loadingCard]}>
                       <ActivityIndicator color={colors.cyan} size="large" />
-                      <Text style={styles.loadingText}>Hunyuan3D-2 is generating shape and texture...</Text>
+                      <Text style={styles.loadingText}>Creating your model’s shape and texture…</Text>
                       <View style={styles.stageRow}>
                         <StagePill active label="Shape" />
                         <StagePill label="Texture" />
@@ -1569,9 +1562,9 @@ function ActionButton({ disabled = false, icon, label, loading = false, onPress,
   const styles = makeStyles(colors);
   const shared = makeSharedStyles(colors);
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
-      {loading && <ActivityIndicator color={secondary ? colors.primary : "#fff"} size="small" style={styles.buttonSpinner} />}
-      {!loading && icon && <Icon color={secondary ? colors.text : "#ffffff"} name={icon} size={17} />}
+    <Pressable {...(Platform.OS === "web" ? { dataSet: { themeButton: secondary ? "secondary" : "primary" } } : {})} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
+      {loading && <ActivityIndicator color={secondary ? colors.primary : colors.onButton} size="small" style={styles.buttonSpinner} />}
+      {!loading && icon && <Icon color={secondary ? colors.text : colors.onButton} name={icon} size={17} />}
       <Text style={secondary ? shared.secondaryButtonText : shared.buttonText}>{label}</Text>
     </Pressable>
   );
@@ -1655,67 +1648,65 @@ function ErrorBanner({ title, message }: { title: string; message: string }) {
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
-  floatingNewPrompt: { position: "absolute", zIndex: 100, bottom: 24, right: 24, width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: 28, backgroundColor: colors.primary, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
-  ambientTop: { position: "absolute", width: 620, height: 620, borderRadius: 310, right: -190, top: -270, backgroundColor: "rgba(211, 105, 55, 0.20)" },
-  ambientBottom: { position: "absolute", width: 520, height: 520, borderRadius: 260, left: -230, bottom: -170, backgroundColor: "rgba(175, 125, 73, 0.16)" },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 100 },
-  container: { width: "100%", maxWidth: 1040, alignSelf: "center", gap: 20 },
-  header: { paddingVertical: 8, gap: 40 },
-  topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  floatingNewPrompt: { position: "absolute", zIndex: 100, bottom: 24, right: 24, width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: 28, backgroundColor: colors.buttonBackground, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 },
+  container: { width: "100%", maxWidth: 1160, alignSelf: "center", gap: 24 },
+  header: { paddingVertical: 8, gap: 48 },
+  topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 22, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  themeToggle: { alignItems: "center", justifyContent: "center", width: 42, height: 42, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 50,  ...Platform.select({ web: { boxShadow: `0 12px 35px ${colors.shadow}`, backdropFilter: "blur(20px)" } as object }) },
+  themeToggle: { alignItems: "center", justifyContent: "center", width: 44, height: 44, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
-  brandMarkText: { color: "#fffaf1", fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
-  brand: { color: colors.primaryBright, fontSize: 20, fontWeight: "900", letterSpacing: 0.2 },
-  heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 34 },
-  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 500, minWidth: 280, maxWidth: "100%" as unknown as number },
+  brandMark: { width: 34, height: 34, borderRadius: 4, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  brandMarkText: { color: colors.onBrand, fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
+  brand: { color: colors.text, fontSize: 24, fontWeight: "700", letterSpacing: -0.8 },
+  heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 40, paddingBottom: 24 },
+  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 600, minWidth: 0, maxWidth: "100%" },
   eyebrow: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 2.6, marginBottom: 12 },
-  title: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, 'Times New Roman', serif", default: "serif" }), fontSize: 58, lineHeight: 63, fontWeight: "700", textAlign: "left", letterSpacing: -2 },
-  titleAccent: { color: colors.primaryBright },
-  subtitle: { color: colors.textMuted, textAlign: "left", fontSize: 16, lineHeight: 26, maxWidth: 610, marginTop: 16 },
-  systemGlass: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 290, maxWidth: "100%" as unknown as number, padding: 20, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 28px 80px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.86)`, backdropFilter: "blur(28px) saturate(130%)" } as object }) },
+  title: { color: colors.text, fontFamily: displayFont, fontSize: 64, lineHeight: 70, fontWeight: "700", textAlign: "left", letterSpacing: -1.2 },
+  titleCompact: { fontSize: 44, lineHeight: 50, letterSpacing: -1.5 },
+  subtitle: { color: colors.textMuted, fontFamily: headingFont, textAlign: "left", fontSize: 20, lineHeight: 28, maxWidth: 610, marginTop: 16 },
+  systemCard: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 0, maxWidth: "100%", padding: 24, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   systemHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
   systemKicker: { color: colors.textDim, fontSize: 9, fontWeight: "900", letterSpacing: 1.8 },
-  systemTitle: { color: colors.text, fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontSize: 22, fontWeight: "700", marginTop: 3 },
+  systemTitle: { color: colors.text, fontFamily: headingFont, fontSize: 24, fontWeight: "400", marginTop: 5 },
   liveBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 50, backgroundColor: "rgba(100,122,81,0.10)" },
   liveBadgeText: { color: colors.success, fontWeight: "800", fontSize: 11 },
   healthWrap: { gap: 7 },
-  healthPill: { flexGrow: 1, minWidth: 86, gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
+  healthPill: { flexGrow: 1, minWidth: 86, gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   agentSignals: { flexDirection: "row", alignItems: "center", gap: 10 },
   signal: { flexDirection: "row", alignItems: "center", gap: 5 },
   healthLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   healthState: { color: colors.textDim, fontSize: 12 },
   warmNote: { color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
-  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 6, borderRadius: 26, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { boxShadow: `0 22px 65px ${colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.88)`, backdropFilter: "blur(26px) saturate(125%)" } as object }) },
-  workspaceTab: { flexGrow: 1, flexBasis: 220, minWidth: 0, minHeight: 94, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 16, borderWidth: 1, borderColor: "transparent" },
-  workspaceTabActive: { borderColor: "rgba(185,79,39,0.38)", backgroundColor: "rgba(201,95,50,0.13)" },
+  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 0 },
+  workspaceTab: { flexGrow: 1, flexBasis: 220, minWidth: 0, minHeight: 98, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  workspaceTabActive: { borderColor: colors.primaryBright, backgroundColor: colors.surfaceSoft },
   workspaceTabCopy: { flex: 1, gap: 3 },
-  workspaceTabTitle: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
+  workspaceTabTitle: { color: colors.textMuted, fontWeight: "600", fontSize: 14 },
   workspaceTabTitleActive: { color: colors.text },
   workspaceTabDescription: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
-  speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 24, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, ...Platform.select({ web: { backdropFilter: "blur(18px)", boxShadow: `0 18px 50px ${colors.shadow}` } as object }) },
+  speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   centerText: { textAlign: "center" },
   speedPicker: { justifyContent: "center", gap: 10 },
-  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 15, borderRadius: 20, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
-  speedPillActive: { borderColor: colors.primaryBright, backgroundColor: "rgba(201,95,50,0.12)" },
+  speedPill: { minWidth: 160, flexBasis: 160, flexGrow: 1, maxWidth: 260, padding: 15, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  speedPillActive: { borderColor: colors.primaryBright, backgroundColor: colors.surfaceSoft },
   speedName: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
   speedNameActive: { color: colors.text },
   speedDesc: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   hint: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
   promptCard: { gap: 14 },
-  promptInput: { minHeight: 124, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, color: colors.text, padding: 17, fontSize: 15, lineHeight: 23 },
+  promptInput: { minHeight: 140, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, color: colors.text, padding: 18, fontSize: 16, lineHeight: 25 },
   promptFooter: { gap: 14 },
   actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 10 },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
+  pressed: { opacity: 0.88 },
   buttonSpinner: { marginRight: 8 },
   loadingCard: { alignItems: "center", gap: 14 },
   loadingText: { color: colors.text, fontWeight: "700", textAlign: "center" },
   stageRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   stagePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.surfaceSoft, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 50, overflow: "hidden" },
   stagePillText: { color: colors.textDim, fontSize: 11 },
-  stagePillActive: { backgroundColor: "rgba(201,95,50,0.18)" },
+  stagePillActive: { backgroundColor: colors.accentSoft },
   stagePillActiveText: { color: colors.text },
   stagePillDone: { color: colors.success },
   gpuText: { color: colors.textMuted, fontSize: 11 },
@@ -1723,13 +1714,13 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   errorMessage: { color: colors.textMuted, lineHeight: 20 },
   cardHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 },
   badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
-  modelTag: { color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, overflow: "hidden" },
+  modelTag: { color: colors.textDim, fontSize: 12, backgroundColor: colors.surfaceSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, overflow: "hidden" },
   enhancedPrompt: { color: colors.textMuted, fontStyle: "italic", lineHeight: 22, marginTop: 14 },
   resultSection: { gap: 16 },
   qualityCard: { gap: 10 },
   qualityScore: { color: colors.text, fontSize: 14, fontWeight: "800", lineHeight: 21 },
   sectionTitle: { alignItems: "center", gap: 5, marginTop: 4 },
-  sectionHeading: { color: colors.text, fontWeight: "900", fontSize: 22, textAlign: "center" },
+  sectionHeading: { color: colors.text, fontFamily: headingFont, fontWeight: "400", fontSize: 30, textAlign: "center" },
   sectionSubtitle: { color: colors.textMuted, textAlign: "center", lineHeight: 20, fontSize: 13 },
   threeDSection: { gap: 16, marginTop: 10 },
   centeredBlock: { alignItems: "center", gap: 10 },
@@ -1739,7 +1730,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   insightsHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightsTitle: { color: colors.text, fontWeight: "800", fontSize: 14 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricItem: { flexGrow: 1, flexBasis: 180, maxWidth: "50%" as unknown as number, backgroundColor: colors.surfaceSoft, borderRadius: 12, padding: 12, gap: 5 },
+  metricItem: { flexGrow: 1, flexBasis: 180, maxWidth: "50%" as unknown as number, backgroundColor: colors.surfaceSoft, borderRadius: 8, padding: 12, gap: 5 },
   metricLabel: { color: colors.textDim, fontSize: 11 },
   metricValue: { color: colors.text, fontSize: 14, fontWeight: "800" },
 });

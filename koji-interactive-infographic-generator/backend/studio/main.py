@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from uuid import UUID, uuid4
+from typing import Literal
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Query
@@ -209,8 +210,19 @@ def import_history(body: HistoryImport,user_id: str=Depends(require_user)):
 
 @app.get("/studio/chats")
 def list_chats(before: datetime | None=Query(default=None),before_id: str=Query(default="",max_length=128),
-               query: str=Query(default="",max_length=100),user_id: str=Depends(require_user)):
-    return repo.list_chats(user_id,before,before_id,query.strip())
+               query: str=Query(default="",max_length=100),
+               mode: Literal["general","anatomy","sketch"] | None=Query(default=None),
+               since: datetime | None=Query(default=None),user_id: str=Depends(require_user)):
+    rows = repo.list_chats(user_id,before,before_id,query.strip(),mode or "",since)
+    storage = Storage()
+    result = []
+    for row in rows:
+        item = dict(row)
+        path = item.pop("preview_path", None)
+        if path:
+            item["imageUrl"] = storage.signed_url(path)
+        result.append(item)
+    return result
 
 @app.post("/studio/chats/{chat_id}/events",status_code=201)
 def add_chat_event(chat_id: str,body: ChatEvent,user_id: str=Depends(require_user)):

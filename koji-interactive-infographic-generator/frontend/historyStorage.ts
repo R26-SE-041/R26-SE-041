@@ -20,6 +20,7 @@ export interface SketchGenerationMetadata {
 
 export interface GenerationHistoryItem {
   id: string;
+  title?: string;
   createdAt: string;
   prompt: string;
   enhancedPrompt: string;

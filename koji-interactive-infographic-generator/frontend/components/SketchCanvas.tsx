@@ -40,11 +40,11 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
   const button = (label: string, action: () => void, unavailable = false, selected = false, icon?: IconName) => (
     <Pressable key={label} disabled={disabled || unavailable} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled: disabled || unavailable, ...(label === "Pen" || label === "Eraser" ? { selected } : {}) }}
-      onPress={action} style={({ pressed }) => ({ paddingHorizontal: 14, minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 10, borderWidth: 1,
-        borderColor: selected ? colors.primaryBright : colors.border, backgroundColor: selected ? colors.primary : colors.surfaceSoft,
+      onPress={action} style={({ pressed }) => ({ paddingHorizontal: 14, minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 8, borderWidth: 1,
+        borderColor: selected ? colors.primaryBright : colors.border, backgroundColor: selected ? colors.buttonBackground : colors.surfaceSoft,
         opacity: disabled || unavailable ? .4 : pressed ? .75 : 1 })}>
-      {icon && <Icon name={icon} color={selected ? "#fff" : colors.textMuted} size={18} />}
-      <Text style={{ color: selected ? "#fff" : colors.textMuted, fontWeight: "600" }}>{label}</Text>
+      {icon && <Icon name={icon} color={selected ? colors.onButton : colors.textMuted} size={18} />}
+      <Text style={{ color: selected ? colors.onButton : colors.textMuted, fontWeight: "600" }}>{label}</Text>
     </Pressable>
   );
   const webPointerProps = Platform.OS === "web" && editable ? {
@@ -62,7 +62,7 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
       {button("Redo", () => { onChange([...strokes, redo[redo.length - 1]]); setRedo(redo.slice(0, -1)); }, !redo.length)}
       {button("Clear", () => { onChange([]); setRedo([]); }, !strokes.length)}
     </View>}
-    <View {...webPointerProps} accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: "#94a3b8", overflow: "hidden", borderRadius: 14, touchAction: "none", ...(Platform.OS === "web" && editable ? { cursor: tool === "eraser" ? "none" : "crosshair" } : {}) } as any}
+    <View {...webPointerProps} accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: colors.border, overflow: "hidden", borderRadius: 8, touchAction: "none", ...(Platform.OS === "web" && editable ? { cursor: tool === "eraser" ? "none" : "crosshair" } : {}) } as any}
       onLayout={(event) => { size.current = event.nativeEvent.layout.width; }}
       onStartShouldSetResponder={() => editable}
       onMoveShouldSetResponder={() => editable}
@@ -90,7 +90,7 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
           : <Polyline key={index} points={stroke.points.map(([x, y]) => `${x * 1024},${y * 1024}`).join(" ")} fill="none" stroke={stroke.tool === "pen" ? "black" : "white"} strokeWidth={stroke.width * 1024} strokeLinecap="round" strokeLinejoin="round" />)}
         {editable && tool === "eraser" && cursor && <>
           <Circle cx={cursor[0] * 1024} cy={cursor[1] * 1024} r={ERASER_WIDTH * 512} fill="none" stroke="white" strokeWidth={6} />
-          <Circle cx={cursor[0] * 1024} cy={cursor[1] * 1024} r={ERASER_WIDTH * 512} fill="none" stroke="#475569" strokeWidth={3} />
+          <Circle cx={cursor[0] * 1024} cy={cursor[1] * 1024} r={ERASER_WIDTH * 512} fill="none" stroke={colors.textMuted} strokeWidth={3} />
         </>}
       </Svg>
     </View>

@@ -181,17 +181,32 @@ class Repository:
         with connection() as conn,conn.cursor() as cur:
             self._chat_event(cur,user_id,chat_id,event_id,kind,data,generation_id,created_at)
 
-    def list_chats(self,user_id,before=None,before_id="",query=""):
+    def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None):
         pattern="%"+query+"%"
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""select c.*,
+            cur.execute("""select c.*, latest.id as latest_generation_id,
+                coalesce(latest.thumbnail_path,latest.image_path) as preview_path,
+                coalesce(latest.metadata->>'mode',
+                    (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
+                     and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general') as mode,
+                latest.glb_path is not null as has_three_d,
+                (select count(*) from koji_generations g where g.user_id=c.user_id
+                 and coalesce(g.metadata->>'chatId',g.id::text)=c.id) as version_count,
                 (select count(*) from koji_chat_events e where e.user_id=c.user_id and e.chat_id=c.id) as event_count
-                from koji_chats c where c.user_id=%s
+                from koji_chats c left join lateral (
+                    select g.* from koji_generations g where g.user_id=c.user_id
+                    and coalesce(g.metadata->>'chatId',g.id::text)=c.id
+                    order by g.created_at desc,g.id desc limit 1
+                ) latest on true where c.user_id=%s
                 and (%s::timestamptz is null or (c.updated_at,c.id)<(%s::timestamptz,%s))
+                and (%s::timestamptz is null or c.updated_at >= %s::timestamptz)
+                and (%s='' or coalesce(latest.metadata->>'mode',
+                    (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
+                     and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general')=%s)
                 and (%s='' or c.title ilike %s or exists(select 1 from koji_chat_events e
                     where e.user_id=c.user_id and e.chat_id=c.id and
                     (e.data->>'prompt' ilike %s or e.data->>'question' ilike %s or e.data->>'answer' ilike %s)))
-                order by c.updated_at desc,c.id desc limit 50""",(user_id,before,before,before_id,query,pattern,pattern,pattern,pattern))
+                order by c.updated_at desc,c.id desc limit 50""",(user_id,before,before,before_id,since,since,mode,mode,query,pattern,pattern,pattern,pattern))
             return [dict(row) for row in cur.fetchall()]
 
     def get_chat(self,user_id,chat_id):

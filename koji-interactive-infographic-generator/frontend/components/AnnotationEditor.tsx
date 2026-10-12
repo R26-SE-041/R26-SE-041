@@ -41,7 +41,7 @@ export default function AnnotationEditor({ imageBase64, annotations, onChange, c
   }), [size, move, onChange]);
   if (commitRef) commitRef.current = () => commit(latest.current.map(a => ({ ...a, label: a.label.trim() || "New label" })));
   const item = draft.find(a => a.structure_id === selected);
-  const button = { borderWidth:1, borderColor:colors.border, borderRadius:9, padding:9 };
+  const button = { borderWidth:1, borderColor:colors.border, borderRadius:8, padding:9 };
   return <View style={{ gap:12 }}>
     <Text style={{ color:colors.textMuted }}>Select a label, then drag its target or label position. Edits are saved with this image.</Text>
     <View style={{ flexDirection:"row", flexWrap:"wrap", gap:8 }}>{draft.map(a => <Pressable key={a.structure_id} onPress={() => setSelected(a.structure_id)} style={[button,{ borderColor:selected===a.structure_id?colors.primaryBright:colors.border }]}><Text style={{ color:colors.text }}>{a.label}</Text></Pressable>)}</View>
@@ -51,7 +51,7 @@ export default function AnnotationEditor({ imageBase64, annotations, onChange, c
       <Pressable style={button} onPress={() => setMove("target")}><Text style={{ color:move==="target"?colors.primaryBright:colors.text }}>Move arrow target</Text></Pressable>
       <Pressable style={button} onPress={() => setMove("label")}><Text style={{ color:move==="label"?colors.primaryBright:colors.text }}>Move label</Text></Pressable></>}
     </View>
-    {item && <TextInput accessibilityLabel="Label name" value={item.label} maxLength={80} onChangeText={label => edit(item.structure_id,{label},false)} onBlur={() => { if (!latest.current.find(a=>a.structure_id===selected)?.label.trim()) edit(item.structure_id,{label:"New label"},false); onChange(latest.current); }} style={{ color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:9,padding:12 }} />}
+    {item && <TextInput accessibilityLabel="Label name" value={item.label} maxLength={80} onChangeText={label => edit(item.structure_id,{label},false)} onBlur={() => { if (!latest.current.find(a=>a.structure_id===selected)?.label.trim()) edit(item.structure_id,{label:"New label"},false); onChange(latest.current); }} style={{ color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:8,padding:12 }} />}
     {item && <Pressable style={button} onPress={() => edit(item.structure_id, { label: item.label.trim() || "New label" })}><Text style={{ color: colors.text }}>Save name</Text></Pressable>}
     <View accessibilityLabel="Label editing canvas" {...responder.panHandlers} onLayout={e=>setSize(e.nativeEvent.layout)} style={{ width:"100%",aspectRatio:1,backgroundColor:"white" }}>
       <Image source={{uri:"data:image/png;base64,"+imageBase64}} style={StyleSheet.absoluteFill} resizeMode="contain" />
