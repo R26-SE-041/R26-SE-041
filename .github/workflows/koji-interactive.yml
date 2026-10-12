@@ -118,6 +118,7 @@ jobs:
   deploy_backend:
     if: >-
       needs.changes.outputs.backend == 'true' &&
+      vars.KOJI_EC2_DEPLOY_ENABLED == 'true' &&
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
       vars.KOJI_DEPLOY_ENABLED != 'false'
@@ -160,6 +161,7 @@ jobs:
       always() && needs.changes.result == 'success' &&
       needs.frontend.result == 'success' && needs.backend.result == 'success' &&
       (needs.deploy_backend.result == 'success' || needs.deploy_backend.result == 'skipped') &&
+      (needs.changes.outputs.backend != 'true' || needs.deploy_backend.result == 'success') &&
       needs.changes.outputs.frontend == 'true' &&
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&

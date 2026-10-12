@@ -8,10 +8,12 @@ The Koji workflow is independent of the other research components. Only changes 
 - Production deployments run only from `main` or explicit `koji-release-*` tags, after both test jobs pass.
 - Frontend changes deploy the tested web artifact to the existing `koji-studio` Vercel project.
 - CPU backend changes deploy only `studio/` and `shared/` to EC2. Frontend-only changes do not restart the API or worker.
+- EC2 automatic deployment additionally requires `KOJI_EC2_DEPLOY_ENABLED=true`. Keep it `false` while using manual backend deployment without approved runner network access.
 - When a release changes both frontend and backend, the backend must succeed before the frontend is published.
 - Agent/model changes are separate. Modal deployment requires `KOJI_MODEL_DEPLOY_ENABLED=true` or the explicit manual model-deploy option. Routine frontend changes do not redeploy GPUs.
 - `KOJI_DEPLOY_ENABLED=false` pauses production jobs without disabling CI. Set it to `true` after credentials and runner access are verified.
 - GitHub Actions → Koji CI/CD → Run workflow provides `all`, `frontend`, and `backend` targets for a manual fallback. Run production releases from `main`.
+- If a push changes both backend and frontend while EC2 automation is paused, automatic frontend publication waits for backend deployment. After manually deploying the backend, run the workflow with target `frontend` to publish the tested client.
 
 ## Existing EC2 installation
 
@@ -41,6 +43,7 @@ Public repository variables used when building the frontend:
 | `KOJI_SUPABASE_URL` | Existing Supabase authentication project |
 | `KOJI_SUPABASE_ANON_KEY` | Public browser key; never a service-role key |
 | `KOJI_DEPLOY_ENABLED` | Production deployment switch |
+| `KOJI_EC2_DEPLOY_ENABLED` | Enable EC2 automatic deployment only after runner access is configured |
 | `KOJI_MODEL_DEPLOY_ENABLED` | Optional automatic model deployment switch |
 
 The `koji-production` environment owns these deployment variables:
