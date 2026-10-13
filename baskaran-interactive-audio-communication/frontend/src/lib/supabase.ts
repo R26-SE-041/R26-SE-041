@@ -16,7 +16,7 @@ const demo = {
     signInWithPassword: async (_creds: { email: string; password: string }) => ({
       data: { session: null }, error: unavailable(),
     }),
-    signUp: async (_creds: { email: string; password: string; options?: { data?: object } }) => ({
+    signUp: async (_creds: { email: string; password: string; options?: { data?: object; emailRedirectTo?: string } }) => ({
       data: { user: null, session: null }, error: unavailable(),
     }),
     signOut: async () => ({ error: null }),

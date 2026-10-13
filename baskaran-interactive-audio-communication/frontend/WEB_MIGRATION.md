@@ -128,3 +128,27 @@ Validation after removal: 20 browser regressions, four audio-command tests,
 TypeScript checking and production export passed. The live saved library still
 contained 29 items and one indexed document. Desktop and 390px layouts were
 inspected; the narrow layout had no horizontal overflow.
+
+## Signup verification
+
+Registration collects a full name, email and matching passwords. Learner role,
+institution/course and preferred language are optional profile metadata; they
+do not grant permissions or override a language chosen in the study interface.
+Confirmation redirects to `/login`. Email delivery still depends on Supabase's
+email provider configuration.
+
+The SDK request/confirmation/retry checks in `e2e/register.spec.ts` intercept all
+signup requests, so they create no accounts and send no email. For the complete
+suite, export with these isolated test settings in PowerShell:
+
+```powershell
+$env:EXPO_PUBLIC_SUPABASE_URL='https://signup-test.supabase.co'
+$env:EXPO_PUBLIC_SUPABASE_ANON_KEY='signup-test-public-key'
+npm run build:web
+```
+
+Serve that export with `PORT=4185` using `node scripts/serve-web.cjs` in another
+terminal. Run tests with `WEB_TEST_URL=http://localhost:4185` and
+`SIGNUP_AUTH_TEST=1`. Without the flag, only the two SDK integration cases skip;
+validation and responsive-layout checks still run. Remove the test Supabase
+environment overrides and rebuild before using the normal local application.
