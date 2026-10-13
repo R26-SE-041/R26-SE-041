@@ -151,4 +151,6 @@ Serve that export with `PORT=4185` using `node scripts/serve-web.cjs` in another
 terminal. Run tests with `WEB_TEST_URL=http://localhost:4185` and
 `SIGNUP_AUTH_TEST=1`. Without the flag, only the two SDK integration cases skip;
 validation and responsive-layout checks still run. Remove the test Supabase
-environment overrides and rebuild before using the normal local application.
+environment overrides and run
+`node node_modules/expo/bin/cli export --platform web --clear` before using the
+normal local application. Clearing Metro's cache removes compiled test settings.
