@@ -36,6 +36,7 @@ interface InteractionCoords {
 interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
+  imageFeedback?: React.ReactNode;
   chatId?: string;
   generationId?: string;
   interactions?: GenerationInteraction[];
@@ -71,7 +72,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ chatId, generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ imageFeedback, chatId, generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -296,14 +297,14 @@ export default function InteractiveCanvas({ chatId, generationId, interactions =
         </View>
         <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
         {anatomyAnnotations.length > 0 && (
-          <Pressable onPress={() => setShowAnatomyLabels((value) => !value)} style={styles.labelToggle}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: showAnatomyLabels }} onPress={() => setShowAnatomyLabels((value) => !value)} style={styles.labelToggle}>
             <Text style={styles.labelToggleText}>{showAnatomyLabels ? "Hide labels" : "Show labels"}</Text>
           </Pressable>
         )}
       </View>
 
-      {onAnnotationsChange && <Pressable onPress={() => { if (editingLabels) commitLabelEdits.current?.(); setEditingLabels(value => !value); }} style={styles.labelToggle}><Text style={styles.labelToggleText}>{editingLabels ? "Finish editing labels" : "Edit labels and arrows"}</Text></Pressable>}
-      {editingLabels && onAnnotationsChange && <AnnotationEditor imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
+      {onAnnotationsChange && <Pressable accessibilityRole="button" accessibilityState={{ selected: editingLabels }} onPress={() => { if (editingLabels) commitLabelEdits.current?.(); setEditingLabels(value => !value); }} style={styles.labelToggle}><Text style={styles.labelToggleText}>{editingLabels ? "Save changes" : "Edit labels"}</Text></Pressable>}
+      {editingLabels && onAnnotationsChange && <AnnotationEditor aspectRatio={aspectRatio} imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
 
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
       <PdfSourcesPanel key={conversation} chatId={conversation} selected={selectedDocuments} onSelectionChange={setSelectedDocuments} disabled={isLoading} restoreSelection={lastSelection.current !== undefined} />
@@ -334,6 +335,8 @@ export default function InteractiveCanvas({ chatId, generationId, interactions =
       </View>
 
       }
+
+      {imageFeedback}
 
       {!editingLabels && currentSelection && (
         <View style={[shared.card, styles.actionPanel]}>
@@ -376,6 +379,10 @@ export default function InteractiveCanvas({ chatId, generationId, interactions =
           <Text style={{ color: colors.primaryBright, fontWeight: "700" }}>You: {turn.question || (turn.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text>
           <Text style={styles.resultText}>{turn.status === "failed" ? turn.error : turn.answer || "Answer pending — reopen History to retrieve it."}</Text>
           <PdfEvidence sources={turn.sources} grounding={turn.grounding} />
+          {turn.answer && turn.status !== "failed" && <FeedbackControls key={turn.id} agentName="interactive-agent"
+            accessToken={accessToken} apiUrl={feedbackApiUrl} inputContext={{ interaction: turn.selection, mode: turn.mode, question: turn.question }}
+            outputId={"interaction-" + turn.id} outputSnapshot={{ response_text: turn.answer }} positiveReasons={POSITIVE_REASONS}
+            negativeReasons={NEGATIVE_REASONS} sessionId={sessionId} />}
           {!!turn.selection && <Pressable onPress={() => { setCurrentSelection(turn.selection!); setSelectionType(turn.selection!.type); setAnalysisMode(turn.mode); setSelectedStructureId(turn.structureId ?? null); setCustomQuestion(turn.question || ""); }}><Text style={{ color: colors.primaryBright }}>Show selected region</Text></Pressable>}
         </View>)}
       </View>}

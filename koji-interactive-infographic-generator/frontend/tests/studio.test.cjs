@@ -163,3 +163,20 @@ test('PDF citations request a fresh private URL and open the referenced page', a
   const sources = loadModule('pdfSources.ts', { fetch: async () => ({ ok: true, json: async () => ({ url: 'https://storage.example/private.pdf?token=secret' }) }) });
   assert.equal(await sources.pdfPageUrl('document-one', 9), 'https://storage.example/private.pdf?token=secret#page=9');
 });
+
+
+test('direct editing hit-tests the clicked label or arrow, never unrelated empty space', () => {
+  const geometry = loadModule('components/annotationGeometry.ts');
+  assert.equal(geometry.annotationHit([annotation], .08, .2, 800, 600).part, 'label');
+  assert.equal(geometry.annotationHit([annotation], .5, .5, 800, 600).part, 'target');
+  assert.equal(geometry.annotationHit([annotation], .7, .1, 800, 600), undefined);
+  assert.equal(geometry.annotationHit([{ ...annotation, user_edited: false }], .08, .2, 800, 600), undefined);
+});
+
+test('arrow hit tolerance uses screen pixels on small and wide images', () => {
+  const geometry = loadModule('components/annotationGeometry.ts');
+  for (const width of [320, 1000]) {
+    assert.equal(geometry.annotationHit([annotation], .5 + 10 / width, .5, width, 400).part, 'target');
+    assert.equal(geometry.annotationHit([annotation], .5 + 20 / width, .5, width, 400), undefined);
+  }
+});
