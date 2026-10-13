@@ -8,7 +8,7 @@ The Koji workflow is independent of the other research components. Only changes 
 - Production deployments run only from `main` or explicit `koji-release-*` tags, after both test jobs pass.
 - Frontend changes deploy the tested web artifact to the existing `koji-studio` Vercel project.
 - CPU backend changes deploy only `studio/` and `shared/` to EC2. Frontend-only changes do not restart the API or worker.
-- EC2 automatic deployment additionally requires `KOJI_EC2_DEPLOY_ENABLED=true`. Keep it `false` while using manual backend deployment without approved runner network access.
+- EC2 automatic deployment additionally requires `KOJI_EC2_DEPLOY_ENABLED=true`. Enable it after installing and verifying the authenticated HTTPS release receiver.
 - When a release changes both frontend and backend, the backend must succeed before the frontend is published.
 - Agent/model changes are separate. Modal deployment requires `KOJI_MODEL_DEPLOY_ENABLED=true` or the explicit manual model-deploy option. Routine frontend changes do not redeploy GPUs.
 - `KOJI_DEPLOY_ENABLED=false` pauses production jobs without disabling CI. Set it to `true` after credentials and runner access are verified.
@@ -26,7 +26,7 @@ The current Ubuntu server uses:
 - Service paths: `/home/ubuntu/koji/backend/.venv/bin/python`.
 - Services: `koji-api.service` and `koji-worker.service`.
 
-Activation keeps `.env` and systemd paths unchanged. It verifies the tested artifact's commit and file hashes, builds a new CPU virtual environment at a stable absolute path, checks imports and database readiness, and then replaces the two source directories and Python environment link. Failed activation or readiness restores the previous source and Python environment. Deployment does not apply database migrations or touch other components.
+Activation keeps `.env` and systemd paths unchanged. It verifies the tested artifact's commit and file hashes, builds a new CPU virtual environment at a stable absolute path, checks imports and database readiness, and then replaces the two source directories and Python environment link. Failed activation or readiness restores the previous source and Python environment. Deployment does not apply database migrations. Apply reviewed migrations before releasing code that requires them.
 
 Backups are retained in `deploy-backups/`; Python environments are retained in `deploy-environments/`. Clean old releases deliberately after identifying the active environment and a known good backup. The deployment lock prevents overlapping automatic and manual activation.
 
@@ -58,18 +58,22 @@ The `koji-production` environment owns these deployment variables:
 
 Production secrets:
 
-- `KOJI_EC2_SSH_KEY`: deployment private key.
-- `KOJI_EC2_KNOWN_HOSTS`: independently verified, pinned server host record.
+- `KOJI_DEPLOY_TOKEN`: a random token of at least 40 characters, shared only with the EC2 release receiver.
+- SSH credentials are only needed for the manual `ci/deploy_ec2.py` fallback.
 - `KOJI_VERCEL_TOKEN`: Vercel deployment token. Use a project-scoped token where available and track its expiry.
 - `KOJI_MODAL_TOKEN_ID` and `KOJI_MODAL_TOKEN_SECRET`: only needed for model deployment.
 
 Secrets belong in GitHub's protected secret storage, never in the repository, frontend export, artifact manifest, or logs. The workflow uses strict SSH host verification and refuses unsafe release archive paths or a mismatched commit.
 
-## SSH network access
+## Automatic EC2 releases over HTTPS
 
-The deployment runner must be able to reach EC2 TCP port 22. A security-group rule allowing only a developer's home IP does not allow standard GitHub-hosted runners; their egress IPs vary. Use an approved fixed-egress deployment runner or a deliberate network-access setup before enabling automatic backend releases. Do not broaden SSH ingress as part of a code push. Keep HTTPS public and the API's port 8000 private.
+GitHub-hosted runners run all checks and upload the tested backend archive to `/internal/koji-deploy` over HTTPS. The receiver verifies the production token, GitHub workflow identity, commit, successful frontend/backend checks, completed model deployment, bounded archive contents and checksums before activation. It returns a release ID; the workflow polls until activation and readiness finish. Vercel publication waits for backend success. Model changes deploy before the API and frontend.
 
-The authenticated runner also needs passwordless permission to stop/restart only the two Koji services. The existing Ubuntu deployment administrator already has this permission; use a dedicated restricted deployment identity when changing the server's access model.
+Install `deploy_service.py` and `activate.sh` in `/home/ubuntu/koji/deploy-control`, and install `koji-deploy.service` as a systemd unit. Store `KOJI_DEPLOY_TOKEN` in a mode-600 `.env` in that directory and as the `koji-production` encrypted secret of the same name. The service listens only on `127.0.0.1:8766`; Caddy forwards `/internal/koji-deploy*` to it and all other requests to `127.0.0.1:8000`. Keep port 8000 and 8766 private. No self-hosted Actions runner or public SSH rule is needed. SSH can remain limited to the administrator's IP.
+
+The activation script is installed by an administrator. Changes to `activate.sh` or the receiver require updating those installed control files over pinned SSH. Routine application changes are fully automatic. Receiver/activation logs remain on EC2, outside public responses. A dedicated production environment branch policy restricts release credentials to `main` and approved release tags.
+
+The existing Ubuntu deployment administrator can restart the two Koji services. No pull-request code runs on EC2; public-repository tests use GitHub-hosted runners. Keep the production token only in encrypted GitHub secrets and the private server environment. Never put it in repository variables or browser builds.
 
 ## Validation
 

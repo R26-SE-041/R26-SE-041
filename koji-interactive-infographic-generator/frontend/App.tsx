@@ -1498,6 +1498,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   <ActionButton icon="tag" label={labelBusy ? "Labeling…" : "Label image automatically"} disabled={labelBusy || isLoading} onPress={() => { const sourceImage=imageBase64,sourceId=currentHistoryId; void localizeAnatomy(sourceImage,anatomySpec,true).then(items => sourceId ? updateHistoryItem(sourceId,{anatomyAnnotations:items}).catch(e=>setLocalizationError(e.message)) : undefined); }} />
                 </View>
                 <InteractiveCanvas
+                  chatId={currentChatId.current ?? currentHistoryId ?? undefined}
                   accessToken={accessToken}
                   anatomyAnnotations={anatomyAnnotations}
                   generationId={currentHistoryId ?? undefined}
@@ -1508,7 +1509,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   imageBase64={imageBase64}
                   onInteractionComplete={(interaction) => {
                     if (visibleImage.current === imageBase64) setHistoryInteractions(current => [...current.filter(turn => turn.id !== interaction.id), interaction]);
-                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction).catch(e=>setError("Interaction could not be saved: "+e.message));
+                    if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction, cloudEnabled() && /^[0-9a-f-]{36}$/i.test(currentHistoryId)).catch(e=>setError("Interaction could not be saved: "+e.message));
                   }}
                   onOperationComplete={(duration) => {
                     setTimings((current) => ({ ...current, interactive: duration }));

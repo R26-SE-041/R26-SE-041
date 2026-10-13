@@ -1,4 +1,5 @@
 import { cloudEnabled, studioOwner, studioRequest, getCloudHistory } from "./studioClient";
+import type { PdfSource } from "./pdfSources";
 export type HistoryMode = "general" | "anatomy" | "sketch";
 
 export interface SketchStroke {
@@ -64,6 +65,9 @@ export interface GenerationHistoryItem {
 }
 
 export interface GenerationInteraction {
+  documentIds?: string[];
+  sources?: PdfSource[];
+  grounding?: "image" | "pdf" | "no_match";
   id: string;
   createdAt: string;
   mode: "identify" | "explain" | "ask";
@@ -222,8 +226,8 @@ export function updateHistoryItem(id: string, patch: Partial<Omit<GenerationHist
   void pending.finally(() => { if (pendingPatches.get(key) === pending) pendingPatches.delete(key); }).catch(() => undefined);
   return pending;
 }
-export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction) {
-  if(cloudEnabled() && /^[0-9a-f-]{36}$/i.test(id)) await studioRequest("/studio/history/"+id+"/interactions",{method:"POST",body:JSON.stringify(interaction)});
+export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction, alreadySaved = false) {
+  if(!alreadySaved && cloudEnabled() && /^[0-9a-f-]{36}$/i.test(id)) await studioRequest("/studio/history/"+id+"/interactions",{method:"POST",body:JSON.stringify(interaction)});
   await localAppendHistoryInteraction(id,interaction);
 }
 export async function deleteConversation(chatId: string) {

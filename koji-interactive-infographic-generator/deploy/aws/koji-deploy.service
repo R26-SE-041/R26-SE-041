@@ -1,0 +1,18 @@
+[Unit]
+Description=Koji authenticated release receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/koji/deploy-control
+EnvironmentFile=/home/ubuntu/koji/deploy-control/.env
+ExecStart=/usr/bin/python3 /home/ubuntu/koji/deploy-control/deploy_service.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -103,6 +103,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -r studio/requirements-dev.txt
       - run: python ../ci/check.py
       - name: Test deployment routing and artifact boundaries
@@ -117,34 +118,33 @@ jobs:
 
   deploy_backend:
     if: >-
+      always() && needs.frontend.result == 'success' && needs.backend.result == 'success' &&
+      (needs.deploy_models.result == 'success' || needs.deploy_models.result == 'skipped') &&
       needs.changes.outputs.backend == 'true' &&
       vars.KOJI_EC2_DEPLOY_ENABLED == 'true' &&
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
       vars.KOJI_DEPLOY_ENABLED != 'false'
-    needs: [changes, frontend, backend]
+    needs: [changes, frontend, backend, deploy_models]
     runs-on: ubuntu-latest
     environment: koji-production
     concurrency:
       group: koji-backend-production
       cancel-in-progress: false
     env:
-      KOJI_EC2_HOST: ${{ vars.KOJI_EC2_HOST }}
-      KOJI_EC2_USER: ${{ vars.KOJI_EC2_USER || 'ubuntu' }}
-      KOJI_EC2_ROOT: ${{ vars.KOJI_EC2_ROOT || '/home/ubuntu/koji' }}
-      KOJI_EC2_SSH_KEY: ${{ secrets.KOJI_EC2_SSH_KEY }}
-      KOJI_EC2_KNOWN_HOSTS: ${{ secrets.KOJI_EC2_KNOWN_HOSTS }}
+      KOJI_STUDIO_API_URL: ${{ vars.KOJI_STUDIO_API_URL }}
+      KOJI_DEPLOY_TOKEN: ${{ secrets.KOJI_DEPLOY_TOKEN }}
       KOJI_BACKEND_ARCHIVE: koji-interactive-infographic-generator/release/backend.tar.gz
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate EC2 deployment access
+      - name: Validate EC2 release receiver access
         run: |
           python - <<'PY'
           import os
-          required = ('KOJI_EC2_HOST', 'KOJI_EC2_SSH_KEY', 'KOJI_EC2_KNOWN_HOSTS')
+          required = ('KOJI_STUDIO_API_URL', 'KOJI_DEPLOY_TOKEN')
           missing = [key for key in required if not os.getenv(key, '').strip()]
           if missing:
               raise SystemExit('Configure koji-production deployment settings: ' + ', '.join(missing))
@@ -154,19 +154,20 @@ jobs:
           name: koji-backend
           path: koji-interactive-infographic-generator/release
       - name: Deploy tested API and worker with rollback
-        run: python koji-interactive-infographic-generator/ci/deploy_ec2.py
+        run: python koji-interactive-infographic-generator/ci/deploy_http.py
 
   deploy_frontend:
     if: >-
       always() && needs.changes.result == 'success' &&
       needs.frontend.result == 'success' && needs.backend.result == 'success' &&
+      (needs.deploy_models.result == 'success' || needs.deploy_models.result == 'skipped') &&
       (needs.deploy_backend.result == 'success' || needs.deploy_backend.result == 'skipped') &&
       (needs.changes.outputs.backend != 'true' || needs.deploy_backend.result == 'success') &&
       needs.changes.outputs.frontend == 'true' &&
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/koji-release-')) &&
       vars.KOJI_DEPLOY_ENABLED != 'false'
-    needs: [changes, frontend, backend, deploy_backend]
+    needs: [changes, frontend, backend, deploy_models, deploy_backend]
     runs-on: ubuntu-latest
     environment: koji-production
     concurrency:
@@ -216,6 +217,7 @@ jobs:
 
   deploy_models:
     if: >-
+      vars.KOJI_DEPLOY_ENABLED != 'false' &&
       github.event_name != 'pull_request' && github.ref == 'refs/heads/main' &&
       ((needs.changes.outputs.models == 'true' && vars.KOJI_MODEL_DEPLOY_ENABLED == 'true') || inputs.deploy_models)
     needs: [changes, frontend, backend]

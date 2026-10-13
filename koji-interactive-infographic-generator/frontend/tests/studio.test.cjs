@@ -106,3 +106,60 @@ test('hosted web requests use the configured same-origin route and keep bearer a
   assert.equal(calls[0].url,'/studio-api/studio/jobs');assert.equal(calls[0].init.headers.Authorization,'Bearer session-token');
  }finally{for(const key of ['NODE_ENV','EXPO_PUBLIC_STUDIO_API_URL','EXPO_PUBLIC_STUDIO_PROXY_PATH']){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}}
 });
+
+test('PDF polling keeps deliberate deselections and selects newly indexed files', () => {
+  const sources = loadModule('pdfSources.ts');
+  const ready = id => ({ id, status: 'ready' });
+  const known = new Set(['one', 'two']);
+  const documents = [ready('one'), ready('two'), ready('three'), { id: 'four', status: 'processing' }];
+  assert.deepEqual(Array.from(sources.reconcilePdfSelection(documents, ['two'], known)), ['two', 'three']);
+  known.add('three');
+  assert.deepEqual(Array.from(sources.reconcilePdfSelection(documents, [], known)), []);
+  assert.deepEqual(Array.from(sources.reconcilePdfSelection([ready('two')], ['one', 'two'], known)), ['two']);
+});
+
+test('PDF uploads send raw bytes with authentication and encoded filenames', async () => {
+  const previous = process.env.EXPO_PUBLIC_STUDIO_API_URL;
+  process.env.EXPO_PUBLIC_STUDIO_API_URL = 'https://studio.example';
+  const calls = [];
+  const cache = new Map();
+  const globals = { fetch: async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => ({ id: 'pdf' }) }; } };
+  try {
+    const client = loadModule('studioClient.ts', globals, cache);
+    client.configureStudio('session-token');
+    const sources = loadModule('pdfSources.ts', globals, cache);
+    const body = new Uint8Array([37, 80, 68, 70]);
+    await sources.uploadPdfDocument('chat/one', 'My notes & diagrams.pdf', body);
+    assert.equal(calls[0].init.body, body);
+    assert.equal(calls[0].init.headers['Content-Type'], 'application/pdf');
+    assert.equal(calls[0].init.headers.Authorization, 'Bearer session-token');
+    assert.match(calls[0].url, /chat%2Fone\/documents\?filename=My%20notes%20%26%20diagrams.pdf/);
+  } finally {
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_STUDIO_API_URL;
+    else process.env.EXPO_PUBLIC_STUDIO_API_URL = previous;
+  }
+});
+
+test('hosted PDF uploads use the backend origin while metadata keeps the proxy', async () => {
+  const previous = { ...process.env }; const calls = []; const cache = new Map();
+  try {
+    process.env.NODE_ENV = 'production'; process.env.EXPO_PUBLIC_STUDIO_API_URL = 'https://api.example'; process.env.EXPO_PUBLIC_STUDIO_PROXY_PATH = '/studio-api';
+    const globals = { window: {}, fetch: async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => [] }; } };
+    const client = loadModule('studioClient.ts', globals, cache); client.configureStudio('session-token');
+    const sources = loadModule('pdfSources.ts', globals, cache);
+    await sources.uploadPdfDocument('chat', 'notes.pdf', new Uint8Array([37, 80, 68, 70]));
+    await sources.listPdfDocuments('chat');
+    assert.match(calls[0].url, /^https:\/\/api.example\/studio\/chats\/chat\/documents/);
+    assert.equal(calls[1].url, '/studio-api/studio/chats/chat/documents');
+    assert.equal(calls[0].init.headers.Authorization, 'Bearer session-token');
+  } finally {
+    for (const key of ['NODE_ENV', 'EXPO_PUBLIC_STUDIO_API_URL', 'EXPO_PUBLIC_STUDIO_PROXY_PATH']) {
+      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+    }
+  }
+});
+
+test('PDF citations request a fresh private URL and open the referenced page', async () => {
+  const sources = loadModule('pdfSources.ts', { fetch: async () => ({ ok: true, json: async () => ({ url: 'https://storage.example/private.pdf?token=secret' }) }) });
+  assert.equal(await sources.pdfPageUrl('document-one', 9), 'https://storage.example/private.pdf?token=secret#page=9');
+});

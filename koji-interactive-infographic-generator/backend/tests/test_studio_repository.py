@@ -173,5 +173,70 @@ class RepositoryIntegrationTests(unittest.TestCase):
         self.assertIsNone(self.repo.get_chat(self.owner,"chat"))
         self.assertIsNone(self.repo.get_history(self.owner,generation))
 
+    def test_pdf_retrieval_is_scoped_to_owner_chat_and_selected_files(self):
+        from studio.documents import Documents
+        documents = Documents()
+        selected, unselected, foreign = (str(uuid4()) for _ in range(3))
+        for owner in (self.owner,self.other):
+            self.repo.append_chat_event(owner,"course","prompt","prompt",{"prompt":"Heart study"})
+        first=documents.register(self.owner,"course",selected,"Textbook.pdf",self.owner+"/selected.pdf",100)
+        second=documents.register(self.owner,"course",unselected,"Other.pdf",self.owner+"/other.pdf",100)
+        third=documents.register(self.other,"course",foreign,"Private.pdf",self.other+"/private.pdf",100)
+        vector=[1.0]+[0.0]*383
+        for row in (first,second,third):
+            with connection() as conn,conn.cursor() as cur:
+                cur.execute("""update koji_jobs set status='running',lease_token=%s,lease_until=now()+interval '2 minutes'
+                    where id=%s returning *""",(str(uuid4()),row["job_id"]))
+            job=self.repo.get_job(str(row["user_id"]),str(row["job_id"]))
+            documents.finish(job,[{"page":3,"content":"Left ventricle has thick walls for high pressure.","embedding":vector}],4,0)
+            self.repo.update_job(job,status="completed")
+        with patch("studio.documents.embed_texts",return_value=[vector]):
+            results=documents.retrieve(self.owner,"course",[selected],"left ventricle thick walls")
+        self.assertEqual({str(row["document_id"]) for row in results},{selected})
+        self.assertEqual(results[0]["page"],3)
+        self.assertEqual(results[0]["filename"],"Textbook.pdf")
+        with patch("studio.documents.embed_texts",return_value=[[0.0,1.0]+[0.0]*382]),patch.dict(os.environ,{"STUDIO_PDF_MIN_SIMILARITY":"0.30"}):
+            self.assertEqual(documents.retrieve(self.owner,"course",[selected],"chloroplast photosynthesis"),[])
+        with self.assertRaises(LookupError):
+            documents.selected(self.owner,"course",[foreign])
+        with self.assertRaises(LookupError):
+            documents.selected(self.owner,"another-chat",[selected])
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("set local role authenticated")
+            cur.execute("select set_config('request.jwt.claim.sub',%s,true)",(self.other,))
+            cur.execute("select id from koji_documents where user_id=%s",(self.owner,))
+            self.assertEqual(cur.fetchall(),[])
+            cur.execute("select id from koji_document_chunks where user_id=%s",(self.owner,))
+            self.assertEqual(cur.fetchall(),[])
+
+    def test_pdf_completion_is_fenced_and_removal_waits_for_active_questions(self):
+        from studio.documents import Documents
+        from unittest.mock import Mock
+        documents=Documents()
+        self.repo.append_chat_event(self.owner,"course","prompt","prompt",{"prompt":"Study"})
+        document=str(uuid4())
+        row=documents.register(self.owner,"course",document,"Notes.pdf",self.owner+"/notes.pdf",100)
+        job=self.repo.claim()
+        stale={**job,"lease_token":str(uuid4())}
+        with self.assertRaisesRegex(RuntimeError,"lease lost"):
+            documents.finish(stale,[],1,0)
+        documents.finish(job,[{"page":1,"content":"Heart wall", "embedding":[1.0]+[0.0]*383}],1,0)
+        self.repo.update_job(job,status="completed")
+        generation=str(uuid4())
+        self.repo.save_history(self.owner,generation,{"chatId":"course"},self.owner+"/image.png")
+        question=self.repo.create_job(self.owner,self.payload(kind="analysis",generation_id=generation,
+            analysis={"id":"q","mode":"ask","question":"Why?","interaction":{"type":"point","coords":[.4,.5]},"document_ids":[document]}),{})
+        remove=Mock()
+        with self.assertRaisesRegex(ValueError,"finish"):
+            documents.delete(self.owner,document,remove)
+        remove.assert_not_called()
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("update koji_jobs set status='failed' where id=%s",(question["id"],))
+        documents.delete(self.owner,document,remove)
+        remove.assert_called_once_with([self.owner+"/notes.pdf"])
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("select count(*) from koji_document_chunks where document_id=%s",(document,))
+            self.assertEqual(cur.fetchone()[0],0)
+
 if __name__=="__main__":
     unittest.main()

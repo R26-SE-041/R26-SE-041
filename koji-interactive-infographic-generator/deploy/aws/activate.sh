@@ -37,6 +37,7 @@ mkdir -p "$root/deploy-environments" "$root/deploy-backups"
 # Keep virtual environments at stable absolute paths across activation.
 environment="$(mktemp -d "$root/deploy-environments/$sha.XXXXXXXX")"
 python3 -m venv "$environment"
+"$environment/bin/python" -m pip install --disable-pip-version-check torch --index-url https://download.pytorch.org/whl/cpu
 "$environment/bin/python" -m pip install --disable-pip-version-check -r "$stage/package/studio/requirements.txt"
 "$environment/bin/python" -m compileall -q "$stage/package/studio" "$stage/package/shared"
 cd "$stage/package"

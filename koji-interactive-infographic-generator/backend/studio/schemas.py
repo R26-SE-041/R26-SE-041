@@ -44,9 +44,11 @@ class AnalysisRequest(BaseModel):
     structure_id: str | None = Field(default=None, max_length=160)
     regeneration_feedback: str | None = Field(default=None, max_length=2000)
     memory_context: str = Field(default="", max_length=16000)
+    document_ids: list[UUID] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def validate_question(self):
+        self.document_ids = list(dict.fromkeys(self.document_ids))
         if self.mode == "ask" and not self.question.strip():
             raise ValueError("Question is required")
         return self
