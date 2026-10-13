@@ -8,6 +8,8 @@ export type IconName =
   | "book"
   | "box-select"
   | "check"
+  | "chevron-down"
+  | "chevron-up"
   | "close"
   | "log-out"
   | "message-plus"
@@ -53,6 +55,8 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "book" && <><Path {...common} d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><Path {...common} d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>}
       {name === "box-select" && <><Rect {...common} height="14" rx="1" width="14" x="5" y="5" /><Path {...common} d="M9 2H2v7M15 22h7v-7" /></>}
       {name === "check" && <Polyline {...common} points="20 6 9 17 4 12" />}
+      {name === "chevron-down" && <Polyline {...common} points="6 9 12 15 18 9" />}
+      {name === "chevron-up" && <Polyline {...common} points="6 15 12 9 18 15" />}
       {name === "close" && <Path {...common} d="m6 6 12 12M18 6 6 18" />}
       {name === "log-out" && <><Path {...common} d="M9 4H4v16h5M9 12h12m-4-4 4 4-4 4" /></>}
       {name === "message-plus" && <><Path {...common} d="M21 11v6a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h8M19 2v6m-3-3h6" /></>}

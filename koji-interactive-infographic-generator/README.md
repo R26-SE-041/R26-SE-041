@@ -119,13 +119,17 @@ The default local backend check skips database integration tests if no test data
 
 ## Optional PDFs for image questions
 
-In the interactive image view, **Workspace PDF library** accepts multiple PDFs saved to
-the signed-in student's personal workspace. Upload once and reuse them with any
+In the interactive image view, select a region and choose **Ask Question**. Below
+the question box, expand **PDF sources · Optional** to upload or choose PDFs saved
+to the signed-in student's personal workspace. Upload once and reuse them with any
 image or conversation. Deleting a conversation keeps the library and its index.
 Students can select any combination of ready files
 for each question, select all, or clear selection for an image-based explanation.
-Newly processed uploads are selected automatically; deliberate deselections are
-retained while studying. Reopening a conversation restores its last question's
+The collapsed panel shows the selected file count, or **Image only**. Existing
+files start unselected; newly processed uploads are selected while the panel is
+mounted. Deliberate deselections are retained when switching question modes.
+Identify Object and Explain Region use the image without PDF sources.
+Reopening a conversation restores its last question's
 selection. Each question saves its own document IDs and retrieved evidence.
 
 PDF indexing runs as a durable CPU worker job. Closing the browser does not stop
