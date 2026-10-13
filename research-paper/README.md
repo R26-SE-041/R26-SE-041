@@ -22,7 +22,11 @@ The [LearnX research website](https://learnx-research.vercel.app) provides the t
 - [Earlier paper (HTML)](archive/research_paper.html)
 - [ICAC HTML export](archive/BioLearnX_ICAC2026.html)
 - [Bibliography collection (BibTeX)](archive/references.bib)
-- [Editable manuscript draft (Word)](../output/paper/BioLearnX_ICAC_2026_Manuscript_Draft.docx)
-- [Manuscript draft (PDF)](../output/paper/BioLearnX_ICAC_2026_Manuscript_Draft.pdf)
+- [Editable manuscript draft (Word)](archive/manuscript-draft/BioLearnX_ICAC_2026_Manuscript_Draft.docx)
+- [Manuscript draft (PDF)](archive/manuscript-draft/BioLearnX_ICAC_2026_Manuscript_Draft.pdf)
 
 Archived versions preserve their original names and contents. Submission status is not inferred from filenames.
+
+Generated reports and validation artifacts belong in the ignored root `output/`
+directory. `tools/build_biolearnx_paper.py` regenerates the Word draft and its
+architecture image in `output/paper/`; archived drafts remain here for reference.
