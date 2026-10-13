@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from studio.repository import Repository
 from studio.storage import Storage
-from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch
+from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback
 from studio.pipeline import configured_endpoints, required_services
 from studio.documents import Documents, MAX_PDF_BYTES, filename_for_upload, public_document
 
@@ -89,13 +89,21 @@ def ready():
     with connection() as conn,conn.cursor() as cur:
         cur.execute("select 1 from koji_chats limit 1")
         cur.execute("select 1 from koji_documents limit 1")
-        if os.getenv("ORCHESTRATOR_URL"):
-            cur.execute("select 1 from agent_feedback limit 1")
+        cur.execute("select 1 from agent_feedback limit 1")
         cur.execute("""select attnotnull from pg_attribute
             where attrelid='public.koji_documents'::regclass and attname='chat_id'""")
         if cur.fetchone()[0]:
             raise HTTPException(503,"Apply the workspace PDF library migration before deploying")
     return {"status":"ok"}
+
+@app.post("/feedback",status_code=201)
+def save_output_feedback(body: OutputFeedback,user_id: str=Depends(require_user)):
+    try:
+        return repo.save_feedback(user_id,body.model_dump(mode="json"))
+    except LookupError:
+        raise HTTPException(404,"Output feedback not found") from None
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from None
 
 @app.post("/studio/jobs",status_code=202)
 def start_job(body: JobRequest,user_id: str=Depends(require_user)):

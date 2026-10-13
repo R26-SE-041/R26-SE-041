@@ -18,6 +18,29 @@ class Annotation(BaseModel):
     user_edited: bool = False
     source: Literal["automatic", "manual"] = "automatic"
 
+
+class OutputFeedback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: str = Field(min_length=1, max_length=128)
+    agent_name: Literal["prompt-agent", "prompt-anatomy", "prompt-generic", "image-agent", "interactive-agent", "eval-agent", "threed-agent"]
+    output_id: str = Field(min_length=1, max_length=128)
+    rating: Literal[-1, 1]
+    reason_codes: list[str] = Field(default_factory=list, max_length=8)
+    comment: str | None = Field(default=None, max_length=2000)
+    parent_feedback_id: UUID | None = None
+    parent_output_id: str | None = Field(default=None, max_length=128)
+    input_context: dict = Field(default_factory=dict)
+    output_snapshot: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def bound_context(self):
+        import json
+        if len(json.dumps(self.input_context)) > 10000 or len(json.dumps(self.output_snapshot)) > 20000:
+            raise ValueError("Feedback context is too large")
+        if any(len(code) > 80 for code in self.reason_codes):
+            raise ValueError("Feedback reason is too long")
+        return self
+
 class ImageSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
     type: Literal["point", "box"]

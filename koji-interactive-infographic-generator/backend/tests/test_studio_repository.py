@@ -52,13 +52,14 @@ class RepositoryIntegrationTests(unittest.TestCase):
         return {"request_id":str(uuid4()),"kind":"generate","prompt":"heart","mode":"general",**changes}
 
     def test_output_ratings_save_change_and_remain_private_for_every_agent(self):
-        from shared.db import record_agent_feedback, _FEEDBACK_AGENTS
+        from shared.db import _FEEDBACK_AGENTS
         for agent in _FEEDBACK_AGENTS:
             output=str(uuid4())
-            first=record_agent_feedback(session_id="test",agent_name=agent,output_id=output,
-                rating=1,reason_codes=[],auth_user_id=self.owner)
-            second=record_agent_feedback(session_id="test",agent_name=agent,output_id=output,
-                rating=-1,reason_codes=[],comment="User marked this output as not useful.",auth_user_id=self.owner)
+            data={"session_id":"test","agent_name":agent,"output_id":output,"rating":1}
+            first=self.repo.save_feedback(self.owner,data)
+            with self.assertRaises(LookupError):
+                self.repo.save_feedback(self.other,{**data,"rating":-1})
+            second=self.repo.save_feedback(self.owner,{**data,"rating":-1,"comment":"User marked this output as not useful."})
             self.assertEqual(first["feedback_id"],second["feedback_id"])
             with connection() as conn,conn.cursor() as cur:
                 cur.execute("select rating,auth_user_id::text from agent_feedback where output_id=%s",(output,))
@@ -67,6 +68,15 @@ class RepositoryIntegrationTests(unittest.TestCase):
                 cur.execute("select set_config('request.jwt.claim.sub',%s,true)",(self.other,))
                 cur.execute("select id from agent_feedback where output_id=%s",(output,))
                 self.assertEqual(cur.fetchall(),[])
+
+    def test_feedback_pairs_require_owned_disliked_output_in_same_session(self):
+        data={"session_id":"test","agent_name":"image-agent","output_id":str(uuid4()),"rating":-1}
+        negative=self.repo.save_feedback(self.owner,data)
+        retry={**data,"output_id":str(uuid4()),"rating":1,"parent_feedback_id":negative["feedback_id"]}
+        with self.assertRaises(ValueError):
+            self.repo.save_feedback(self.other,retry)
+        pair=self.repo.save_feedback(self.owner,retry)
+        self.assertIsNotNone(pair["preference_pair_id"])
 
     def test_request_id_is_idempotent_but_not_reusable_for_changed_payload(self):
         payload=self.payload()
