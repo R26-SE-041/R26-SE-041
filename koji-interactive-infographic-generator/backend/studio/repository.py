@@ -16,6 +16,39 @@ def connection():
         conn.close()
 
 class Repository:
+    def save_feedback(self,user_id,data):
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("""insert into agent_feedback
+                (session_id,auth_user_id,agent_name,output_id,rating,reason_codes,comment,input_context,output_snapshot,parent_output_id)
+                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                on conflict(agent_name,output_id) do update set rating=excluded.rating,
+                    reason_codes=excluded.reason_codes,comment=excluded.comment,
+                    input_context=excluded.input_context,output_snapshot=excluded.output_snapshot
+                where agent_feedback.auth_user_id=excluded.auth_user_id returning id::text""",
+                (data["session_id"],user_id,data["agent_name"],data["output_id"],data["rating"],data.get("reason_codes",[]),
+                 data.get("comment"),Json(data.get("input_context",{})),Json(data.get("output_snapshot",{})),data.get("parent_output_id")))
+            row=cur.fetchone()
+            if not row:
+                raise LookupError("Output belongs to another account")
+            feedback_id=row[0]; pair_id=None
+            if data.get("parent_feedback_id"):
+                if data["rating"] != 1:
+                    raise ValueError("Only a liked retry can complete a preference pair")
+                cur.execute("""insert into preference_pairs
+                    (agent_name,negative_feedback_id,positive_feedback_id,negative_output_id,positive_output_id,negative_reasons,positive_reasons)
+                    select n.agent_name,n.id,p.id,n.output_id,p.output_id,n.reason_codes,p.reason_codes
+                    from agent_feedback n join agent_feedback p on p.id=%s::uuid
+                    where n.id=%s::uuid and n.rating=-1 and n.auth_user_id=%s
+                        and n.agent_name=p.agent_name and n.session_id=p.session_id and n.output_id<>p.output_id
+                    on conflict(negative_feedback_id) do update set positive_feedback_id=excluded.positive_feedback_id,
+                        positive_output_id=excluded.positive_output_id,positive_reasons=excluded.positive_reasons
+                    returning id::text""",(feedback_id,data["parent_feedback_id"],user_id))
+                pair=cur.fetchone()
+                if not pair:
+                    raise ValueError("Choose a disliked output from the same account, agent and session")
+                pair_id=pair[0]
+            return {"feedback_id":feedback_id,"preference_pair_id":pair_id,"status":"recorded"}
+
     def get_job(self, user_id, job_id):
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("select * from koji_jobs where id=%s and user_id=%s", (job_id,user_id))

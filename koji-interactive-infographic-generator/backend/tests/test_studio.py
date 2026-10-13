@@ -150,3 +150,35 @@ class RecoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutputFeedbackApiTests(unittest.TestCase):
+    def setUp(self):
+        app.dependency_overrides[require_user]=lambda: USER_A
+        self.client=TestClient(app)
+        self.payload={"session_id":"study","agent_name":"image-agent","output_id":"image","rating":-1}
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+
+    def test_rating_saves_locally_with_authenticated_owner_without_model_call(self):
+        with patch("studio.main.repo") as repo,patch("studio.main.requests.post") as external:
+            repo.save_feedback.return_value={"status":"recorded","feedback_id":str(uuid4())}
+            response=self.client.post("/feedback",json=self.payload)
+            self.assertEqual(response.status_code,201)
+            self.assertEqual(repo.save_feedback.call_args.args[0],USER_A)
+            self.assertEqual(repo.save_feedback.call_args.args[1]["rating"],-1)
+            external.assert_not_called()
+            app.dependency_overrides.clear()
+            self.assertEqual(self.client.post("/feedback",json=self.payload).status_code,401)
+
+    def test_owner_spoofing_invalid_rating_and_oversized_context_are_rejected(self):
+        with patch("studio.main.repo") as repo:
+            for changes in ({"auth_user_id":USER_B},{"rating":0},{"input_context":{"text":"x"*10001}}):
+                self.assertEqual(self.client.post("/feedback",json={**self.payload,**changes}).status_code,422)
+            repo.save_feedback.assert_not_called()
+
+    def test_another_accounts_output_cannot_be_overwritten(self):
+        with patch("studio.main.repo") as repo:
+            repo.save_feedback.side_effect=LookupError("Foreign output")
+            self.assertEqual(self.client.post("/feedback",json=self.payload).status_code,404)

@@ -213,7 +213,8 @@ Failed saves restore the previous selection and show an actionable error.
 Speed choices reserve the checkmark space and keep their dimensions stable;
 web controls share hover, pressed, selected and keyboard-focus feedback.
 
-Apply **005_output_feedback.sql** with `python -m studio.migrate` when using the
-existing `ORCHESTRATOR_URL` feedback service. It provisions that service's
-feedback and preference-pair tables with private owner access; Studio readiness
-checks feedback storage when the service is configured.
+Apply **005_output_feedback.sql** with `python -m studio.migrate` before using
+output ratings. The authenticated Studio API saves ratings directly in the
+existing feedback and preference-pair tables with private owner access. Rating
+saves do not depend on the external orchestrator. Studio readiness checks this
+storage before deployment.
