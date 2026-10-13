@@ -1,7 +1,14 @@
-# EC2 deployment preparation
+# EC2 deployment
 
-Status: deployment sources prepared. No EC2 instance has been launched, no remote
-Docker build has been validated, and the public frontend still has no backend.
+Deployment verified on 2026-10-13: Linux Docker builds, HTTPS, Supabase login,
+document upload and Q&A, OpenClaw flashcards and audio saving, WAV download,
+user isolation, browser login/reopen, and persistence after automatic deployment.
+
+Frontend: https://voicelearn-audio.vercel.app/study-assistant
+Backend: https://voicelearn-15-134-177-14.sslip.io
+The backend uses temporary sslip.io DNS; replace it with owned DNS when available.
+Production signup uses confirmed email. Supabase's default email service has
+recipient/rate restrictions; configure custom SMTP before general student signup.
 
 Use a dedicated Ubuntu 24.04 LTS **x86_64** instance for this component. A starting
 configuration is t3.small (2 vCPU, 2 GiB RAM), 30 GiB encrypted gp3 root storage and 4 GiB swap. OpenClaw can use over 1 GiB RAM; monitor memory during concurrent requests.
@@ -59,8 +66,26 @@ user's account. A separate user-approved ownership/data migration is needed.
 Build a new release before replacing running services. Saved data is outside release
 directories. Restarting the backend may interrupt active generation jobs; finish
 requests before deploying. Retain a previous release for rollback and verify health
-after every update. Backend automatic deployment and Linux Modal switching still
-need implementation/live validation; the Windows switch command is not valid here.
+after every update. GitHub Actions checks the production branch before the EC2
+systemd timer deploys it. The timer checks every five minutes, retaining the old
+release when checks fail and restoring it if deployment fails. This public-repo
+pull mechanism requires no GitHub token or AWS IAM deployment credentials.
+
+Install poll_release.py under /opt/voicelearn and the service/timer under
+/etc/systemd/system. Enable voicelearn-deploy.timer after creating the current
+release symlink. The active branch is baskaran/expo-web-migration.
+
+For cloud Modal switching, use:
+`sudo bash /srv/voicelearn/current/deploy/ec2/switch-modal.sh WORKSPACE`.
+It verifies the selected workspace before changing protected backend settings,
+retains the frontend URL and saved data, and restores settings if health fails.
+bootstrap.sh installs the isolated Python environment used by this helper.
+Use configured names visakanbaskaran, krishnavaranan1, krishnavaranan, or varananrp.
+
+Document files and metadata use Supabase; saved revision transcripts, WAVs and
+flashcards currently persist on EC2 EBS. They are not uploaded to the Supabase
+audio bucket. Persistent EBS is not an off-server backup; set up backups before
+depending on this demo deployment for irreplaceable user data.
 
 Do not call this deployment complete until AWS resources, DNS, package downloads,
 authentication, actual Docker builds, MCP, saved-file persistence after restart,
