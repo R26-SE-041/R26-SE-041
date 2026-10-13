@@ -173,15 +173,15 @@ class RepositoryIntegrationTests(unittest.TestCase):
         self.assertIsNone(self.repo.get_chat(self.owner,"chat"))
         self.assertIsNone(self.repo.get_history(self.owner,generation))
 
-    def test_pdf_retrieval_is_scoped_to_owner_chat_and_selected_files(self):
+    def test_workspace_pdf_retrieval_is_scoped_to_owner_and_selected_files(self):
         from studio.documents import Documents
         documents = Documents()
         selected, unselected, foreign = (str(uuid4()) for _ in range(3))
         for owner in (self.owner,self.other):
             self.repo.append_chat_event(owner,"course","prompt","prompt",{"prompt":"Heart study"})
-        first=documents.register(self.owner,"course",selected,"Textbook.pdf",self.owner+"/selected.pdf",100)
-        second=documents.register(self.owner,"course",unselected,"Other.pdf",self.owner+"/other.pdf",100)
-        third=documents.register(self.other,"course",foreign,"Private.pdf",self.other+"/private.pdf",100)
+        first=documents.register(self.owner,selected,"Textbook.pdf",self.owner+"/selected.pdf",100)
+        second=documents.register(self.owner,unselected,"Other.pdf",self.owner+"/other.pdf",100)
+        third=documents.register(self.other,foreign,"Private.pdf",self.other+"/private.pdf",100)
         vector=[1.0]+[0.0]*383
         for row in (first,second,third):
             with connection() as conn,conn.cursor() as cur:
@@ -191,16 +191,15 @@ class RepositoryIntegrationTests(unittest.TestCase):
             documents.finish(job,[{"page":3,"content":"Left ventricle has thick walls for high pressure.","embedding":vector}],4,0)
             self.repo.update_job(job,status="completed")
         with patch("studio.documents.embed_texts",return_value=[vector]):
-            results=documents.retrieve(self.owner,"course",[selected],"left ventricle thick walls")
+            results=documents.retrieve(self.owner,[selected],"left ventricle thick walls")
         self.assertEqual({str(row["document_id"]) for row in results},{selected})
         self.assertEqual(results[0]["page"],3)
         self.assertEqual(results[0]["filename"],"Textbook.pdf")
         with patch("studio.documents.embed_texts",return_value=[[0.0,1.0]+[0.0]*382]),patch.dict(os.environ,{"STUDIO_PDF_MIN_SIMILARITY":"0.30"}):
-            self.assertEqual(documents.retrieve(self.owner,"course",[selected],"chloroplast photosynthesis"),[])
+            self.assertEqual(documents.retrieve(self.owner,[selected],"chloroplast photosynthesis"),[])
         with self.assertRaises(LookupError):
-            documents.selected(self.owner,"course",[foreign])
-        with self.assertRaises(LookupError):
-            documents.selected(self.owner,"another-chat",[selected])
+            documents.selected(self.owner,[foreign])
+        self.assertEqual(str(documents.selected(self.owner,[selected])[0]["id"]),selected)
         with connection() as conn,conn.cursor() as cur:
             cur.execute("set local role authenticated")
             cur.execute("select set_config('request.jwt.claim.sub',%s,true)",(self.other,))
@@ -209,13 +208,38 @@ class RepositoryIntegrationTests(unittest.TestCase):
             cur.execute("select id from koji_document_chunks where user_id=%s",(self.owner,))
             self.assertEqual(cur.fetchall(),[])
 
+    def test_deleting_original_chat_preserves_workspace_pdf_and_indexing_job(self):
+        from studio.documents import Documents
+        from unittest.mock import Mock
+        documents=Documents()
+        self.repo.append_chat_event(self.owner,"original","prompt","prompt",{"prompt":"Study"})
+        identifier=str(uuid4())
+        row=documents.register(self.owner,identifier,"Notes.pdf",self.owner+"/notes.pdf",100)
+        # A retained origin column must never restore chat ownership or cascading deletion.
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("update koji_documents set chat_id='original' where id=%s",(identifier,))
+        remove=Mock()
+        self.repo.delete_chat(self.owner,"original",remove)
+        remove.assert_called_once_with([])
+        self.assertIsNotNone(documents.get(self.owner,identifier))
+        self.assertEqual(len(documents.list(self.owner)),1)
+        job=self.repo.get_job(self.owner,str(row["job_id"]))
+        self.assertEqual(job["status"],"queued")
+        self.assertNotIn("chat_id",job["payload"])
+        job=self.repo.claim()
+        vector=[1.0]+[0.0]*383
+        documents.finish(job,[{"page":1,"content":"Heart walls", "embedding":vector}],1,0)
+        self.repo.update_job(job,status="completed")
+        with patch("studio.documents.embed_texts",return_value=[vector]):
+            self.assertEqual(str(documents.retrieve(self.owner,[identifier],"Heart walls")[0]["document_id"]),identifier)
+
     def test_pdf_completion_is_fenced_and_removal_waits_for_active_questions(self):
         from studio.documents import Documents
         from unittest.mock import Mock
         documents=Documents()
         self.repo.append_chat_event(self.owner,"course","prompt","prompt",{"prompt":"Study"})
         document=str(uuid4())
-        row=documents.register(self.owner,"course",document,"Notes.pdf",self.owner+"/notes.pdf",100)
+        row=documents.register(self.owner,document,"Notes.pdf",self.owner+"/notes.pdf",100)
         job=self.repo.claim()
         stale={**job,"lease_token":str(uuid4())}
         with self.assertRaisesRegex(RuntimeError,"lease lost"):
@@ -223,7 +247,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
         documents.finish(job,[{"page":1,"content":"Heart wall", "embedding":[1.0]+[0.0]*383}],1,0)
         self.repo.update_job(job,status="completed")
         generation=str(uuid4())
-        self.repo.save_history(self.owner,generation,{"chatId":"course"},self.owner+"/image.png")
+        self.repo.save_history(self.owner,generation,{"chatId":"another-image"},self.owner+"/image.png")
         question=self.repo.create_job(self.owner,self.payload(kind="analysis",generation_id=generation,
             analysis={"id":"q","mode":"ask","question":"Why?","interaction":{"type":"point","coords":[.4,.5]},"document_ids":[document]}),{})
         remove=Mock()

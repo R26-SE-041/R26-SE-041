@@ -66,8 +66,8 @@ class Repository:
                 chat_id = source["metadata"].get("chatId") or str(source["id"])
                 # Validate under the same per-user lock used by PDF removal.
                 if a.get("document_ids"):
-                    cur.execute("""select id,status from koji_documents where user_id=%s and chat_id=%s
-                        and id=any(%s::uuid[])""",(user_id,chat_id,a["document_ids"]))
+                    cur.execute("""select id,status from koji_documents where user_id=%s
+                        and id=any(%s::uuid[])""",(user_id,a["document_ids"]))
                     selected = cur.fetchall()
                     if len(selected) != len(set(a["document_ids"])):
                         raise LookupError("Selected PDF not found")
@@ -260,8 +260,6 @@ class Repository:
             paths=[path for row in cur.fetchall() for path in (row["image_path"],row["thumbnail_path"],row["glb_path"]) if path]
             cur.execute("select data->>'glbPath' as path from koji_chat_events where user_id=%s and chat_id=%s and kind='threed'",(user_id,chat_id))
             paths.extend(row["path"] for row in cur.fetchall() if row["path"] and row["path"].startswith(user_id+"/"))
-            cur.execute("select storage_path from koji_documents where user_id=%s and chat_id=%s",(user_id,chat_id))
-            paths.extend(row["storage_path"] for row in cur.fetchall())
             remove_assets(list(set(paths)))
             cur.execute("delete from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s",(user_id,chat_id))
             cur.execute("delete from koji_chats where user_id=%s and id=%s",(user_id,chat_id))

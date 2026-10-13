@@ -1,4 +1,4 @@
-"""Private, chat-scoped PDF indexing and question-aware retrieval on the CPU worker."""
+"""Private, workspace-scoped PDF indexing and question-aware retrieval on the CPU worker."""
 from __future__ import annotations
 
 import base64
@@ -83,10 +83,10 @@ def public_document(row):
 
 
 class Documents:
-    def list(self, user_id, chat_id):
+    def list(self, user_id):
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("select * from koji_documents where user_id=%s and chat_id=%s order by created_at,id",
-                        (user_id, chat_id))
+            cur.execute("select * from koji_documents where user_id=%s order by created_at,id",
+                        (user_id,))
             return [dict(row) for row in cur.fetchall()]
 
     def get(self, user_id, document_id):
@@ -95,34 +95,31 @@ class Documents:
             row = cur.fetchone()
             return dict(row) if row else None
 
-    def selected(self, user_id, chat_id, document_ids):
+    def selected(self, user_id, document_ids):
         if not document_ids:
             return []
         unique = list(dict.fromkeys(str(value) for value in document_ids))
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("select * from koji_documents where user_id=%s and chat_id=%s and id=any(%s::uuid[])",
-                        (user_id, chat_id, unique))
+            cur.execute("select * from koji_documents where user_id=%s and id=any(%s::uuid[])",
+                        (user_id, unique))
             rows = [dict(row) for row in cur.fetchall()]
         if len(rows) != len(unique):
-            raise LookupError("A selected PDF is no longer attached to this conversation")
+            raise LookupError("A selected PDF is no longer available in your workspace")
         if any(row["status"] != "ready" for row in rows):
             raise ValueError("Wait until all selected PDFs are ready, or deselect them")
         return rows
 
-    def register(self, user_id, chat_id, document_id, filename, path, size):
+    def register(self, user_id, document_id, filename, path, size):
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (user_id,))
-            cur.execute("select 1 from koji_chats where user_id=%s and id=%s for update", (user_id, chat_id))
-            if not cur.fetchone():
-                raise LookupError("Conversation not found")
-            cur.execute("select count(*) from koji_documents where user_id=%s and chat_id=%s", (user_id, chat_id))
+            cur.execute("select count(*) from koji_documents where user_id=%s", (user_id,))
             if cur.fetchone()["count"] >= MAX_DOCUMENTS:
-                raise ValueError(f"You can attach up to {MAX_DOCUMENTS} PDFs per conversation")
+                raise ValueError(f"You can store up to {MAX_DOCUMENTS} PDFs in your workspace")
             self._capacity(cur, user_id)
-            job_id = self._queue(cur, user_id, chat_id, document_id)
-            cur.execute("""insert into koji_documents(id,user_id,chat_id,filename,storage_path,size_bytes,job_id)
-                values(%s,%s,%s,%s,%s,%s,%s) returning *""",
-                        (document_id, user_id, chat_id, filename, path, size, job_id))
+            job_id = self._queue(cur, user_id, document_id)
+            cur.execute("""insert into koji_documents(id,user_id,filename,storage_path,size_bytes,job_id)
+                values(%s,%s,%s,%s,%s,%s) returning *""",
+                        (document_id, user_id, filename, path, size, job_id))
             return dict(cur.fetchone())
 
     def _capacity(self, cur, user_id):
@@ -130,9 +127,9 @@ class Documents:
         if cur.fetchone()["count"] >= int(os.getenv("STUDIO_MAX_ACTIVE_JOBS", "3")):
             raise OverflowError("Finish an active job before uploading or retrying another PDF")
 
-    def _queue(self, cur, user_id, chat_id, document_id):
+    def _queue(self, cur, user_id, document_id):
         job_id = str(uuid4())
-        payload = {"kind": "document_index", "document_id": str(document_id), "chat_id": chat_id}
+        payload = {"kind": "document_index", "document_id": str(document_id)}
         cur.execute("""insert into koji_jobs(id,user_id,request_id,kind,payload,endpoints)
             values(%s,%s,%s,'document_index',%s,'{}')""", (job_id, user_id, str(uuid4()), Json(payload)))
         return job_id
@@ -147,7 +144,7 @@ class Documents:
             if row["status"] != "failed":
                 raise ValueError("Only failed PDFs can be retried")
             self._capacity(cur, user_id)
-            job_id = self._queue(cur, user_id, row["chat_id"], document_id)
+            job_id = self._queue(cur, user_id, document_id)
             cur.execute("update koji_documents set status='processing',error=null,job_id=%s where user_id=%s and id=%s returning *",
                         (job_id, user_id, document_id))
             return dict(cur.fetchone())
@@ -195,8 +192,8 @@ class Documents:
             remove_assets([row["storage_path"]])
             cur.execute("delete from koji_documents where user_id=%s and id=%s", (user_id, document_id))
 
-    def retrieve(self, user_id, chat_id, document_ids, query, limit=4):
-        self.selected(user_id, chat_id, document_ids)
+    def retrieve(self, user_id, document_ids, query, limit=4):
+        self.selected(user_id, document_ids)
         if not document_ids:
             return []
         vector = vector_literal(embed_texts([query])[0])
@@ -209,7 +206,7 @@ class Documents:
                     ts_rank(c.fts,websearch_to_tsquery('english',%s)) as lexical,
                     c.fts @@ websearch_to_tsquery('english',%s) as lexical_match
                 from koji_document_chunks c join koji_documents d on d.id=c.document_id and d.user_id=c.user_id
-                where c.user_id=%s and d.chat_id=%s and d.status='ready' and c.document_id=any(%s::uuid[])
+                where c.user_id=%s and d.status='ready' and c.document_id=any(%s::uuid[])
             ), semantic as (
                 select id,row_number() over(order by similarity desc,id) as rank from scoped
                 where similarity>=%s order by similarity desc,id limit 20
@@ -220,7 +217,7 @@ class Documents:
                 select coalesce(s.id,l.id) as id,coalesce(1.0/(60+s.rank),0)+coalesce(1.0/(60+l.rank),0) as score
                 from semantic s full join lexical l on s.id=l.id
             ) select c.*,f.score from scoped c join fused f on f.id=c.id order by f.score desc,c.id limit %s""",
-                        (vector, query, query, user_id, chat_id, list(document_ids),
+                        (vector, query, query, user_id, list(document_ids),
                          float(os.getenv("STUDIO_PDF_MIN_SIMILARITY", "0.30")), limit))
             return [dict(row) for row in cur.fetchall()]
 

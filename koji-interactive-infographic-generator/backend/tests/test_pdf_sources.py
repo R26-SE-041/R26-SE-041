@@ -62,7 +62,7 @@ class ExtractionTests(TestCase):
 
     def test_retrieval_without_sources_does_not_load_the_embedding_model(self):
         with patch("studio.documents.embed_texts") as embed:
-            self.assertEqual(Documents().retrieve("owner","chat",[],"question"),[])
+            self.assertEqual(Documents().retrieve("owner",[],"question"),[])
             embed.assert_not_called()
 
     def test_evidence_retains_original_document_page_and_passage(self):
@@ -89,7 +89,7 @@ class PdfApiTests(TestCase):
     def test_upload_is_authenticated_and_rejects_wrong_content_before_storage(self):
         with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
             repo.get_chat.return_value = {"id":"chat"}
-            route = "/studio/chats/chat/documents?filename=notes.pdf"
+            route = "/studio/documents?filename=notes.pdf"
             self.assertEqual(self.client.post(route,content=b"fake",headers={"Content-Type":"text/plain"}).status_code,415)
             self.assertEqual(self.client.post(route,content=b"fake",headers={"Content-Type":"application/pdf"}).status_code,422)
             storage.assert_not_called()
@@ -99,10 +99,18 @@ class PdfApiTests(TestCase):
     def test_upload_size_is_bounded_before_storage(self):
         with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
             repo.get_chat.return_value = {"id":"chat"}
-            response = self.client.post("/studio/chats/chat/documents?filename=notes.pdf",
+            response = self.client.post("/studio/documents?filename=notes.pdf",
                 content=b"%PDF-"+b"x"*MAX_PDF_BYTES,headers={"Content-Type":"application/pdf"})
             self.assertEqual(response.status_code,413)
             storage.assert_not_called()
+
+    def test_workspace_library_does_not_require_an_image_or_chat(self):
+        with patch("studio.main.documents") as documents, patch("studio.main.repo") as repo:
+            documents.list.return_value=[]
+            response=self.client.get("/studio/documents")
+            self.assertEqual(response.status_code,200)
+            documents.list.assert_called_once_with(self.owner)
+            repo.get_chat.assert_not_called()
 
     def test_selected_foreign_pdf_prevents_question_job_creation(self):
         with patch("studio.main.repo") as repo, patch("studio.main.documents") as documents, patch.dict(os.environ,{"INTERACTIVE_AGENT_URL":"https://models.example"}):
@@ -128,7 +136,7 @@ class PdfApiTests(TestCase):
             repo.get_chat.return_value={"id":"chat"}
             storage.return_value.upload.return_value="owner/documents/upload.pdf"
             documents.register.side_effect=OverflowError("Finish an active job")
-            response=self.client.post("/studio/chats/chat/documents?filename=notes.pdf",content=b"%PDF-1.7",headers={"Content-Type":"application/pdf"})
+            response=self.client.post("/studio/documents?filename=notes.pdf",content=b"%PDF-1.7",headers={"Content-Type":"application/pdf"})
             self.assertEqual(response.status_code,429)
             storage.return_value.remove.assert_called_once_with(["owner/documents/upload.pdf"])
 
@@ -151,8 +159,8 @@ class PdfPipelineTests(TestCase):
             documents.return_value.retrieve.return_value=[{"document_id":self.doc,"page":9,"filename":"Notes.pdf","content":"The ventricle pumps blood at high pressure."}]
             self.pipeline.process_source(self.job)
             args=documents.return_value.retrieve.call_args.args
-            self.assertEqual(args[:3],(self.owner,"chat",[self.doc]))
-            self.assertIn("Left ventricle",args[3]); self.assertIn("Why is its wall thick?",args[3])
+            self.assertEqual(args[:2],(self.owner,[self.doc]))
+            self.assertIn("Left ventricle",args[2]); self.assertIn("Why is its wall thick?",args[2])
             payload=self.pipeline.invoke.call_args.args[3]
             self.assertFalse(payload["enable_rag"])
             self.assertIn("PDF page 9",payload["pdf_context"])
