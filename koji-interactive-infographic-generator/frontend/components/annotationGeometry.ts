@@ -15,3 +15,26 @@ export function annotationGeometry(item: AnatomyAnnotation) {
   const arrow = [[ax, ay], [backX + 5 * Math.sin(angle), backY - 5 * Math.cos(angle)], [backX - 5 * Math.sin(angle), backY + 5 * Math.cos(angle)]];
   return { x, y, ax, ay, endX, width, arrow: arrow.map(p => p.join(",")).join(" ") };
 }
+
+/** Hit-test in screen pixels so arrow handles stay usable at any canvas size. */
+export function annotationHit(items: AnatomyAnnotation[], x: number, y: number, width: number, height: number) {
+  const visible = items.filter(item => item.verified || item.user_edited);
+  for (const item of [...visible].reverse()) {
+    const g = annotationGeometry(item);
+    if (x >= g.x / 1000 && x <= (g.x + g.width) / 1000 && Math.abs(y - g.y / 1000) <= LABEL_HEIGHT / 2000) {
+      return { id: item.structure_id, part: "label" as const };
+    }
+  }
+  let nearest: { id: string; part: "target"; distance: number } | undefined;
+  for (const item of visible) {
+    const g = annotationGeometry(item);
+    const ax = g.ax / 1000 * width, ay = g.ay / 1000 * height;
+    const bx = g.endX / 1000 * width, by = g.y / 1000 * height;
+    const px = x * width, py = y * height;
+    const length = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = length ? clamp(((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / length) : 0;
+    const distance = Math.hypot(px - ax - t * (bx - ax), py - ay - t * (by - ay));
+    if (distance <= 12 && (!nearest || distance < nearest.distance)) nearest = { id: item.structure_id, part: "target", distance };
+  }
+  return nearest;
+}

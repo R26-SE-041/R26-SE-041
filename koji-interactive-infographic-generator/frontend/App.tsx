@@ -23,6 +23,7 @@ import { StatusBar } from "expo-status-bar";
 import SketchCanvas from "./components/SketchCanvas";
 import { SketchStroke, SketchGenerationMetadata } from "./historyStorage";
 import InteractiveCanvas from "./components/InteractiveCanvas";
+import SpeedSelector from "./components/SpeedSelector";
 import FeedbackControls, { createOutputId, FeedbackReason } from "./components/FeedbackControls";
 import StudioSettings from "./components/StudioSettings";
 import ThreeDViewer from "./components/ThreeDViewer";
@@ -319,6 +320,7 @@ function Home({ accessToken, studioSession }: AppProps) {
   const [threedStage, setThreedStage] = useState<ThreeDStage>("idle");
   const [glbBase64, setGlbBase64] = useState<string | null>(null);
   const [glbSizeKb, setGlbSizeKb] = useState<number>();
+  const threedOutputId = useMemo(() => glbBase64 ? createOutputId("threed") : null, [glbBase64]);
   const [threedError, setThreedError] = useState<string | null>(null);
   const [promptHealth, setPromptHealth] = useState<Health>("checking");
   const [imageHealth, setImageHealth] = useState<Health>("checking");
@@ -1378,7 +1380,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 value={prompt}
               />
               {stage === "idle" && workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 10 }]}>{(workspace === "anatomy" ? ["Anterior view of the human heart", "Human lungs and airways", "Lateral view of the human brain"] : ["Photosynthesis for eighth graders", "The water cycle with clear labels", "Animal cell structure"]).map(example => <Pressable key={example} accessibilityRole="button" disabled={isLoading} style={styles.ghostButton} onPress={() => handlePromptChange(example)}><Text style={styles.ghostText}>{example}</Text></Pressable>)}</View>}
-              {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={styles.optionLabel}>Speed</Text>{SPEED_MODES.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label + ": " + item.desc} aria-pressed={speedMode === item.id} accessibilityState={{ selected: speedMode === item.id, disabled: isLoading }} disabled={isLoading} onPress={() => setSpeedMode(item.id)} style={[styles.optionButton, speedMode === item.id && styles.optionButtonSelected, isLoading && shared.disabled]}><Text style={[styles.optionText, speedMode === item.id && styles.optionTextSelected]}>{speedMode === item.id ? "✓ " : ""}{item.label}</Text></Pressable>)}</View>}
+              {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={styles.optionLabel}>Speed</Text><SpeedSelector options={SPEED_MODES} value={speedMode} disabled={isLoading} onChange={setSpeedMode} /></View>}
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
                   {workspace === "sketch" ? "Your drawing guides the image directly. Leave the instruction empty to use the default illustration style." : workspace === "anatomy"
@@ -1471,26 +1473,6 @@ function Home({ accessToken, studioSession }: AppProps) {
                     {!!evaluation.feedback && <Text style={styles.hint}>{evaluation.feedback}</Text>}
                   </View>
                 )}
-                {imageOutputId && workspace !== "sketch" && (
-                  <View style={shared.card}>
-                    <Text style={styles.badge}>Generated Image</Text>
-                    <FeedbackControls
-                      key={imageOutputId}
-                      agentName="image-agent"
-                      accessToken={accessToken}
-                      apiUrl={BACKEND_HEALTH_URL}
-                      inputContext={{ prompt: enhancedPrompt || prompt }}
-                      negativeReasons={IMAGE_NEGATIVE}
-                      onRegenerate={regenerateImageFromFeedback}
-                      outputId={imageOutputId}
-                      outputSnapshot={{ prompt: enhancedPrompt || prompt }}
-                      parentFeedbackId={imageRetryLink?.feedbackId}
-                      parentOutputId={imageRetryLink?.outputId}
-                      positiveReasons={IMAGE_POSITIVE}
-                      sessionId={sessionId}
-                    />
-                  </View>
-                )}
                 {workspace === "sketch" && <ActionButton icon="refresh" label="Regenerate from Drawing" disabled={isLoading} onPress={() => generateSketch()} />}
                 <SectionTitle title="Interactive Image Analysis" subtitle="Tap an object or select a region to ask questions and explore its details." />
                 {localizationError && <ErrorBanner title="Labels unavailable; clean image preserved" message={localizationError} />}
@@ -1507,6 +1489,13 @@ function Home({ accessToken, studioSession }: AppProps) {
                   anatomyOrgan={anatomySpec.organ}
                   feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
+                  imageFeedback={imageOutputId && <FeedbackControls
+                    key={imageOutputId} agentName="image-agent" accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL}
+                    inputContext={{ prompt: enhancedPrompt || prompt }} negativeReasons={IMAGE_NEGATIVE}
+                    outputId={imageOutputId} outputSnapshot={{ prompt: enhancedPrompt || prompt }}
+                    parentFeedbackId={imageRetryLink?.feedbackId} parentOutputId={imageRetryLink?.outputId}
+                    positiveReasons={IMAGE_POSITIVE} sessionId={sessionId}
+                  />}
                   onInteractionComplete={(interaction) => {
                     if (visibleImage.current === imageBase64) setHistoryInteractions(current => [...current.filter(turn => turn.id !== interaction.id), interaction]);
                     if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction, cloudEnabled() && /^[0-9a-f-]{36}$/i.test(currentHistoryId)).catch(e=>setError("Interaction could not be saved: "+e.message));
@@ -1541,6 +1530,10 @@ function Home({ accessToken, studioSession }: AppProps) {
                   )}
                   {threedError && <ErrorBanner title="3D conversion failed" message={threedError} />}
                   {threedStage === "done" && glbBase64 && <ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} />}
+                  {threedStage === "done" && threedOutputId && <FeedbackControls key={threedOutputId} agentName="threed-agent"
+                    apiUrl={BACKEND_HEALTH_URL} accessToken={accessToken} sessionId={sessionId} outputId={threedOutputId}
+                    inputContext={{ prompt: enhancedPrompt || prompt }} outputSnapshot={{ size_kb: glbSizeKb }} />}
+
                   {threedStage === "done" && (
                     <Pressable onPress={() => { setThreedStage("idle"); setGlbBase64(null); setThreedError(null); }} style={styles.ghostButton}>
                       <Icon color={colors.textMuted} name="refresh" size={16} /><Text style={styles.ghostText}>Convert again</Text>
@@ -1732,7 +1725,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   optionButton: { minHeight: 44, minWidth: 104, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.textDim, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   optionButtonSelected: { backgroundColor: colors.buttonBackground, borderColor: colors.buttonBackground },
   optionText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  optionTextSelected: { color: colors.onButton, fontWeight: "700" },
+  optionTextSelected: { color: colors.onButton },
   insightsCard: { gap: 14 },
   insightsHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightsTitle: { color: colors.text, fontWeight: "800", fontSize: 14 },

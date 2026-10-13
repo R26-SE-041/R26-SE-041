@@ -197,3 +197,18 @@ Pricing checked 8 October 2026:
 - AWS credits cover eligible billed usage until exhausted/expired. Check the separate Free Plan deadline: [AWS Free Tier FAQ](https://aws.amazon.com/free/free-tier-faqs/). EC2, disk, public IPv4 and traffic count toward costs. The component does not require a GPU server, load balancer, NAT gateway or a second database.
 
 Storage examples are estimates, not fixed capacities: 1 GB fits roughly 500 images averaging 2 MB, or about 45 image+GLB pairs averaging 22 MB each, before thumbnails and existing project usage. Downloading large 3D assets repeatedly can exhaust egress before storage fills. The app defaults to a 50 MiB upload limit; the project's actual per-file limit still applies. Large GLBs may need a higher Supabase plan or smaller output.
+
+### Direct label editing and output ratings
+
+Choose **Edit labels**, click a label box to rename it in place, or drag a box or
+arrow to reposition it. Clicking empty space leaves existing targets unchanged.
+Double-click or double-tap empty space to add a label; the contextual close icon
+removes the selected label. **Save changes** finishes editing. Changes persist
+with the image through the existing ordered history saves and appear in SVG exports.
+
+Every image (including drawings), prompt, completed answer and 3D output has
+compact **Like / Dislike** controls underneath it. A click saves the rating
+immediately, keeps the selected button visible, and allows changing the rating.
+Failed saves restore the previous selection and show an actionable error.
+Speed choices reserve the checkmark space and keep their dimensions stable;
+web controls share hover, pressed, selected and keyboard-focus feedback.

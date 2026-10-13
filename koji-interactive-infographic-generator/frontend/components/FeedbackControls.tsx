@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import Icon from "./Icon";
-import { ColorPalette, useAppTheme } from "../theme";
+import { useAppTheme } from "../theme";
 
 export type FeedbackAgent = "prompt-agent" | "prompt-anatomy" | "prompt-generic" | "image-agent" | "interactive-agent" | "eval-agent" | "threed-agent";
 export interface FeedbackReason { code: string; label: string }
@@ -11,13 +11,13 @@ interface FeedbackControlsProps {
   agentName: FeedbackAgent;
   apiUrl: string;
   inputContext: Record<string, unknown>;
-  negativeReasons: FeedbackReason[];
+  negativeReasons?: FeedbackReason[];
   onRegenerate?: (feedback: string, feedbackId: string, outputId: string) => Promise<void> | void;
   outputId: string;
   outputSnapshot: Record<string, unknown>;
   parentFeedbackId?: string;
   parentOutputId?: string;
-  positiveReasons: FeedbackReason[];
+  positiveReasons?: FeedbackReason[];
   sessionId: string;
 }
 
@@ -40,153 +40,45 @@ function messageFrom(payload: unknown, fallback: string): string {
 
 export default function FeedbackControls(props: FeedbackControlsProps) {
   const { colors } = useAppTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rating, setRating] = useState<-1 | 1 | null>(null);
-  const [reasons, setReasons] = useState<string[]>([]);
-  const [comment, setComment] = useState("");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [regenerated, setRegenerated] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const options = rating === 1 ? props.positiveReasons : props.negativeReasons;
-
-  const chooseRating = (next: -1 | 1) => {
-    if (status === "saved") return;
-    if (rating === next) {
-      setRating(null);
-      setReasons([]);
-      setComment("");
-      setError(null);
-      return;
-    }
-    setRating(next);
-    setReasons([]);
-    setComment("");
-    setRegenerated(false);
-    setError(null);
-  };
-
-  const toggleReason = (code: string) => {
-    setReasons((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code]);
-  };
-
-  const submit = async (regenerate: boolean) => {
-    if (!rating || status !== "idle") return;
-    if (reasons.length === 0) {
-      setError(`Select what ${rating === 1 ? "worked" : "needs correction"}.`);
-      return;
-    }
-    setStatus("saving");
-    setError(null);
+  const pending = useRef(false);
+  const chooseRating = async (next: -1 | 1) => {
+    if (pending.current || rating === next) return;
+    pending.current = true; setSaving(true); setError(null);
+    const previous = rating; setRating(next);
     try {
       const response = await fetch(`${props.apiUrl.replace(/\/$/, "")}/feedback`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(props.accessToken ? { Authorization: `Bearer ${props.accessToken}` } : {}),
-        },
-        body: JSON.stringify({
-          session_id: props.sessionId,
-          agent_name: props.agentName,
-          output_id: props.outputId,
-          parent_feedback_id: rating === 1 ? props.parentFeedbackId : undefined,
-          parent_output_id: props.parentOutputId,
-          rating,
-          reason_codes: reasons,
-          comment: comment.trim() || undefined,
-          input_context: props.inputContext,
-          output_snapshot: props.outputSnapshot,
-        }),
+        headers: { "Content-Type": "application/json", ...(props.accessToken ? { Authorization: `Bearer ${props.accessToken}` } : {}) },
+        body: JSON.stringify({ session_id: props.sessionId, agent_name: props.agentName, output_id: props.outputId,
+          parent_feedback_id: next === 1 ? props.parentFeedbackId : undefined, parent_output_id: props.parentOutputId,
+          rating: next, reason_codes: [], comment: next === -1 ? "User marked this output as not useful." : undefined,
+          input_context: props.inputContext, output_snapshot: props.outputSnapshot }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(messageFrom(data, `Feedback HTTP ${response.status}`));
-      if (regenerate && rating === -1 && props.onRegenerate) {
-        const labels = options.filter((item) => reasons.includes(item.code)).map((item) => item.label);
-        const feedback = [...labels, comment.trim()].filter(Boolean).join(". ");
-        await props.onRegenerate(feedback, String(data.feedback_id), props.outputId);
-      }
-      setRegenerated(regenerate);
-      setStatus("saved");
     } catch (caught) {
-      setStatus("idle");
-      setError(caught instanceof Error ? caught.message : "Feedback could not be saved");
-    }
+      setRating(previous); setError(caught instanceof Error ? caught.message : "Feedback could not be saved. Try again.");
+    } finally { pending.current = false; setSaving(false); }
   };
-
-  if (status === "saved") {
-    return <View style={styles.saved}><Icon color={colors.success} name="check" size={15} /><Text style={styles.savedText}>{rating === 1 ? "Preference saved" : regenerated ? "Feedback saved; corrected retry requested" : "Feedback saved"}</Text></View>;
-  }
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.question}>Was this {props.agentName.replace("-agent", "")} output useful?</Text>
-      <View style={styles.row}>
-        <Pressable accessibilityLabel="Like output" onPress={() => chooseRating(1)} style={[styles.ratingButton, rating === 1 && styles.likeActive]}>
-          <Icon color={rating === 1 ? colors.success : colors.textMuted} name="thumb-up" size={17} /><Text style={styles.buttonText}>Like</Text>
-        </Pressable>
-        <Pressable accessibilityLabel="Dislike output" onPress={() => chooseRating(-1)} style={[styles.ratingButton, rating === -1 && styles.dislikeActive]}>
-          <Icon color={rating === -1 ? colors.danger : colors.textMuted} name="thumb-down" size={17} /><Text style={styles.buttonText}>Dislike</Text>
-        </Pressable>
-      </View>
-      {rating && (
-        <View style={styles.panel}>
-          <Text style={styles.panelLabel}>{rating === 1 ? "What worked?" : "What should be corrected?"}</Text>
-          <View style={styles.reasonRow}>
-            {options.map((reason) => (
-              <Pressable key={reason.code} onPress={() => toggleReason(reason.code)} style={[styles.reason, reasons.includes(reason.code) && styles.reasonActive]}>
-                <Text style={[styles.reasonText, reasons.includes(reason.code) && styles.reasonTextActive]}>{reason.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <TextInput
-            maxLength={2000}
-            multiline
-            onChangeText={setComment}
-            placeholder="Optional detail"
-            placeholderTextColor={colors.textDim}
-            style={styles.comment}
-            value={comment}
-          />
-          {error && <Text style={styles.error}>{error}</Text>}
-          <View style={styles.submitRow}>
-            <Pressable disabled={status === "saving"} onPress={() => submit(false)} style={[styles.submit, rating === -1 && props.onRegenerate && styles.submitSecondary, status === "saving" && styles.disabled]}>
-              {status === "saving" && <ActivityIndicator color={rating === -1 && props.onRegenerate ? colors.text : colors.onButton} size="small" />}
-              <Text style={[styles.submitText, rating === -1 && props.onRegenerate && styles.submitSecondaryText]}>Submit</Text>
-            </Pressable>
-            {rating === -1 && props.onRegenerate && (
-              <Pressable disabled={status === "saving"} onPress={() => submit(true)} style={[styles.submit, status === "saving" && styles.disabled]}>
-                <Text style={styles.submitText}>Submit & regenerate</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
+  return <View style={{ marginTop: 12, gap: 6 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      {([1, -1] as const).map(value => {
+        const active = rating === value;
+        const color = active ? (value === 1 ? colors.success : colors.danger) : colors.textMuted;
+        return <Pressable key={value} accessibilityRole="button" accessibilityLabel={value === 1 ? "Like output" : "Dislike output"}
+          accessibilityState={{ selected: active, disabled: saving }} aria-pressed={active} disabled={saving} onPress={() => void chooseRating(value)}
+          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 10,
+            borderWidth: 1, borderColor: active ? color : "transparent", borderRadius: 7, backgroundColor: active ? colors.surfaceSoft : "transparent",
+            opacity: pressed ? .65 : saving ? .7 : 1 })}>
+          <Icon color={color} name={value === 1 ? "thumb-up" : "thumb-down"} size={16} />
+          <Text style={{ color, fontSize: 12, fontWeight: "600" }}>{value === 1 ? "Like" : "Dislike"}</Text>
+        </Pressable>;
+      })}
+      {saving && <ActivityIndicator size="small" color={colors.textDim} />}
     </View>
-  );
+    {error && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 12 }}>{error}</Text>}
+  </View>;
 }
-
-const makeStyles = (colors: ColorPalette) => StyleSheet.create({
-  container: { marginTop: 14, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
-  question: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
-  row: { flexDirection: "row", gap: 8 },
-  ratingButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
-  likeActive: { borderColor: colors.success },
-  dislikeActive: { borderColor: colors.danger },
-  buttonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
-  panel: { gap: 10, backgroundColor: colors.surfaceSoft, borderRadius: 8, padding: 12 },
-  panelLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
-  reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  reason: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
-  reasonActive: { borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
-  reasonText: { color: colors.textDim, fontSize: 11 },
-  reasonTextActive: { color: colors.text },
-  comment: { minHeight: 54, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, fontSize: 12 },
-  submit: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  submitRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  submitSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBright },
-  submitText: { color: colors.onButton, fontWeight: "800", fontSize: 12 },
-  submitSecondaryText: { color: colors.text },
-  error: { color: colors.danger, fontSize: 11 },
-  disabled: { opacity: 0.55 },
-  saved: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 7 },
-  savedText: { color: colors.success, fontSize: 12, fontWeight: "700" },
-});
