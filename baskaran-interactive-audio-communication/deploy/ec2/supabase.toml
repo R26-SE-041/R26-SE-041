@@ -1,0 +1,6 @@
+project_id = "voicelearn-audio"
+[auth]
+site_url = "https://voicelearn-audio.vercel.app"
+additional_redirect_urls = ["https://voicelearn-audio.vercel.app/login"]
+[auth.email]
+enable_confirmations = true

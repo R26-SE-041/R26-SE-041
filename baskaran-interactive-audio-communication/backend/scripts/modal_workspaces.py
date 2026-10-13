@@ -216,7 +216,7 @@ def update_env(content, values):
     return "\n".join(result) + "\n"
 
 
-def switch(profile):
+def switch(profile, env_file=None):
     manifest = json.loads((MANIFEST_DIR / (profile + ".json")).read_text(encoding="utf-8"))
     report = json.loads((STATE_DIR / (profile + "-verification.json")).read_text(encoding="utf-8"))
     if not report["ready"] or report["source_sha256"] != source_digest():
@@ -224,7 +224,7 @@ def switch(profile):
     digest = hashlib.sha256(json.dumps(manifest["endpoints"], sort_keys=True).encode()).hexdigest()
     if report["endpoints_sha256"] != digest or len(manifest["endpoints"]) != len(SPECS):
         raise RuntimeError("Endpoint manifest changed; verify again")
-    env = BACKEND / ".env"
+    env = Path(env_file) if env_file is not None else BACKEND / ".env"
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     original = env.read_text(encoding="utf-8")
     backup = STATE_DIR / f"env-before-{profile}-{time.time_ns()}.bak"
@@ -239,14 +239,21 @@ def switch(profile):
 
 
 def main():
+    global STATE_DIR
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["discover", "deploy", "verify", "switch"])
     parser.add_argument("profile", choices=PROFILES)
     parser.add_argument("--resume", action="store_true", help="Retry failed verification checks for unchanged source and endpoints")
+    parser.add_argument("--env-file", type=Path, help="Explicit backend env path for server switching")
+    parser.add_argument("--state-dir", type=Path, help="Persistent verification and private backup directory")
     args = parser.parse_args()
+    if args.state_dir is not None:
+        STATE_DIR = args.state_dir
     if args.command == "verify":
         if not verify(args.profile, resume=args.resume)["ready"]:
             raise SystemExit(1)
+    elif args.command == "switch":
+        switch(args.profile, args.env_file)
     else:
         {"discover": discover, "deploy": deploy, "switch": switch}[args.command](args.profile)
 

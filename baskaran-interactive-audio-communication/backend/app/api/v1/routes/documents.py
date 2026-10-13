@@ -47,7 +47,15 @@ from app.agents.tutor.memory import (
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(prefix="/documents", tags=["documents"], dependencies=[Depends(get_current_user)])
+
+
+def _retrieval_status() -> tuple[bool, str]:
+    settings = get_settings()
+    if getattr(settings, "use_modal_retrieval_models", False):
+        ready = bool(settings.modal_bge_embed_url and settings.modal_bge_rerank_url)
+        return ready, "Modal endpoints configured" if ready else "Configure Modal BGE endpoints"
+    return bge_m3_cache_status()
 
 
 # ── In-memory document registry (local dev fallback) ─────────────────────────
@@ -61,7 +69,8 @@ def _is_supabase_configured() -> bool:
     """
     settings = get_settings()
     return (
-        settings.chroma_host not in {"localhost", "127.0.0.1", "local"}
+        (settings.use_supabase_documents if settings.use_supabase_documents is not None
+         else settings.chroma_host not in {"localhost", "127.0.0.1", "local"})
         and
         settings.supabase_url != ""
         and "placeholder" not in settings.supabase_url.lower()
@@ -119,14 +128,13 @@ async def upload_document_endpoint(
     Works without Supabase — uses in-memory local registry as fallback.
     """
     settings = get_settings()
-    bge_ready, bge_reason = bge_m3_cache_status()
+    bge_ready, bge_reason = _retrieval_status()
     if not bge_ready:
         logger.error("Upload rejected: BGE-M3 cache check failed: %s", bge_reason)
         raise HTTPException(
             status_code=503,
             detail=(
-                "BGE-M3 model unavailable: local cache is incomplete or corrupt, so indexing "
-                "is unavailable. Complete the BAAI/bge-m3 model setup and retry."
+                f"BGE-M3 retrieval unavailable: {bge_reason}. Complete the retrieval setup and retry."
             ),
         )
     # Load the expensive embedding implementation only for an actual upload;
@@ -438,11 +446,11 @@ async def ask_question(
             route=route.name if debug_routes else None,
         )
 
-    bge_ready, _ = bge_m3_cache_status()
+    bge_ready, bge_reason = _retrieval_status()
     if not bge_ready:
         raise HTTPException(
             status_code=503,
-            detail="BGE-M3 model unavailable: local cache is incomplete or corrupt.",
+            detail=f"BGE-M3 retrieval unavailable: {bge_reason}.",
         )
     from app.services.ingestion import hybrid_query_chunks
     retrieval_query = contextual_retrieval_query(query, memento)

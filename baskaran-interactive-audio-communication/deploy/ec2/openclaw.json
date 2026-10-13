@@ -1,0 +1,103 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789,
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/state/workspace",
+      "skipBootstrap": true,
+      "model": {
+        "primary": "google/gemini-3.1-flash-lite",
+        "fallbacks": []
+      },
+      "heartbeat": {
+        "every": "0m"
+      },
+      "models": {
+        "google/gemini-3.1-flash-lite": {}
+      },
+      "thinkingDefault": "low",
+      "timeoutSeconds": 1800
+    },
+    "entries": {
+      "voicelearn-actions": {
+        "name": "VoiceLearn Actions",
+        "model": {
+          "primary": "google/gemini-3.1-flash-lite",
+          "fallbacks": []
+        },
+        "workspace": "/state/workspace"
+      }
+    }
+  },
+  "tools": {
+    "profile": "minimal",
+    "alsoAllow": [
+      "bundle-mcp"
+    ],
+    "deny": [
+      "group:openclaw",
+      "group:runtime",
+      "group:fs",
+      "canvas"
+    ],
+    "toolSearch": false
+  },
+  "mcp": {
+    "servers": {
+      "voicelearn-actions": {
+        "enabled": true,
+        "transport": "stdio",
+        "command": "/opt/mcp/bin/python",
+        "args": [
+          "/opt/voicelearn/openclaw_mcp.py"
+        ],
+        "cwd": "/opt/voicelearn",
+        "connectionTimeoutMs": 20000,
+        "requestTimeoutMs": 1800000,
+        "toolFilter": {
+          "include": [
+            "summarize_document",
+            "save_summary",
+            "create_revision_audio",
+            "save_audio_revision",
+            "create_flashcards",
+            "save_flashcards"
+          ]
+        },
+        "env": {
+          "VOICELEARN_BACKEND_URL": "http://127.0.0.1:8000",
+          "ACTIONS_BRIDGE_SECRET": "${ACTIONS_BRIDGE_SECRET}",
+          "ACTIONS_TIMEOUT_SECONDS": "600",
+          "ACTIONS_SECTIONED_TIMEOUT_SECONDS": "1800"
+        }
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "google": {
+        "enabled": true
+      },
+      "memory-core": {
+        "enabled": false
+      }
+    }
+  },
+  "cron": {
+    "enabled": false
+  }
+}

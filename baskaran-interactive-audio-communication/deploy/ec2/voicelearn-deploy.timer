@@ -1,0 +1,11 @@
+[Unit]
+Description=Check verified VoiceLearn backend updates every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20
+Unit=voicelearn-deploy.service
+
+[Install]
+WantedBy=timers.target

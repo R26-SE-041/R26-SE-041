@@ -21,7 +21,8 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 # Local ChromaDB data directory (relative to backend/)
-_LOCAL_DB_PATH = Path(__file__).parent.parent.parent / "chroma_data"
+_LOCAL_DB_PATH = (Path(get_settings().chroma_data_path) if get_settings().chroma_data_path
+                  else Path(__file__).parent.parent.parent / "chroma_data")
 
 
 def _repair_legacy_collection_configuration() -> None:

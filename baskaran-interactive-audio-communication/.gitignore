@@ -55,3 +55,5 @@ frontend/playwright-report/
 !frontend/src/lib/
 !frontend/src/lib/**
 !frontend/.dockerignore
+!backend/Dockerfile.ec2.dockerignore
+!deploy/ec2/Dockerfile.openclaw.dockerignore

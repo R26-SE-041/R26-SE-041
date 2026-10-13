@@ -20,6 +20,8 @@ Why Hybrid:
 Supports: PDF, PPTX, DOCX, XLSX, TXT, MD.
 """
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import contextlib
@@ -40,7 +42,10 @@ os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
 # standard Hugging Face download path in this local Windows environment.
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from app.db.chroma import get_or_create_collection
 from app.core.config import get_settings
@@ -108,6 +113,7 @@ _embedder_lock = threading.Lock()
 
 def _get_embedder() -> SentenceTransformer:
     """Load the one embedding model used for both documents and queries."""
+    from sentence_transformers import SentenceTransformer
     global _embedder
     if _embedder is None:
         with _embedder_lock:
@@ -149,6 +155,7 @@ _reranker_lock = threading.Lock()
 
 def _get_reranker() -> CrossEncoder | None:
     """Lazy-load the cross-encoder reranker (singleton, thread-safe)."""
+    from sentence_transformers import CrossEncoder
     global _reranker
     if _reranker is not None:
         return _reranker

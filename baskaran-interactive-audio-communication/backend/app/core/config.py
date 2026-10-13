@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     app_name: str = "VoiceLearn AI"
     app_version: str = "1.0.0"
     debug: bool = False
+    require_auth: bool = False  # True for public EC2 deployments; local demo stays unchanged.
+    use_supabase_documents: bool | None = None
+    chroma_data_path: str = ""
 
     @field_validator("debug", mode="before")
     @classmethod

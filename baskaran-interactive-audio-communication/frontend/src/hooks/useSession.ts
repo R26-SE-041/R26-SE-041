@@ -11,10 +11,16 @@ export function useSession() {
 
   useEffect(() => {
     const supabase = createClient()
+    let active = true
     supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
       setUser(data.session?.user ?? null)
       setLoading(false)
+    }).catch(() => { if (active) { setUser(null); setLoading(false) } })
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) { setUser(session?.user ?? null); setLoading(false) }
     })
+    return () => { active = false; data.subscription.unsubscribe() }
   }, [])
 
   const signOut = async () => {

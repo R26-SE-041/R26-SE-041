@@ -1,0 +1,12 @@
+{$API_DOMAIN} {
+    request_body {
+        max_size 55MB
+    }
+    @internal path /api/v1/actions/tools/* /api/v1/auth/* /docs /redoc /openapi.json
+    respond @internal 404
+    reverse_proxy 127.0.0.1:8000 {
+        transport http {
+            response_header_timeout 1900s
+        }
+    }
+}

@@ -1,0 +1,59 @@
+name: voicelearn
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.ec2
+    network_mode: host
+    env_file: /etc/voicelearn/backend.env
+    environment:
+      DEBUG: 'false'
+      REQUIRE_AUTH: 'true'
+      USE_MODAL_RETRIEVAL_MODELS: 'true'
+      USE_SUPABASE_DOCUMENTS: 'true'
+      CHROMA_HOST: local
+      CHROMA_DATA_PATH: /data/chroma
+      LOCAL_DOCUMENT_STORE_PATH: /data/documents
+      LOCAL_HISTORY_STORE_PATH: /data/history
+      ACTIONS_STORE_PATH: /data/actions
+      ACTIONS_ALLOW_LOCAL_GUEST: 'false'
+      OPENCLAW_GATEWAY_URL: http://127.0.0.1:18789
+    volumes:
+      - /srv/voicelearn/data:/data
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  openclaw:
+    build:
+      context: ../..
+      dockerfile: deploy/ec2/Dockerfile.openclaw
+    network_mode: host
+    env_file: /etc/voicelearn/openclaw.env
+    environment:
+      OPENCLAW_STATE_DIR: /state
+      OPENCLAW_CONFIG_PATH: /opt/voicelearn/openclaw.json
+      VOICELEARN_BACKEND_URL: http://127.0.0.1:8000
+    volumes:
+      - /srv/voicelearn/openclaw:/state
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  proxy:
+    image: caddy:2.10.2
+    network_mode: host
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set the HTTPS backend domain}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/voicelearn/caddy/data:/data
+      - /srv/voicelearn/caddy/config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Deploy verified VoiceLearn backend commits
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock -n /run/voicelearn-deploy.lock /usr/bin/python3 /opt/voicelearn/poll_release.py
+TimeoutStartSec=1800
+PrivateTmp=true
+UMask=0077

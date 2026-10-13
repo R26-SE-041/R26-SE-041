@@ -1,0 +1,7 @@
+**
+!app/
+!app/**
+!requirements-cloud.txt
+!Dockerfile.ec2
+app/**/__pycache__/
+app/**/*.pyc

@@ -1,0 +1,11 @@
+FROM node:24.21.0-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global openclaw@2026.9.8 --strict-ssl=true --allow-scripts=openclaw --no-audit --no-fund \
+    && python3 -m venv /opt/mcp \
+    && /opt/mcp/bin/pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1
+WORKDIR /opt/voicelearn
+COPY backend/openclaw_mcp.py ./openclaw_mcp.py
+COPY deploy/ec2/openclaw.json ./openclaw.json
+USER node
+CMD ["openclaw", "gateway", "run", "--port", "18789"]

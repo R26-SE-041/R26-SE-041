@@ -38,12 +38,15 @@ interface Result {
 
 const ACCEPTED_DOCUMENTS = '.pdf,.pptx,.docx,.xlsx,.txt,.md'
 import { API_URL, BACKEND_CONFIGURED, requireBackend } from '@/lib/config'
+import { createClient } from '@/lib/supabase'
 
 async function correctTranscript(transcript: string, language: Language): Promise<string> {
   requireBackend()
+  const { data: sessionData } = await createClient().auth.getSession()
+  const token = sessionData.session?.access_token
   const response = await fetch(`${API_URL}/api/v1/documents/enhance`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ transcript, language }),
   })
   if (!response.ok) throw new Error('Transcript correction is unavailable.')

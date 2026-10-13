@@ -1,0 +1,7 @@
+**
+!backend/
+!backend/openclaw_mcp.py
+!deploy/
+!deploy/ec2/
+!deploy/ec2/openclaw.json
+!deploy/ec2/Dockerfile.openclaw
