@@ -212,3 +212,8 @@ immediately, keeps the selected button visible, and allows changing the rating.
 Failed saves restore the previous selection and show an actionable error.
 Speed choices reserve the checkmark space and keep their dimensions stable;
 web controls share hover, pressed, selected and keyboard-focus feedback.
+
+Apply **005_output_feedback.sql** with `python -m studio.migrate` when using the
+existing `ORCHESTRATOR_URL` feedback service. It provisions that service's
+feedback and preference-pair tables with private owner access; Studio readiness
+checks feedback storage when the service is configured.

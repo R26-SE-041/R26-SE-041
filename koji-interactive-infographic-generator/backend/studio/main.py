@@ -89,6 +89,8 @@ def ready():
     with connection() as conn,conn.cursor() as cur:
         cur.execute("select 1 from koji_chats limit 1")
         cur.execute("select 1 from koji_documents limit 1")
+        if os.getenv("ORCHESTRATOR_URL"):
+            cur.execute("select 1 from agent_feedback limit 1")
         cur.execute("""select attnotnull from pg_attribute
             where attrelid='public.koji_documents'::regclass and attname='chat_id'""")
         if cur.fetchone()[0]:
