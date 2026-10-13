@@ -421,20 +421,17 @@ async def call_answer_generator(
     tutor_instructions: str = "",
     memento: dict | None = None,
 ) -> dict:
-    """Call the configured base or V2 answer service.
+    """Call the configured base answer service.
 
     This caller never falls back across model routes: doing so would violate
     document fidelity and make Modal usage hard to audit.
     """
     settings = get_settings()
-    url = (
-        settings.modal_base_gemma_url
-        if route in {"document_rag_base", "general_base"}
-        else settings.modal_finetuned_gemma_v2_url
-    ).strip()
+    if route not in {"document_rag_base", "general_base"}:
+        raise ValueError(f"Unsupported answer route: {route}")
+    url = settings.modal_base_gemma_url.strip()
     if not url:
-        setting = "MODAL_BASE_GEMMA_URL" if route in {"document_rag_base", "general_base"} else "MODAL_FINETUNED_GEMMA_V2_URL"
-        raise RuntimeError(f"{setting} is not configured for route {route}.")
+        raise RuntimeError(f"MODAL_BASE_GEMMA_URL is not configured for route {route}.")
     try:
         response = await _http.post(
             url,
@@ -446,7 +443,7 @@ async def call_answer_generator(
                 "memento": memento,
                 "route": route,
             },
-            timeout=480.0,  # A100 cold-start for Gemma 4 12B + LoRA can reach 6-7 min
+            timeout=480.0,  # Allow the base model's A100 cold start.
         )
         response.raise_for_status()
         return response.json()

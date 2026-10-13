@@ -14,7 +14,7 @@ not a native mobile implementation. Expo supports this combination:
 https://docs.expo.dev/workflow/web/.
 
 The web screens retain document upload/drop/removal, English/Tamil/Sinhala
-selection, Document Study/Muscle Tutor, microphone recording and audio upload,
+selection, Document Study, microphone recording and audio upload,
 transcript review/correction, grounded answers and sources, language-specific
 TTS, Sinhala answer approval/editing, local question history, all document action
 commands, source-linked sections, flashcard flips, downloads, playback commands,
@@ -92,13 +92,8 @@ and a six-card deck without regeneration; there were no browser page errors.
 MCP discovery confirmed all six tools. New AI generation was not repeated during
 the frontend migration.
 
-Original Next.js and Expo screenshots were compared at 1440x1000 (light/dark and
-Muscle Tutor) and 390x844. Matching loading/empty states and disabled animations
-were used. Light, dark and narrow frames had no pixels differing by more than
-8/255 per channel; the Muscle Tutor frame differed at about 0.017% of pixels.
-This supports visual parity for those captured states, not a guarantee of identical
-pixels across every browser, font environment or workflow state. Local comparison
-evidence is in the ignored `.migration-backup/qa` directory.
+Original migration screenshots covered light, dark and narrow layouts.
+The current interface retains Document Study; the specialized tutor was removed.
 
 Microphone permission/device behavior needs a real-device check; a synthetic or
 uploaded recording only proves the browser pipeline. OpenClaw model quota limits
@@ -122,3 +117,14 @@ To run the old version in a separate checkout, restore the baseline frontend,
 restore the backed-up `src/lib` modules and `.env.local`, then run `npm ci` and
 `npm run dev`. Its API client uses `NEXT_PUBLIC_API_URL`; the migration's client
 uses `EXPO_PUBLIC_API_URL`. Both point to the same unchanged FastAPI backend.
+
+## Document-only update
+
+The specialized tutor panel, topic cards, quick prompts and mode selector were
+removed. Document Q&A now defaults to document grounding. Shared three-language
+strings moved to `src/lib/studyLocale.ts`; stored history remains readable.
+
+Validation after removal: 20 browser regressions, four audio-command tests,
+TypeScript checking and production export passed. The live saved library still
+contained 29 items and one indexed document. Desktop and 390px layouts were
+inspected; the narrow layout had no horizontal overflow.

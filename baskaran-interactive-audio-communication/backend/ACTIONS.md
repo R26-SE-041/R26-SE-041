@@ -430,7 +430,7 @@ the supported set are rejected with guidance.
 The audio action panel now offers **Sectioned audio with supporting source passages**
 and **Single audio (baseline)**. Old records and API requests without a mode stay single.
 Set ACTIONS_SECTIONED_ENABLED=false to hide/reject the sectioned mode without disabling
-existing summaries, single audio, ordinary Q&A or Muscle Tutor.
+existing summaries, single audio, document Q&A.
 
 Sectioned workflow (same four production MCP tools, no document/script bytes sent to Gemini):
 1. summarize_document deterministically groups extracted paragraphs into up to three

@@ -24,33 +24,17 @@ from typing import Any, Callable, Literal
 # One input per modality, held constant across every system so the latency
 # numbers are comparable. Changing these invalidates previously collected runs.
 
-BENCH_TEXT_EN = (
-    "The pectoralis major is a thick fan-shaped muscle of the upper chest that "
-    "adducts and medially rotates the humerus."
-)
-BENCH_TEXT_TA = (
-    "பெக்டோரலிஸ் மேஜர் என்பது மார்பின் மேற்பகுதியில் உள்ள ஒரு தடிமனான "
-    "விசிறி வடிவ தசை ஆகும்."
-)
-BENCH_TEXT_SI = (
-    "පෙක්ටෝරාලිස් මේජර් යනු පපුවේ ඉහළ කොටසේ පිහිටි ඝන පංකා හැඩැති මාංශ පේශියකි."
-)
-BENCH_TEXT_MIXED = (
-    "Pectoralis major muscle னு சொல்றது chest ல இருக்கிற ஒரு பெரிய தசை."
-)
-
-BENCH_QUERY = "What is the origin and insertion of the pectoralis major?"
+BENCH_TEXT_EN = "Dogs need daily exercise, balanced food, and fresh water."
+BENCH_TEXT_TA = "\u0ba8\u0bbe\u0baf\u0bcd\u0b95\u0bb3\u0bc1\u0b95\u0bcd\u0b95\u0bc1 \u0ba4\u0ba3\u0bcd\u0ba3\u0bc0\u0bb0\u0bcd \u0ba4\u0bc7\u0bb5\u0bc8."
+BENCH_TEXT_SI = "\u0db6\u0dbd\u0dca\u0dbd\u0db1\u0dca\u0da7 \u0da2\u0dbd\u0dba \u0d85\u0dc0\u0dc1\u0dca\u200d\u0dba\u0dba\u0dd2."
+BENCH_TEXT_MIXED = "Dogs need fresh water. " + BENCH_TEXT_TA
+BENCH_QUERY = "What do dogs need each day?"
 BENCH_CONTEXT = [
-    "The pectoralis major has a clavicular head arising from the medial half of "
-    "the clavicle and a sternocostal head arising from the sternum and the "
-    "upper six costal cartilages.",
-    "Both heads converge and insert into the lateral lip of the intertubercular "
-    "sulcus of the humerus via a bilaminar tendon.",
-    "Its principal actions are adduction, flexion and medial rotation of the arm "
-    "at the glenohumeral joint.",
-    "Innervation is by the lateral and medial pectoral nerves, derived from the "
-    "brachial plexus (C5-T1).",
-    "The muscle is a common landmark in the anterior axillary fold.",
+    "Dogs need daily exercise to stay healthy.",
+    "A balanced diet provides essential nutrients.",
+    "Fresh drinking water should always be available.",
+    "Regular veterinary check-ups help monitor health.",
+    "Owners should provide consistent care and grooming.",
 ]
 BENCH_EMBED_TEXTS = BENCH_CONTEXT + [BENCH_QUERY, BENCH_TEXT_TA, BENCH_TEXT_SI]
 
@@ -222,25 +206,6 @@ AGENTS: list[Agent] = [
         server_time_key="timings_ms.total",
     ),
     Agent(
-        key="llm_gemma_finetuned_v2",
-        stage="Answer generation — LoRA v2",
-        model_id="google/gemma-4-12B-it + PEFT LoRA v2 (bf16)",
-        requested_gpu="A100-80GB",
-        modality="llm",
-        env_var="MODAL_FINETUNED_GEMMA_V2_URL",
-        scaledown_window_s=600,
-        source="modal_endpoints/gemma_answer_generator.py:192",
-        payload={
-            "query": BENCH_QUERY,
-            "context": [],
-            "language": "english",
-            "tutor_instructions": "",
-            "memento": None,
-            "route": "muscle_finetuned_v2",
-        },
-        server_time_key="timings_ms.total",
-    ),
-    Agent(
         key="llm_transcript_corrector",
         stage="Transcript correction",
         model_id="google/gemma-4-12B-it + LoRA v2 (shared RAG container)",
@@ -250,7 +215,7 @@ AGENTS: list[Agent] = [
         scaledown_window_s=60,
         source="modal_endpoints/rag_generator.py:384",
         payload={
-            "transcript": "what is the origin and insertion of the pectoralis major",
+            "transcript": "what do dogs need each day",
             "language": "english",
             "mode": "correct",
         },

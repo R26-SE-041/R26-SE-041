@@ -8,7 +8,7 @@ a large BLEU/chrF gap is evidence about morphology, not about quality — but do
 not let BLEU carry the claim.
 
 The third metric is the one that matters most for this system. VoiceLearn
-translates anatomy tutoring, where the technical terms must survive: an answer
+translates academic document answers, where the technical terms must survive: an answer
 that renders "pectoralis major" as a loose descriptive phrase has failed the
 student even if it scores well. `term_preservation` checks each case's expected
 terminology explicitly.

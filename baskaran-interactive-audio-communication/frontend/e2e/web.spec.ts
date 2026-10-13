@@ -32,7 +32,7 @@ test('Expo root, all original URLs, legacy redirect and browser navigation', asy
   expect(errors).toEqual([])
 })
 
-test('theme survives refresh, response languages and study mode switching', async ({page}) => {
+test('theme survives refresh and document response languages remain selectable', async ({page}) => {
   await start(page)
   await page.getByRole('button',{name:/Switch to .* mode/}).click()
   const theme = await page.locator('html').getAttribute('data-theme')
@@ -42,9 +42,6 @@ test('theme survives refresh, response languages and study mode switching', asyn
   await page.getByRole('button',{name:'Sinhala',exact:true}).click()
   await expect(page.getByRole('button',{name:'Sinhala',exact:true})).toHaveAttribute('aria-pressed','true')
   await page.getByRole('button',{name:'English',exact:true}).click()
-  await page.getByRole('button',{name:'Muscle Tutor',exact:true}).click()
-  await expect(page.getByRole('heading',{name:'Document actions and audio revision'})).toHaveCount(0)
-  await page.getByRole('button',{name:'Document Study',exact:true}).click()
   await expect(page.locator('#action-command')).toBeVisible()
   await page.locator('#action-command').scrollIntoViewIfNeeded()
   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBeGreaterThan(0)
@@ -79,16 +76,12 @@ test('audio upload, transcription, question correction, answer audio and Indexed
   expect(state.transcriptions).toBe(1)
 })
 
-test('Muscle Tutor quick prompts submit without document grounding', async ({page}) => {
-  const state = await start(page)
-  await page.getByRole('button',{name:'Muscle Tutor',exact:true}).click()
-  const tutor = page.locator('section').filter({has:page.getByRole('heading',{name:'Muscle Tutor',exact:true})})
-  await tutor.getByRole('button',{name:/Biceps/i}).first().click()
-  await tutor.getByRole('button').last().click()
-  await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toBeVisible()
-  await page.getByRole('button',{name:'Ask →',exact:true}).click()
-  await expect.poll(()=>state.asks.length).toBe(1)
-  expect(state.asks[0].document_grounded).toBe(false)
+test('document-only interface keeps actions visible and removes mode switching', async ({page}) => {
+  await start(page)
+  await expect(page.getByRole('heading',{name:'Document Study',exact:true})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Document actions and audio revision'})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Document Study',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:/specialized|tutor/i})).toHaveCount(0)
 })
 
 test('Sinhala answer editing and explicit speech approval are retained', async ({page}) => {

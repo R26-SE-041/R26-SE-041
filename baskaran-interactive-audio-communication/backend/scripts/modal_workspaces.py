@@ -24,8 +24,7 @@ SPECS = {
     "MODAL_WHISPER_URL": ("voicelearn-whisper-stt", "WhisperSTT", "transcribe"),
     "MODAL_INDIC_STT_URL": ("voicelearn-tamil-asr-qwen3", "TamilASRQwen3", "transcribe"),
     "MODAL_SINHALA_ASR_URL": ("voicelearn-sinhala-whisper-asr-stage2", "SinhalaWhisperASR", "transcribe"),
-    "MODAL_BASE_GEMMA_URL": ("voicelearn-hybrid-gemma", "BaseGemmaAnswer", "generate"),
-    "MODAL_FINETUNED_GEMMA_V2_URL": ("voicelearn-hybrid-gemma", "FineTunedGemmaV2Answer", "generate"),
+    "MODAL_BASE_GEMMA_URL": ("voicelearn-document-gemma", "BaseGemmaAnswer", "generate"),
     "MODAL_RAG_GENERATOR_URL": ("voicelearn-rag-generator-v2", "RAGGenerator", "generate"),
     "MODAL_TRANSCRIPT_CORRECTOR_URL": ("voicelearn-rag-generator-v2", "RAGGenerator", "correct_transcript"),
     "MODAL_LOCALIZER_URL": ("voicelearn-localizer", "Localizer", "localize"),
@@ -163,10 +162,10 @@ def verify(profile, resume=False):
                 raise ValueError("Empty WAV")
 
     # Short bounded fixtures exercise real generation; no user documents are altered.
-    for key, name, route in [("MODAL_BASE_GEMMA_URL", "base_rag", "document_rag_base"),
-                             ("MODAL_FINETUNED_GEMMA_V2_URL", "fine_tuned", "muscle_finetuned_v2")]:
-        request(name, key, {"query": "What is the function of the biceps?", "context": ["The biceps flexes the elbow."] if name == "base_rag" else [],
-                           "language": "english", "route": route}, validate=text_field("answer"))
+    request("base_rag", "MODAL_BASE_GEMMA_URL", {
+        "query": "What do dogs need?", "context": ["Dogs need daily exercise and fresh water."],
+        "language": "english", "route": "document_rag_base",
+    }, validate=text_field("answer"))
     request("rag_v2", "MODAL_RAG_GENERATOR_URL", {"query": "Summarize in one sentence.", "context": ["Dogs need daily exercise and fresh water."], "language": "english"}, validate=text_field("answer"))
     request("transcript_correction", "MODAL_TRANSCRIPT_CORRECTOR_URL", {"transcript": "dogs need water", "language": "english", "mode": "correct"}, validate=text_field("corrected_transcript"))
     for language, text, key in [("english", "Dogs need fresh water.", "MODAL_ENGLISH_KOKORO_TTS_URL"),
@@ -194,7 +193,7 @@ def verify(profile, resume=False):
     request("reranker", "MODAL_BGE_RERANK_URL", {"query": "What do dogs need?", "candidates": [{"text": "Dogs need fresh water."}, {"text": "The moon orbits Earth."}], "top_k": 1}, validate=reranked)
     report = {"workspace": profile, "checked_at": time.time(), "source_sha256": verified_source,
               "endpoints_sha256": hashlib.sha256(json.dumps(urls, sort_keys=True).encode()).hexdigest(),
-              "checks": checks, "ready": source_digest() == verified_source and len(checks) == 14 and all(x["ok"] for x in checks.values())}
+              "checks": checks, "ready": source_digest() == verified_source and len(checks) == 13 and all(x["ok"] for x in checks.values())}
     write_json(report_path, report)
     print(json.dumps({"workspace": profile, "ready": report["ready"]}))
     return report

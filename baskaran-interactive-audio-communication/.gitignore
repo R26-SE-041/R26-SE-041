@@ -47,6 +47,7 @@ local_actions/
 .venv-official/
 .migration-backup/
 .expo/
+.vercel/
 frontend/src/styles/generated.css
 frontend/test-results/
 frontend/playwright-report/

@@ -48,7 +48,7 @@ class AskRequest(BaseModel):
         description="Optional opaque ID for short-lived Tutor follow-up context",
     )
     document_grounded: bool = Field(
-        default=False,
+        default=True,
         description="True only when this request is explicitly asking about uploaded documents",
     )
 

@@ -27,11 +27,10 @@ benchmarks/
   discover_urls.py       resolve deployed gpu_info URLs via Modal's control plane
   metrics.py             WER/CER, retrieval, chrF/BLEU, ROUGE-L, bootstrap CI — stdlib only
   latency_bench.py       warm-state latency + GPU probe
-  eval_router.py         routing accuracy            — CPU, free
   eval_retrieval.py      BM25 / dense / RRF / rerank — 3 of 4 arms free
   eval_asr.py            WER, CER, native-script purity
   eval_tts.py            round-trip CER, RTF, blinded MOS study builder
-  eval_generation.py     base vs LoRA vs RAG
+  eval_generation.py     document-grounded base vs RAG
   eval_localization.py   chrF, BLEU, term preservation
   eval_e2e.py            full-turn latency, per-stage breakdown
   report.py              Markdown + LaTeX tables from saved JSON (10 tables)
@@ -47,9 +46,8 @@ benchmarks/
 
 | Set | File | State |
 |---|---|---|
-| Router | `data/router_eval_set.json` | **62 cases, done.** Runs free, results below. |
 | Retrieval | `data/retrieval_gold.json` | **26 queries, pilot.** Gold ids read off the live index and verified — but see the corpus warning. |
-| Generation | `data/generation_qa.json` | **26 questions**, 13 in-domain / 13 control. Expand toward ~200 before publishing. |
+| Generation | `data/generation_qa.json` | **13 general document questions**. Expand toward ~200 before publishing. |
 | TTS | `data/tts_set.json` | **30 items** across 4 languages. Sized for the MOS study. |
 | Localisation | `data/localization_set.json` | **20 cases, drafted.** References are machine-drafted — a fluent speaker must review them, Sinhala first. |
 | ASR | `data/asr_manifest.example.jsonl` | **Blocked.** Needs recorded audio; see below. |
@@ -91,8 +89,7 @@ needs the backend's own dependencies, not a bare Python.
 
 On this machine `backend/.venv/Scripts/python.exe` is blocked by an Application
 Control policy, and the system Python has no `sentence_transformers`, so the
-retrieval arms cannot run here yet. Everything else — the router evaluation,
-the metrics, the corpus statistics, the copy-through localisation baseline, and
+retrieval arms cannot run here yet. Everything else — the metrics, the corpus statistics, the copy-through localisation baseline, and
 all report rendering — runs on the bare interpreter and has been verified.
 
 Fix by running the suite under an interpreter that has the backend
@@ -125,15 +122,6 @@ cannot. What is needed:
 ## Order of operations
 
 Cheapest first. Nothing below spends credits until step 3.
-
-### 1. Router evaluation — free, runs today
-
-```bash
-python -m benchmarks.eval_router --verbose
-```
-
-CPU only, fully deterministic, exactly reproducible. Already run; see
-*Current findings* below.
 
 ### 2. Deploy the `gpu_info` probe
 
@@ -257,12 +245,9 @@ python -m benchmarks.eval_generation --systems all
 python -m benchmarks.eval_generation --offline
 ```
 
-Three A100-80GB endpoints. Smoke-test with `--limit 5` before committing.
+Base and RAG A100-80GB endpoints. Smoke-test with `--limit 5` before committing.
 
-The headline is an **interaction, not an average**: the LoRA fine-tune should
-beat the base model on the five trained muscles *without regressing elsewhere*.
-The harness splits every metric by `in_finetune_domain` for exactly this reason;
-a pooled average hides both halves of the result.
+Compare document-grounded answers against the closed-book baseline.
 
 `ROUGE-L`, `token_f1` and `context_groundedness` are **screening** metrics — say
 so in the paper. They reward surface overlap and penalise correct paraphrase.
@@ -352,73 +337,6 @@ Rules that keep this from overrunning:
   finished and the metric definitions have stopped moving.
 
 ---
-
-## Current findings — router (62 labelled queries, free to reproduce)
-
-The router was evaluated, three defects were found, and the fix was measured on
-the same set. Both columns are reproducible with one CPU command.
-
-| | Before | After |
-|---|---|---|
-| Accuracy | 0.774 | **0.968** |
-| Macro-F1 | 0.833 | **0.976** |
-| `muscle_finetuned_v2` precision | 0.778 | **1.000** |
-| Over-routing onto a paid A100 path | 6 / 62 (9.7%) | **0 (0%)** |
-| Under-routing away from the fine-tune | 8 | **2** |
-
-`results/router_eval_before.json` holds the pre-fix run; re-running
-`eval_router.py` regenerates the post-fix column.
-
-**Read the "after" column with the circularity caveat stated plainly:** the same
-labelled set both revealed these defects and validated the fix, so 0.968 is an
-in-sample figure and will be optimistic. The fixes are principled rather than
-case-by-case — qualifier disambiguation, not a list of memorised strings — but
-the honest presentation is to report the before/after delta as evidence that the
-defects were real, and to validate the fixed router on a held-out set written by
-someone who has not seen the regex before quoting a headline accuracy.
-
-### The three defects
-
-**1. Over-triggering on near-miss anatomy — 4 errors, every one a paid A100
-route.** `biceps(?:\s+brachii)?` made the qualifier optional, so bare `biceps`
-matched and *biceps femoris* — a hamstring — was sent to an adapter trained on
-biceps brachii. The same held for `pectoralis minor`, `triceps surae`, and the
-ankle's `deltoid ligament`. Fixed with a negative lookahead per stem, so the
-bare form still matches (students do write "the biceps") while an explicitly
-wrong qualifier no longer does.
-
-**2. Missing colloquial and inflected forms — 5 errors.** `pecs`, `delts`,
-`quads` and the singular misspellings `bicep`/`tricep` all fell through to the
-base model, wasting the fine-tune that exists for exactly those questions. The
-singulars matter disproportionately because they are what ASR emits from student
-speech. Fixed by adding the short forms and optional-`s` variants.
-
-**3. Topic switches without the trigger keywords — 2 errors.**
-`_NEW_TOPIC_PATTERN` matched only a leading "new topic" / "topic change" /
-"switch topic", so "Forget that. What is glycolysis?" kept the stale memento and
-routed a biochemistry question to the muscle adapter. Fixed by recognising
-ordinary redirection markers anywhere in the turn — "let's talk about X
-instead" puts the signal at the end, not the start.
-
-A fourth gap the set exposed: Tamil- and Sinhala-script muscle names did not
-match at all, so `பெக்டோரலிஸ் மேஜர்` silently routed to the base model while the
-identical English question reached the adapter — a failure of the multilingual
-promise invisible to an English-only test. The five muscle names in both scripts
-are now matched.
-
-### What remains, and why it is left alone
-
-The two surviving errors are ASR word-splits: `delta id` for "deltoid",
-`by seps` for "biceps". These are deliberately **not** fixed in the router. A
-regex that fuzzy-matches phonetic fragments would start matching unrelated text,
-and the pipeline already has a component for this — the Gemma transcript
-corrector runs upstream of routing. The right experiment is the pipeline
-interaction: measure routing accuracy on raw ASR output versus corrected
-transcripts, and report the corrector's contribution as the difference. That is
-a stronger result than a wider regex would be.
-
-Verified no regression: all nine assertions in `tests/test_hybrid_model_router.py`
-still hold, and the collectible suite is unchanged at 41 passed.
 
 ## Reproducibility notes for the paper
 

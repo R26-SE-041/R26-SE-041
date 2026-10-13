@@ -47,7 +47,6 @@ class Settings(BaseSettings):
     # Dedicated answer-generation services.  Keep these separate from the
     # transcript corrector endpoint, which is intentionally unchanged.
     modal_base_gemma_url: str = ""
-    modal_finetuned_gemma_v2_url: str = ""
     modal_localizer_url: str = ""
     # Temporary latency experiment. Set false to restore Gemma English -> Localizer.
     use_direct_multilingual_gemma: bool = True

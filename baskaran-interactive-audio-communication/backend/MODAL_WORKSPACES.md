@@ -6,7 +6,7 @@ switching the dashboard or CLI profile alone does not switch the application.
 Supported workspaces: `visakanbaskaran`, `krishnavaranan1`, `krishnavaranan`,
 `varananrp`, environment `main`.
 
-All four passed the production smoke checks on 13 October 2026. See
+The document-only component uses 12 endpoints and 13 smoke checks per workspace. See
 [verification record](MODAL_VERIFICATION.md) for scope and switch-test results.
 
 Run from `backend` using a Python installation with `modal==1.6.1` and `httpx`:
@@ -32,11 +32,11 @@ Install administrative dependencies with `pip install -r requirements-modal-tool
 if using another Python installation.
 
 Discovery writes public endpoint URLs to `modal_workspaces/<workspace>.json`.
-Verification makes short, real inference requests: base and fine-tuned answers,
+Verification makes short, real inference requests: base document answers,
 RAG, transcript correction, translation, English/Tamil/Sinhala WAV generation,
 STT using those WAV fixtures, 1024-dimensional embeddings and reranking. It costs
 compute in the selected workspace. Results are saved to the ignored
-`.workspace-runtime` directory. A workspace must pass all 14 checks before
+`.workspace-runtime` directory. A workspace must pass all 13 checks before
 switching is allowed. Source or URL changes invalidate earlier verification.
 
 Switching backs up `.env`, updates production endpoints and clears workspace
@@ -74,3 +74,7 @@ files. It must only be run for explicitly authorized destinations.
 
 OpenClaw/Gemini is configured separately. Switching Modal endpoints does not
 change Gemini quotas, OpenClaw credentials, Modal credit eligibility or billing.
+
+The base answer app is `voicelearn-document-gemma`. It is isolated from older
+shared deployments, which remain untouched. The dedicated specialized answer
+service is absent from component configuration and workspace manifests.

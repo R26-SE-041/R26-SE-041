@@ -90,14 +90,14 @@ def test_transcribe_rejects_removed_mixed_mode(mock_verify, client):
 
 
 @pytest.mark.parametrize(
-    ("language", "client_name"),
+    ("language", "client_name", "text"),
     [
-        ("english", "call_english_tts"),
-        ("tamil", "call_tamil_tts"),
-        ("sinhala", "call_sinhala_vits_tts_direct"),
+        ("english", "call_english_tts", "A grounded answer"),
+        ("tamil", "call_tamil_tts", "\u0ba4\u0bae\u0bbf\u0bb4\u0bcd \u0baa\u0ba4\u0bbf\u0bb2\u0bcd"),
+        ("sinhala", "call_sinhala_vits_tts_direct", "\u0dc3\u0dd2\u0d82\u0dc4\u0dbd \u0db4\u0dd2\u0dc5\u0dd2\u0dad\u0dd4\u0dbb"),
     ],
 )
-def test_tts_routes_to_final_language_client(language, client_name, client):
+def test_tts_routes_to_final_language_client(language, client_name, text, client):
     with (
         patch("app.core.security.verify_token", return_value={"sub": "user-123"}),
         patch(
@@ -108,13 +108,13 @@ def test_tts_routes_to_final_language_client(language, client_name, client):
     ):
         response = client.post(
             "/api/v1/voice/tts",
-            json={"text": "A grounded answer", "language": language},
+            json={"text": text, "language": language},
             headers=_auth_headers(),
         )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("audio/wav")
-    tts_client.assert_awaited_once_with("A grounded answer")
+    tts_client.assert_awaited_once_with(text)
 
 
 def test_tts_failure_returns_a_non_blocking_audio_error(client):
@@ -148,13 +148,16 @@ def test_transcribe_empty_audio(client):
     assert "empty" in response.json()["detail"].lower()
 
 
-def test_transcribe_unauthenticated(client):
+@patch("app.agents.stt_agent.call_whisper", new_callable=AsyncMock, return_value=MOCK_STT_RESULT)
+def test_transcribe_without_token_retains_guest_study_workflow(mock_whisper, client):
     response = client.post(
         "/api/v1/voice/transcribe",
         files={"audio_file": ("test.webm", FAKE_AUDIO, "audio/webm")},
         data={"language": "english"},
     )
-    assert response.status_code == 403  # No Bearer token
+    assert response.status_code == 200
+    assert response.json()["transcript"] == MOCK_STT_RESULT["transcript"]
+    mock_whisper.assert_awaited_once()
 
 
 @patch("app.core.security.verify_token", return_value={"sub": "user-123"})

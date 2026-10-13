@@ -7,7 +7,6 @@
  */
 
 import type { ChunkReference, Language } from '@/types'
-import type { StudyMode } from '@/components/ui/StudyModeSelector'
 
 const DB_NAME = 'voicelearn-test-history'
 const DB_VERSION = 1
@@ -16,7 +15,6 @@ const STORE_NAME = 'entries'
 export interface LocalHistoryEntry {
   id: string
   createdAt: string
-  studyMode: StudyMode
   language: Language
   transcript: string
   answer: string

@@ -4,7 +4,7 @@ This is a protocol, not collected human-study results. Do not fill benchmark tab
 invented timings, accuracy, or learning gains.
 
 Compare Single audio (baseline) versus Sectioned audio with the same document/language.
-Use three short documents (anatomy, another technical topic, and text without headings),
+Use three short documents (science notes, another technical topic, and text without headings),
 English/Tamil/Sinhala, both modes: 18 generations if credits and quotas permit. Source limits
 remain 12,000 extracted characters. Keep model/endpoints fixed; log warm/cold runs separately.
 

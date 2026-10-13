@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from 'axios'
 import type { AskResponse, ChunkReference, DocumentItem, HistoryItem, Language, QueryResponse, TranscribeResponse } from '@/types'
 import { createClient } from './supabase'
 
-import { API_URL as BASE_URL } from '@/lib/config'
+import { API_URL as BASE_URL, requireBackend } from '@/lib/config'
 // A RAG request includes: retrieval (BGE embed + rerank now 120s), plus Gemma A100 cold-start
 // (up to 480s server-side). Keep the browser deadline above the full server budget.
 const RAG_REQUEST_TIMEOUT_MS = 600_000
@@ -12,6 +12,7 @@ const RAG_REQUEST_TIMEOUT_MS = 600_000
 function createApiClient(): AxiosInstance {
   const instance = axios.create({ baseURL: BASE_URL, timeout: 540_000 })
   instance.interceptors.request.use(async (config) => {
+    requireBackend()
     const supabase = createClient()
     const { data } = await supabase.auth.getSession()
     const token = data.session?.access_token
@@ -80,7 +81,7 @@ export async function askDocument(
   language: Language,
   correctedTranscript?: string,
   detectedLanguage?: string,
-  documentGrounded = false,
+  documentGrounded = true,
 ): Promise<AskResponse> {
   const { data } = await api.post<AskResponse>('/api/v1/documents/ask', {
     transcript,
@@ -100,6 +101,7 @@ export async function synthesizeSpeech(text: string, language: Language): Promis
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 180_000)
   try {
+    requireBackend()
     const response = await fetch(`${BASE_URL}/api/v1/voice/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },

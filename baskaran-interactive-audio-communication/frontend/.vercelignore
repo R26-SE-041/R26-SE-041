@@ -1,0 +1,12 @@
+# Upload only frontend sources. Secrets and local runtime artifacts stay local.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+.expo
+test-results
+playwright-report
+*.log
+*.pid
+*.tsbuildinfo

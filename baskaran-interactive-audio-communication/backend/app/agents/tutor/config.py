@@ -45,6 +45,6 @@ def load_tutor_config() -> TutorConfig:
 
 @lru_cache(maxsize=1)
 def load_tutor_instructions() -> str:
-    """Return shared Tutor guidance for both base and fine-tuned routes."""
+    """Return document/general study guidance for the base answer service."""
     config = load_tutor_config()
     return "\n\n".join((config.skills, config.persona, "Memento policy:\n" + config.memento))

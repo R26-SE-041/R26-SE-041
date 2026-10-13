@@ -6,8 +6,6 @@ import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { DocumentActions } from '@/components/documents/DocumentActions'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
-import { StudyModeSelector, type StudyMode } from '@/components/ui/StudyModeSelector'
-import { MuscleTopicGrid } from '@/components/ui/MuscleTopicGrid'
 import { HistoryPanel } from '@/components/history/HistoryPanel'
 import {
   askDocument,
@@ -17,7 +15,7 @@ import {
   uploadDocument,
 } from '@/lib/api'
 import type { AskResponse, DocumentItem, Language, TranscribeResponse } from '@/types'
-import { getMuscleLocale } from '@/lib/muscleLocale'
+import { getStudyLocale } from '@/lib/studyLocale'
 import {
   addLocalHistoryEntry,
   clearLocalHistory,
@@ -39,9 +37,10 @@ interface Result {
 }
 
 const ACCEPTED_DOCUMENTS = '.pdf,.pptx,.docx,.xlsx,.txt,.md'
-import { API_URL } from '@/lib/config'
+import { API_URL, BACKEND_CONFIGURED, requireBackend } from '@/lib/config'
 
 async function correctTranscript(transcript: string, language: Language): Promise<string> {
+  requireBackend()
   const response = await fetch(`${API_URL}/api/v1/documents/enhance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,9 +52,6 @@ async function correctTranscript(transcript: string, language: Language): Promis
 }
 
 export default function StudyAssistantPage() {
-  // ─── Study mode ────────────────────────────────────────────────────────────
-  const [studyMode, setStudyMode] = useState<StudyMode>('document')
-
   // ─── Language & document state ─────────────────────────────────────────────
   const [language, setLanguage] = useState<Language>('english')
   const [documents, setDocuments] = useState<DocumentItem[]>([])
@@ -143,18 +139,6 @@ export default function StudyAssistantPage() {
     setAnswerDraft('')
   }, [])
 
-  /**
-   * Switch study mode without clearing the current conversation.
-   *
-   * Question/answer state belongs to this browser page, not to either panel.
-   * It must survive mode changes (and an independently restarted backend) and
-   * is intentionally reset only by clearAnswer or a real browser refresh.
-   */
-  const handleStudyModeChange = useCallback((nextMode: StudyMode) => {
-    if (nextMode === studyMode) return
-    setStudyMode(nextMode)
-  }, [studyMode])
-
   const selectLanguage = useCallback((nextLanguage: Language) => {
     setLanguage(nextLanguage)
     clearAnswer()
@@ -210,7 +194,7 @@ export default function StudyAssistantPage() {
       }
     } catch {
       if (requestId === audioRequestRef.current) {
-        const locAudio = getMuscleLocale(responseLanguage).ui.audioUnavailable
+        const locAudio = getStudyLocale(responseLanguage).ui.audioUnavailable
         setAudioError(locAudio)
       }
     } finally {
@@ -231,7 +215,6 @@ export default function StudyAssistantPage() {
   ) => {
     try {
       const entry = await addLocalHistoryEntry({
-        studyMode,
         language,
         transcript: questionText,
         answer: answerText,
@@ -244,7 +227,7 @@ export default function StudyAssistantPage() {
     } catch {
       // Local history is a convenience layer — it must never block the Q&A flow.
     }
-  }, [studyMode, language])
+  }, [language])
 
   const handleDeleteHistoryEntry = useCallback((id: string) => {
     setHistoryEntries((current) => current.filter((item) => item.id !== id))
@@ -269,31 +252,19 @@ export default function StudyAssistantPage() {
 
     if (!question) {
       setPhase('asr-error')
-      setAsrError(getMuscleLocale(language).ui.noSpeechDetected)
+      setAsrError(getStudyLocale(language).ui.noSpeechDetected)
       return
     }
 
     setPhase('transcript-ready')
   }, [language])
 
-  /** Fill transcript from a quick-prompt chip click (Muscle Tutor mode). */
-  const handlePromptSelect = useCallback((prompt: string) => {
-    lastQuestionAudioRef.current = null
-    setTranscript(prompt)
-    setResult(null)
-    setAsrError(null)
-    setRagError(null)
-    setCorrectionError(null)
-    setAudioError(null)
-    setPhase('transcript-ready')
-  }, [])
-
   // ─── Submit question ───────────────────────────────────────────────────────
   const submitQuestionToRag = useCallback(async () => {
     const question = transcript.trim()
     if (!question || ragRequestActiveRef.current) return
 
-    const isDocumentGrounded = studyMode === 'document'
+    const isDocumentGrounded = true
 
     ragRequestActiveRef.current = true
     setPhase('asking')
@@ -313,7 +284,7 @@ export default function StudyAssistantPage() {
         language,
         undefined,
         detectedLanguage,
-        isDocumentGrounded, // ← dynamic: true for Document Study, false for Muscle Tutor
+        true,
       )
       setResult({
         transcript: question,
@@ -350,7 +321,7 @@ export default function StudyAssistantPage() {
     } finally {
       ragRequestActiveRef.current = false
     }
-  }, [detectedLanguage, language, studyMode, synthesizeAnswer, persistHistoryEntry, transcript])
+  }, [detectedLanguage, language, synthesizeAnswer, persistHistoryEntry, transcript])
 
   const saveEditedAnswer = useCallback(() => {
     const editedAnswer = answerDraft.trim()
@@ -425,16 +396,19 @@ export default function StudyAssistantPage() {
     result.references.length > 0
 
   // Locale strings — recomputed whenever language changes
-  const loc = getMuscleLocale(language)
+  const loc = getStudyLocale(language)
 
-  const askingText =
-    studyMode === 'document'
-      ? loc.ui.searchingDocs
-      : loc.ui.consultingBase
+  const askingText = loc.ui.searchingDocs
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen" style={{ background: 'var(--background)', transition: 'background 0.3s' }}>
+
+      {!BACKEND_CONFIGURED && (
+        <div role="status" className="relative z-50 px-5 py-3 text-center text-sm" style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+          Frontend preview: backend connection is pending. Document uploads and AI actions will be available after the backend is connected.
+        </div>
+      )}
 
       {/* Ambient blobs */}
       <div className="vl-ambient" aria-hidden="true">
@@ -468,7 +442,7 @@ export default function StudyAssistantPage() {
           <p className="vl-eyebrow">AI Study Assistant</p>
           <h1 className="vl-serif text-5xl font-bold tracking-tight" style={{ color: 'var(--text)', fontSize: 42, lineHeight: 1.1 }}>Learn with your voice</h1>
           <p className="max-w-2xl text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-            Study your documents or explore specialized anatomy topics in English, Tamil, and Sinhala.
+            Study your documents in English, Tamil, and Sinhala.
           </p>
         </div>
 
@@ -476,14 +450,10 @@ export default function StudyAssistantPage() {
         <section className="nb-card flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-start lg:gap-5">
             <div>
-              <p className="vl-label">{loc.ui.studyMode}</p>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Choose how you want to learn</p>
+              <p className="vl-label">Document Study</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Learn from your uploaded documents</p>
             </div>
-            <StudyModeSelector
-              value={studyMode}
-              onChange={handleStudyModeChange}
-              disabled={phase === 'asking'}
-            />
+
           </div>
 
           <div className="hidden h-10 w-px lg:block" style={{ background: 'var(--border)' }} aria-hidden />
@@ -498,7 +468,6 @@ export default function StudyAssistantPage() {
         </section>
 
         {/* ── Document Study panel ── */}
-        {studyMode === 'document' && (
           <SectionWide title="Document Study">
             <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               Upload your notes, PDFs, slides, or study files and receive answers grounded in your documents.
@@ -582,16 +551,8 @@ export default function StudyAssistantPage() {
 
             {documentError && <ErrorNotice message={documentError} />}
           </SectionWide>
-        )}
 
-        {/* ── Muscle Tutor panel ── */}
-        {studyMode === 'muscle' && (
-          <SectionWide title={loc.ui.muscleTutor}>
-            <MuscleTopicGrid language={language} onPromptSelect={handlePromptSelect} />
-          </SectionWide>
-        )}
-
-        {/* ── Ask a Question (shared by both modes) ── */}
+        {/* ── Ask a Question ── */}
         <SectionWide title={loc.ui.askAQuestion}>
           <VoiceRecorder
             language={language}
@@ -612,8 +573,8 @@ export default function StudyAssistantPage() {
           {asrError && <ErrorNotice message={asrError} />}
         </SectionWide>
 
-        {/* ── Transcript / Fix / Ask (shared by both modes) ── */}
-        {studyMode === 'document' && <DocumentActions documents={documents} />}
+        {/* ── Transcript / Fix / Ask ── */}
+        <DocumentActions documents={documents} />
 
         {transcript && (
           <SectionWide title={loc.ui.yourQuestion}>
@@ -651,13 +612,12 @@ export default function StudyAssistantPage() {
           </SectionWide>
         )}
 
-        {/* ── Answer (shared by both modes) ── */}
+        {/* ── Answer ── */}
         {result && (
           <>
             <SectionWide title={loc.ui.answer}>
               {/* Answer mode badge */}
               <div style={{ marginBottom: 18 }}>
-                {result.documentGrounded ? (
                   <span
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -672,23 +632,6 @@ export default function StudyAssistantPage() {
                     </svg>
                     {loc.ui.documentGroundedAnswer}
                   </span>
-                ) : (
-                  <span
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 50,
-                      background: 'var(--success-soft)', color: 'var(--success)',
-                      border: '1px solid var(--success-border)', letterSpacing: '0.05em', textTransform: 'uppercase',
-                    }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M18 20V10" />
-                      <path d="M12 20V4" />
-                      <path d="M6 20v-6" />
-                    </svg>
-                    {loc.ui.specializedAnatomyAnswer}
-                  </span>
-                )}
               </div>
 
               {editingAnswer ? (

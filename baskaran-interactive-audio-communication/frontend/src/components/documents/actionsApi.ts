@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase'
 
-import { API_URL as BASE_URL } from '@/lib/config'
+import { API_URL as BASE_URL, requireBackend } from '@/lib/config'
 export type ActionLanguage = 'english' | 'tamil' | 'sinhala'
 export type RevisionMode = 'single' | 'sectioned'
 export interface RevisionSection {
@@ -39,6 +39,7 @@ export interface SavedAction {
 }
 
 async function request(path: string, init: RequestInit = {}, timeout = 10_000): Promise<Response> {
+  requireBackend()
   const { data } = await createClient().auth.getSession()
   const token = data.session?.access_token
   const controller = new AbortController()

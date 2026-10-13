@@ -1,40 +1,7 @@
-"""Answer-generation comparison: base Gemma vs LoRA v2 vs document-grounded RAG.
+"""Compare document-grounded base/RAG generation with a closed-book baseline.
 
-This is the most expensive table in the study — three A100-80GB endpoints — so
-the harness is built to be paid for exactly once:
-
-  * every generated answer is appended to `results/gen_answers_<system>.json`
-    as it arrives, and a re-run skips any question already answered;
-  * `--offline` recomputes every metric from those files with no Modal calls;
-  * `--limit` caps the question count for a cheap smoke test before committing
-    to the full set.
-
-Automatic metrics here are *screening* metrics, and the paper must say so.
-ROUGE-L and token-F1 reward surface overlap, and `context_groundedness` counts
-how many of the answer's content words appear in the retrieved context — a
-lower bound on faithfulness that penalises correct paraphrase. Their job is to
-rank the whole set cheaply so that human review and the LLM-judge can be spent
-on the disagreements and the low-scoring tail, not to stand in as the headline
-quality claim. State the sample size of the human pass alongside them.
-
-Question set — `data/generation_qa.json`:
-
-    {"questions": [
-      {"id": "g01",
-       "question": "What is the origin of the pectoralis major?",
-       "reference_answer": "…",
-       "context": ["…", "…"],
-       "in_finetune_domain": true}
-    ]}
-
-`in_finetune_domain` marks the five LoRA-trained muscles. The headline result is
-the interaction: the fine-tune should beat the base model inside its domain
-*without* regressing outside it. A single pooled average hides exactly that.
-
-Usage:
-    python -m benchmarks.eval_generation --systems base --limit 5
-    python -m benchmarks.eval_generation --systems all
-    python -m benchmarks.eval_generation --offline
+Use --limit for bounded live checks, or --offline to rescore saved responses.
+ROUGE-L, token-F1 and context overlap are screening metrics, not accuracy claims.
 """
 
 from __future__ import annotations
@@ -73,12 +40,6 @@ SYSTEMS = {
         "label": "Gemma-4-12B-it base (no adapter)",
         "route": "document_rag_base",
         "with_context": True,
-    },
-    "finetuned_v2": {
-        "env": "MODAL_FINETUNED_GEMMA_V2_URL",
-        "label": "Gemma-4-12B-it + LoRA v2",
-        "route": "muscle_finetuned_v2",
-        "with_context": False,
     },
     "rag_v2": {
         "env": "MODAL_RAG_GENERATOR_URL",
@@ -135,7 +96,6 @@ def generate_all(system: str, cases: list[dict], url: str) -> list[dict]:
                 "question": case["question"],
                 "reference_answer": case["reference_answer"],
                 "context": case.get("context", []),
-                "in_finetune_domain": case.get("in_finetune_domain", False),
                 "answer": str(body.get("answer", "")).strip(),
                 "wall_ms": round(elapsed * 1000, 1),
                 "server_timings_ms": body.get("timings_ms"),
@@ -210,14 +170,10 @@ def main() -> int:
             print(f"\n── {system} ({spec['label']}) — {len(cases)} question(s)")
             answers = generate_all(system, cases, url)
 
-        in_domain = [a for a in answers if a["in_finetune_domain"]]
-        out_domain = [a for a in answers if not a["in_finetune_domain"]]
         reports.append({
             "system": system,
             "label": spec["label"],
             "overall": score_group(answers),
-            "in_finetune_domain": score_group(in_domain),
-            "out_of_domain": score_group(out_domain),
         })
 
     if not reports:
@@ -227,7 +183,7 @@ def main() -> int:
     print(f"\n{'system':<16}{'split':<20}{'ROUGE-L':>9}{'tok-F1':>9}"
           f"{'ground':>9}{'ms':>9}{'n':>5}")
     for report in reports:
-        for split in ("overall", "in_finetune_domain", "out_of_domain"):
+        for split in ("overall",):
             m = report[split]
             if not m:
                 continue

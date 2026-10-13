@@ -109,7 +109,7 @@ function HistoryEntryCard({ entry, onDelete }: { entry: LocalHistoryEntry; onDel
               className="rounded-[8px] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
               style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}
             >
-              {entry.studyMode === 'document' ? 'Document' : 'Muscle Tutor'}
+              {entry.documentGrounded ? 'Document' : 'Saved conversation'}
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-dim)' }}>
               {LANGUAGE_LABEL[entry.language] ?? entry.language}

@@ -7,7 +7,7 @@ point during a partially-complete study.
 
 Usage:
     python -m benchmarks.report                    # everything available
-    python -m benchmarks.report --only latency,router
+    python -m benchmarks.report --only latency,retrieval
     python -m benchmarks.report --latex
     python -m benchmarks.report --results results_run2 --out tables_run2
 """
@@ -304,11 +304,7 @@ def generation_section(latex: bool) -> str | None:
     if not data:
         return None
 
-    split_labels = {
-        "overall": "all questions",
-        "in_finetune_domain": "five trained muscles",
-        "out_of_domain": "outside the fine-tune",
-    }
+    split_labels = {"overall": "all questions"}
     headers = ["System", "Split", "ROUGE-L F1", "Token F1", "Groundedness",
                "Latency (ms)", "Answer words", "n"]
     rows = []
@@ -326,19 +322,15 @@ def generation_section(latex: bool) -> str | None:
             ])
 
     parts = [
-        "## Table 7 — Answer generation: base vs. fine-tuned vs. RAG\n",
+        "## Table 7 — Answer generation: document-grounded base vs. RAG\n",
         md_table(headers, rows),
-        "\n**Read the split rows, not the pooled row.** The claim the fine-tune "
-        "has to support is an interaction: it should beat the base model on the "
-        "five trained muscles *without regressing outside them*. A pooled "
-        "average hides both halves of that.\n",
         f"\n_{data.get('caveat', '')}_\n",
     ]
     if latex:
         parts.append("\n% ── LaTeX ──\n")
         parts.append(latex_table(headers, rows,
                                  "Answer-generation quality by system and "
-                                 "fine-tune domain.", "tab:generation"))
+                                 "document context.", "tab:generation"))
     return "\n".join(parts)
 
 
@@ -445,74 +437,6 @@ def e2e_section(latex: bool) -> str | None:
 
 # ── 8. router ────────────────────────────────────────────────────────────────
 
-def router_section(latex: bool) -> str | None:
-    data = load("router_eval.json")
-    if not data:
-        return None
-    before = load("router_eval_before.json")
-
-    headers = ["Route", "Precision", "Recall", "F1", "Support"]
-    rows = [[route, fmt(v["precision"]), fmt(v["recall"]), fmt(v["f1"]),
-             str(v["support"])]
-            for route, v in data["overall"]["per_label"].items()]
-
-    parts = [
-        "## Table 10 — Answer-router accuracy (deterministic, CPU-only)\n",
-        f"Overall accuracy **{data['overall']['accuracy']:.3f}**, macro-F1 "
-        f"**{data['overall']['macro_f1']:.3f}** over {data['overall']['n']} "
-        f"labelled queries.\n",
-        md_table(headers, rows),
-        "",
-        "### Accuracy by query category\n",
-        md_table(["Category", "Accuracy", "Errors", "n"],
-                 [[cat, fmt(v["accuracy"]), str(v["errors"]), str(v["n"])]
-                  for cat, v in data["by_category"].items()]),
-        "",
-        f"Over-routing onto a paid A100-80GB path: "
-        f"**{data['over_routing_to_paid_path']}** of {data['overall']['n']} "
-        f"({data['over_routing_to_paid_path'] / data['overall']['n'] * 100:.1f}%). "
-        f"Under-routing away from the fine-tuned adapter: "
-        f"**{data['under_routing_from_finetune']}**.\n",
-    ]
-
-    if before:
-        n = before["overall"]["n"]
-        parts += [
-            "\n### Before and after the routing fixes\n",
-            md_table(
-                ["Metric", "Before", "After"],
-                [
-                    ["Accuracy", fmt(before["overall"]["accuracy"]),
-                     fmt(data["overall"]["accuracy"])],
-                    ["Macro-F1", fmt(before["overall"]["macro_f1"]),
-                     fmt(data["overall"]["macro_f1"])],
-                    ["`muscle_finetuned_v2` precision",
-                     fmt(before["overall"]["per_label"]["muscle_finetuned_v2"]["precision"]),
-                     fmt(data["overall"]["per_label"]["muscle_finetuned_v2"]["precision"])],
-                    ["Over-routing onto a paid A100 path",
-                     f"{before['over_routing_to_paid_path']} / {n} "
-                     f"({before['over_routing_to_paid_path'] / n * 100:.1f}%)",
-                     f"{data['over_routing_to_paid_path']} / {n} "
-                     f"({data['over_routing_to_paid_path'] / n * 100:.1f}%)"],
-                    ["Under-routing away from the fine-tune",
-                     str(before["under_routing_from_finetune"]),
-                     str(data["under_routing_from_finetune"])],
-                ]),
-            "\n**In-sample caveat.** The same labelled set both revealed these "
-            "defects and validated the fix, so the *after* column is optimistic. "
-            "Present the delta as evidence that the defects were real; validate "
-            "on a held-out set written by someone who has not seen the "
-            "implementation before quoting a headline accuracy.\n",
-        ]
-
-    if latex:
-        parts.append("\n% ── LaTeX ──\n")
-        parts.append(latex_table(headers, rows,
-                                 "Routing accuracy of the deterministic answer "
-                                 "router.", "tab:router"))
-    return "\n".join(parts)
-
-
 SECTIONS: dict[str, Callable[[bool], str | None]] = {
     "latency": latency_section,
     "asr": asr_section,
@@ -521,7 +445,6 @@ SECTIONS: dict[str, Callable[[bool], str | None]] = {
     "generation": generation_section,
     "localization": localization_section,
     "e2e": e2e_section,
-    "router": router_section,
 }
 
 
@@ -553,7 +476,6 @@ def main() -> int:
 
     if not rendered:
         print("No results found yet. Start with:\n"
-              "  python -m benchmarks.eval_router\n"
               "  python -m benchmarks.latency_bench --agents all")
         return 1
 
