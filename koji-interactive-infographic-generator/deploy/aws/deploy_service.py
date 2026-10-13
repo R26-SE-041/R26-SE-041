@@ -60,6 +60,12 @@ def verify_archive(path, sha):
                 raise ValueError("Release checksum mismatch")
 
 
+def store_status(stage, status, sha):
+    temporary = stage / "status.tmp"
+    temporary.write_text(json.dumps({"status": status, "commit": sha}))
+    temporary.replace(stage / "status.json")
+
+
 def activate(stage, sha):
     try:
         with (stage / "activation.log").open("wb") as log:
@@ -70,7 +76,7 @@ def activate(stage, sha):
     except Exception:
         status = "failure"
     finally:
-        (stage / "status.json").write_text(json.dumps({"status": status, "commit": sha}))
+        store_status(stage, status, sha)
         LOCK.release()
 
 
@@ -130,7 +136,7 @@ class Handler(BaseHTTPRequestHandler):
                     remaining -= len(chunk)
             verify_archive(stage / "backend.tar.gz", sha)
             shutil.copyfile(Path(__file__).with_name("activate.sh"), stage / "activate.sh")
-            (stage / "status.json").write_text(json.dumps({"status": "running", "commit": sha}))
+            store_status(stage, "running", sha)
             threading.Thread(target=activate, args=(stage, sha), daemon=True).start()
             started = True
             self.reply(202, {"release": stage.name})
