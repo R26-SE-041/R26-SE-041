@@ -206,7 +206,8 @@ class Documents:
             cur.execute("""with scoped as materialized (
                 select c.id,c.document_id,c.page,c.content,d.filename,
                     1-(c.embedding <=> %s::vector) as similarity,
-                    ts_rank(c.fts,websearch_to_tsquery('english',%s)) as lexical
+                    ts_rank(c.fts,websearch_to_tsquery('english',%s)) as lexical,
+                    c.fts @@ websearch_to_tsquery('english',%s) as lexical_match
                 from koji_document_chunks c join koji_documents d on d.id=c.document_id and d.user_id=c.user_id
                 where c.user_id=%s and d.chat_id=%s and d.status='ready' and c.document_id=any(%s::uuid[])
             ), semantic as (
@@ -214,12 +215,12 @@ class Documents:
                 where similarity>=%s order by similarity desc,id limit 20
             ), lexical as (
                 select id,row_number() over(order by lexical desc,id) as rank from scoped
-                where lexical>0 order by lexical desc,id limit 20
+                where lexical_match order by lexical desc,id limit 20
             ), fused as (
                 select coalesce(s.id,l.id) as id,coalesce(1.0/(60+s.rank),0)+coalesce(1.0/(60+l.rank),0) as score
                 from semantic s full join lexical l on s.id=l.id
             ) select c.*,f.score from scoped c join fused f on f.id=c.id order by f.score desc,c.id limit %s""",
-                        (vector, query, user_id, chat_id, list(document_ids),
+                        (vector, query, query, user_id, chat_id, list(document_ids),
                          float(os.getenv("STUDIO_PDF_MIN_SIMILARITY", "0.30")), limit))
             return [dict(row) for row in cur.fetchall()]
 
