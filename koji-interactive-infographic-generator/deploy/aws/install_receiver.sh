@@ -40,7 +40,15 @@ sudo -n caddy validate --config "$control/Caddyfile.new" --adapter caddyfile
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now koji-deploy.service
 sudo -n systemctl restart koji-deploy.service
-test "$(curl --silent --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:8766/internal/koji-deploy/invalid)" == 401
+receiver_ready=false
+for attempt in {1..10}; do
+    if [[ "$(curl --silent --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:8766/internal/koji-deploy/invalid || true)" == 401 ]]; then
+        receiver_ready=true
+        break
+    fi
+    sleep 1
+done
+[[ "$receiver_ready" == true ]]
 backup="$control/Caddyfile.$(date -u +%Y%m%dT%H%M%SZ).backup"
 sudo -n cp -a /etc/caddy/Caddyfile "$backup"
 sudo -n install -m 644 "$control/Caddyfile.new" /etc/caddy/Caddyfile

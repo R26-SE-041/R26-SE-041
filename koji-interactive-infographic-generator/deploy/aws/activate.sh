@@ -49,6 +49,8 @@ from studio.main import app,ready
 import studio.worker
 assert '/studio/chats' in app.openapi()['paths']
 ready()
+from studio.documents import embed_texts
+assert len(embed_texts(['Student PDF retrieval readiness'])[0]) == 384
 print('Staged API, worker and existing database configuration verified')
 PY
 backup="$(mktemp -d "$root/deploy-backups/$sha.XXXXXXXX")"
