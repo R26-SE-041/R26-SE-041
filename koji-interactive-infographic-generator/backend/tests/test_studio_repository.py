@@ -45,10 +45,28 @@ class RepositoryIntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         with connection() as conn,conn.cursor() as cur:
+            cur.execute("delete from agent_feedback where auth_user_id in (%s,%s)",(self.owner,self.other))
             cur.execute("delete from auth.users where id in (%s,%s)",(self.owner,self.other))
 
     def payload(self,**changes):
         return {"request_id":str(uuid4()),"kind":"generate","prompt":"heart","mode":"general",**changes}
+
+    def test_output_ratings_save_change_and_remain_private_for_every_agent(self):
+        from shared.db import record_agent_feedback, _FEEDBACK_AGENTS
+        for agent in _FEEDBACK_AGENTS:
+            output=str(uuid4())
+            first=record_agent_feedback(session_id="test",agent_name=agent,output_id=output,
+                rating=1,reason_codes=[],auth_user_id=self.owner)
+            second=record_agent_feedback(session_id="test",agent_name=agent,output_id=output,
+                rating=-1,reason_codes=[],comment="User marked this output as not useful.",auth_user_id=self.owner)
+            self.assertEqual(first["feedback_id"],second["feedback_id"])
+            with connection() as conn,conn.cursor() as cur:
+                cur.execute("select rating,auth_user_id::text from agent_feedback where output_id=%s",(output,))
+                self.assertEqual(cur.fetchone(),(-1,self.owner))
+                cur.execute("set local role authenticated")
+                cur.execute("select set_config('request.jwt.claim.sub',%s,true)",(self.other,))
+                cur.execute("select id from agent_feedback where output_id=%s",(output,))
+                self.assertEqual(cur.fetchall(),[])
 
     def test_request_id_is_idempotent_but_not_reusable_for_changed_payload(self):
         payload=self.payload()
