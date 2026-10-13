@@ -1,6 +1,7 @@
 """CPU-only Studio API for Render or any ASGI host."""
 from __future__ import annotations
 import os
+import base64
 from datetime import datetime
 from uuid import UUID, uuid4
 from typing import Literal
@@ -13,6 +14,7 @@ from studio.repository import Repository
 from studio.storage import Storage
 from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch
 from studio.pipeline import configured_endpoints, required_services
+from studio.documents import Documents, MAX_PDF_BYTES, filename_for_upload, public_document
 
 load_dotenv()
 app = FastAPI(title="Koji Interactive Studio",version="2.0.0")
@@ -20,6 +22,7 @@ app.add_middleware(CORSMiddleware,
     allow_origins=[s.strip() for s in os.getenv("CORS_ORIGINS","http://localhost:8081,http://localhost:8091").split(",") if s.strip()],
     allow_methods=["GET","POST","PATCH","DELETE"],allow_headers=["Authorization","Content-Type"])
 repo = Repository()
+documents = Documents()
 
 @app.middleware("http")
 async def private_api_responses(request: Request, call_next):
@@ -85,6 +88,7 @@ def ready():
     from studio.repository import connection
     with connection() as conn,conn.cursor() as cur:
         cur.execute("select 1 from koji_chats limit 1")
+        cur.execute("select 1 from koji_documents limit 1")
     return {"status":"ok"}
 
 @app.post("/studio/jobs",status_code=202)
@@ -95,9 +99,15 @@ def start_job(body: JobRequest,user_id: str=Depends(require_user)):
     if missing:
         raise HTTPException(503,"Required model services are not configured: "+", ".join(sorted(missing)))
     try:
+        if body.kind == "analysis" and body.analysis.document_ids:
+            source = repo.get_history(user_id,str(body.generation_id))
+            if not source:
+                raise LookupError("Source generation not found")
+            documents.selected(user_id,source["metadata"].get("chatId") or str(source["id"]),
+                               [str(value) for value in body.analysis.document_ids])
         job = repo.create_job(user_id,payload,endpoints)
     except LookupError:
-        raise HTTPException(404,"Source generation not found")
+        raise HTTPException(404,"Source image or selected PDF not found")
     except OverflowError as exc:
         raise HTTPException(429,str(exc))
     except ValueError as exc:
@@ -107,6 +117,80 @@ def start_job(body: JobRequest,user_id: str=Depends(require_user)):
     if body.kind == "threed" and job["status"] in {"queued","running"}:
         repo.patch_history(user_id,str(body.generation_id),{"threeDJob":{"status":"converting","requestId":str(job["id"])}})
     return public_job(job)
+
+
+@app.get("/studio/chats/{chat_id}/documents")
+def list_documents(chat_id: str,user_id: str=Depends(require_user)):
+    if not repo.get_chat(user_id,chat_id):
+        raise HTTPException(404,"Conversation not found")
+    return [public_document(row) for row in documents.list(user_id,chat_id)]
+
+
+@app.post("/studio/chats/{chat_id}/documents",status_code=202)
+async def upload_document(chat_id: str,request: Request,filename: str=Query(max_length=180),user_id: str=Depends(require_user)):
+    from starlette.concurrency import run_in_threadpool
+    if not await run_in_threadpool(repo.get_chat,user_id,chat_id):
+        raise HTTPException(404,"Conversation not found")
+    if request.headers.get("content-type","").split(";")[0].lower() != "application/pdf":
+        raise HTTPException(415,"Upload a PDF file")
+    try:
+        name = filename_for_upload(filename)
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from None
+    content = bytearray()
+    async for part in request.stream():
+        if len(content)+len(part)>MAX_PDF_BYTES:
+            raise HTTPException(413,"Each PDF must be 15 MiB or smaller")
+        content.extend(part)
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(422,"This file is not a valid PDF")
+    # Run network/database work in a thread, keeping the async request loop free.
+    return await run_in_threadpool(store_document,user_id,chat_id,name,bytes(content))
+
+
+def store_document(user_id,chat_id,filename,content):
+    document_id = str(uuid4())
+    storage = Storage()
+    path = storage.upload(f"{user_id}/documents/{document_id}.pdf",base64.b64encode(content).decode("ascii"),"application/pdf")
+    try:
+        row = documents.register(user_id,chat_id,document_id,filename,path,len(content))
+        return public_document(row)
+    except Exception as exc:
+        storage.remove([path])
+        if isinstance(exc,LookupError):
+            raise HTTPException(404,str(exc)) from None
+        if isinstance(exc,(ValueError,OverflowError)):
+            raise HTTPException(429 if isinstance(exc,OverflowError) else 409,str(exc)) from None
+        raise
+
+
+@app.get("/studio/documents/{document_id}/url")
+def document_url(document_id: UUID,user_id: str=Depends(require_user)):
+    row = documents.get(user_id,str(document_id))
+    if not row:
+        raise HTTPException(404,"PDF was removed from this conversation")
+    return {"url":Storage().signed_url(row["storage_path"])}
+
+
+@app.post("/studio/documents/{document_id}/retry",status_code=202)
+def retry_document(document_id: UUID,user_id: str=Depends(require_user)):
+    try:
+        return public_document(documents.retry(user_id,str(document_id)))
+    except LookupError as exc:
+        raise HTTPException(404,str(exc)) from None
+    except (ValueError,OverflowError) as exc:
+        raise HTTPException(429 if isinstance(exc,OverflowError) else 409,str(exc)) from None
+
+
+@app.delete("/studio/documents/{document_id}")
+def delete_document(document_id: UUID,user_id: str=Depends(require_user)):
+    try:
+        documents.delete(user_id,str(document_id),Storage().remove)
+    except LookupError as exc:
+        raise HTTPException(404,str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(409,str(exc)) from None
+    return {"status":"deleted"}
 
 @app.get("/studio/jobs")
 def list_jobs(user_id: str=Depends(require_user)):
@@ -126,6 +210,9 @@ def retry_job(job_id: UUID,user_id: str=Depends(require_user)):
         raise HTTPException(404,"Job not found")
     if old["status"] != "failed":
         raise HTTPException(409,"Only failed jobs can be retried")
+    if old["kind"] == "document_index":
+        row = retry_document(UUID(old["payload"]["document_id"]),user_id)
+        return public_job(repo.get_job(user_id,str(row["job_id"])))
     payload = {**old["payload"],"request_id":str(uuid4())}
     if payload["kind"]=="analysis":
         payload["analysis"]={**payload["analysis"],"id":"question."+str(uuid4())}

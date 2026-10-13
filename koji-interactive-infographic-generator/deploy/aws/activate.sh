@@ -37,6 +37,7 @@ mkdir -p "$root/deploy-environments" "$root/deploy-backups"
 # Keep virtual environments at stable absolute paths across activation.
 environment="$(mktemp -d "$root/deploy-environments/$sha.XXXXXXXX")"
 python3 -m venv "$environment"
+"$environment/bin/python" -m pip install --disable-pip-version-check torch --index-url https://download.pytorch.org/whl/cpu
 "$environment/bin/python" -m pip install --disable-pip-version-check -r "$stage/package/studio/requirements.txt"
 "$environment/bin/python" -m compileall -q "$stage/package/studio" "$stage/package/shared"
 cd "$stage/package"
@@ -48,6 +49,8 @@ from studio.main import app,ready
 import studio.worker
 assert '/studio/chats' in app.openapi()['paths']
 ready()
+from studio.documents import embed_texts
+assert len(embed_texts(['Student PDF retrieval readiness'])[0]) == 384
 print('Staged API, worker and existing database configuration verified')
 PY
 backup="$(mktemp -d "$root/deploy-backups/$sha.XXXXXXXX")"

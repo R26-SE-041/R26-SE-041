@@ -117,6 +117,59 @@ From backend after installing `studio/requirements-dev.txt`: `python ../ci/check
 
 The default local backend check skips database integration tests if no test database is provided. The GitHub workflow supplies PostgreSQL so those tests run there. Browser UI tests can use mock model endpoints to verify editing without spending Modal GPU credits.
 
+## Optional PDFs for image questions
+
+In the interactive image view, **Study sources** accepts multiple PDFs attached to
+the current cloud conversation. Students can select any combination of ready files
+for each question, select all, or clear selection for an image-based explanation.
+Newly processed uploads are selected automatically; deliberate deselections are
+retained while studying. Reopening a conversation restores its last question's
+selection. Each question saves its own document IDs and retrieved evidence.
+
+PDF indexing runs as a durable CPU worker job. Closing the browser does not stop
+processing. The panel shows processing, ready, and actionable failure states, with
+retry and removal controls. Limits are 10 files per conversation, 15 MiB per file,
+300 pages, and 2,000 text chunks. Existing per-user active-job limits also apply;
+large batches may need to finish indexing before more files are added.
+Encrypted files must be unlocked first. Textless PDFs need OCR before upload;
+partially scanned files report how many pages were skipped.
+
+Retrieval combines the visually identified concept with the student's question.
+Both semantic and keyword searches are filtered by authenticated owner,
+conversation, and selected document IDs. Factual explanations use the selected
+PDF evidence without web or shared knowledge fallback. Missing evidence produces
+an explicit no-match response. Missing or invented source numbers produce an
+explicit unsupported-answer response. Citation validation checks source IDs,
+not factual entailment; students should inspect the provided passages.
+Each reference opens a freshly signed private PDF URL at the original PDF page
+and can expand its source passage. Evidence stays visible in conversation history
+after PDF removal; its original link then reports that the file was removed.
+
+Apply **003_pdf_sources.sql** with `python -m studio.migrate` before using this
+feature. It adds component-owned document/chunk tables, pgvector, owner RLS, and
+PDF support in the existing private bucket. A custom `STUDIO_STORAGE_BUCKET`
+must also allow `application/pdf`. Deploy the Studio API, worker, frontend, and
+interactive Modal agent together; the agent needs the new `pdf_context` and
+`pdf_concept` fields. No live migration or deployment is performed by adding code.
+PDF uploads go directly to `EXPO_PUBLIC_STUDIO_API_URL` with the same bearer
+authentication, avoiding frontend function payload limits. Include the deployed
+frontend origin in the API's `CORS_ORIGINS`; the API host/reverse proxy must accept
+15 MiB request bodies. Other requests retain the existing same-origin route.
+
+The worker uses fixed 384-dimensional `all-MiniLM-L6-v2` embeddings on CPU.
+First use downloads model weights; allow outbound Hugging Face access and
+provide disk space/cache persistence. Render/AWS setup installs CPU PyTorch
+before other requirements to avoid CUDA packages. For local setup, run
+`python -m pip install torch --index-url https://download.pytorch.org/whl/cpu`
+before installing Studio requirements. Tune `STUDIO_PDF_MIN_SIMILARITY` against
+representative course questions (default 0.30); this is a retrieval threshold,
+not a correctness probability. The initial model is best suited to English
+course materials. GPU image models still run on Modal.
+
+Database integration checks require an isolated **pgvector-enabled PostgreSQL**
+database. CI uses `pgvector/pgvector:pg17` and checks ownership, selected-file
+isolation, page metadata, worker fencing, and safe document removal.
+
 ## Conversation history
 
 Cloud History is a conversation timeline, not a capped list of image cards. Original prompts, full enhanced prompt payloads, generation versions, selected point/box coordinates, every Q&A, failed questions, automatic/manual label snapshots and each 3D version stay linked to the same conversation and source image. Enhancement and Q&A are durable jobs: the worker saves responses without requiring an open browser.

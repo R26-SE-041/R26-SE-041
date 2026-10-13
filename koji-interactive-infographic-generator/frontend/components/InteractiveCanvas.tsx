@@ -1,7 +1,10 @@
 import { modelRequest, cloudEnabled, runJob, getCloudHistory } from "../studioClient";
 import type { GenerationInteraction } from "../historyStorage";
 import AnnotationEditor from "./AnnotationEditor";
-import React, { useMemo, useRef, useState } from "react";
+import PdfSourcesPanel from "./PdfSourcesPanel";
+import PdfEvidence from "./PdfEvidence";
+import type { PdfSource } from "../pdfSources";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   GestureResponderEvent,
@@ -33,6 +36,7 @@ interface InteractionCoords {
 interface Point { x: number; y: number }
 
 interface InteractiveCanvasProps {
+  chatId?: string;
   generationId?: string;
   interactions?: GenerationInteraction[];
   onAnnotationsChange?: (items: AnatomyAnnotation[]) => void;
@@ -67,7 +71,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ chatId, generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -92,6 +96,21 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
   const commitLabelEdits = useRef<(() => void) | null>(null);
   const [showAnatomyLabels, setShowAnatomyLabels] = useState(true);
   const [selectedStructureId, setSelectedStructureId] = useState<string | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>(() => interactions.at(-1)?.documentIds ?? []);
+  const [resultSources, setResultSources] = useState<PdfSource[]>([]);
+  const [resultGrounding, setResultGrounding] = useState<GenerationInteraction["grounding"]>();
+  const conversation = chatId ?? generationId;
+  const lastSelection = useRef(interactions.at(-1)?.documentIds);
+  const activeImage = useRef(imageBase64);
+  activeImage.current = imageBase64;
+  lastSelection.current = interactions.at(-1)?.documentIds;
+  useEffect(() => {
+    setSelectedDocuments(lastSelection.current ?? []);
+  }, [conversation]);
+  useEffect(() => {
+    setResultSources([]); setResultGrounding(undefined); setAnalysisResult(null);
+    setIsLoading(false); setError(null); setCurrentSelection(null); setHighlightedImage(null);
+  }, [conversation, imageBase64]);
 
   const nearestStructure = (point: Point): string | null => {
     let best: AnatomyAnnotation | undefined;
@@ -167,14 +186,16 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
   };
 
   const runAnalysis = async (regenerationFeedback?: string) => {
-    if (!currentSelection || isLoading) return;
+    if (!currentSelection || isLoading || (analysisMode === "ask" && !customQuestion.trim())) return;
     const startedAt = Date.now();
     const turnId = createOutputId("question");
     const turnQuestion = analysisMode === "ask" ? customQuestion.trim() : analysisMode === "identify" ? "Identify selected object" : "Explain selected region";
     const selection = { ...currentSelection, coords: [...currentSelection.coords] };
+    const documentIds = [...selectedDocuments];
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
+    setResultSources([]); setResultGrounding(undefined);
     setAnalysisDuration(null);
     try {
       let memoryContext = "";
@@ -196,18 +217,19 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
       } catch {
         memoryContext = "";
       }
-      let data: { response_text?: string; highlighted_base64?: string; error?: string };
+      let data: { response_text?: string; highlighted_base64?: string; error?: string; sources?: PdfSource[]; grounding?: GenerationInteraction["grounding"] };
       if (cloudEnabled() && generationId && /^[0-9a-f-]{36}$/i.test(generationId)) {
         await runJob({kind:"analysis",generation_id:generationId,speed_mode:speedMode,analysis:{
           id:turnId,mode:analysisMode,question:turnQuestion,interaction:selection,
           organ:anatomyOrgan,structure_id:selectedStructureId ?? undefined,
-          regeneration_feedback:regenerationFeedback,memory_context:memoryContext
+          regeneration_feedback:regenerationFeedback,memory_context:memoryContext,document_ids:documentIds
         }});
         const saved = await getCloudHistory(generationId);
         const turn = saved.interactions?.find(item => item.id === turnId);
         if (!turn?.answer) throw new Error("Saved answer is not available. Reopen this conversation from History.");
-        data = { response_text: turn.answer };
+        data = { response_text: turn.answer, sources: turn.sources, grounding: turn.grounding };
       } else {
+      if (documentIds.length) throw new Error("Save this image to your cloud workspace to ask questions using PDFs.");
       const response = await modelRequest("interactive", INTERACTIVE_AGENT_URL, "/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -217,6 +239,7 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
           mode: analysisMode,
           question: analysisMode === "ask" ? customQuestion.trim() : undefined,
           speed_mode: speedMode,
+          enable_rag: false,
           regeneration_feedback: regenerationFeedback,
           memory_context: memoryContext,
           organ: anatomyOrgan,
@@ -227,25 +250,29 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
       if (!response.ok) throw new Error(apiError(data, `HTTP ${response.status}`));
       if (data.error) throw new Error(String(data.error));
       }
+      if (activeImage.current !== imageBase64) return;
       if (data.highlighted_base64) setHighlightedImage(`data:image/png;base64,${data.highlighted_base64}`);
       const answer = data.response_text || "No analysis provided.";
       setAnalysisResult(answer);
+      setResultSources(data.sources ?? []); setResultGrounding(data.grounding ?? "image");
       onInteractionComplete?.({
         id: turnId,
         createdAt: new Date().toISOString(),
         mode: analysisMode,
         question: turnQuestion,
         answer, selection, structureId: selectedStructureId, status: "completed",
+        documentIds, sources:data.sources ?? [], grounding:data.grounding ?? "image",
       });
       setOutputId(createOutputId("interactive"));
       const duration = Date.now() - startedAt;
       setAnalysisDuration(duration);
       onOperationComplete?.(duration);
     } catch (caught) {
+      if (activeImage.current !== imageBase64) return;
       setError(caught instanceof Error ? caught.message : "Analysis failed");
       setAnalysisDuration(Date.now() - startedAt);
     } finally {
-      setIsLoading(false);
+      if (activeImage.current === imageBase64) setIsLoading(false);
     }
   };
 
@@ -279,6 +306,7 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
       {editingLabels && onAnnotationsChange && <AnnotationEditor imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
 
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
+      <PdfSourcesPanel key={conversation} chatId={conversation} selected={selectedDocuments} onSelectionChange={setSelectedDocuments} disabled={isLoading} restoreSelection={lastSelection.current !== undefined} />
 
       {!editingLabels && <View
         {...panResponder.panHandlers}
@@ -347,6 +375,7 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
           <Text style={{ color: colors.textDim, fontSize: 11 }}>{new Date(turn.createdAt).toLocaleString()} · {turn.selection?.type === "box" ? "Selected region" : "Selected point"}</Text>
           <Text style={{ color: colors.primaryBright, fontWeight: "700" }}>You: {turn.question || (turn.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text>
           <Text style={styles.resultText}>{turn.status === "failed" ? turn.error : turn.answer || "Answer pending — reopen History to retrieve it."}</Text>
+          <PdfEvidence sources={turn.sources} grounding={turn.grounding} />
           {!!turn.selection && <Pressable onPress={() => { setCurrentSelection(turn.selection!); setSelectionType(turn.selection!.type); setAnalysisMode(turn.mode); setSelectedStructureId(turn.structureId ?? null); setCustomQuestion(turn.question || ""); }}><Text style={{ color: colors.primaryBright }}>Show selected region</Text></Pressable>}
         </View>)}
       </View>}
@@ -363,6 +392,7 @@ export default function InteractiveCanvas({ generationId, interactions = [], onA
             </Text>
           </View>
           <Text style={styles.resultText}>{analysisResult}</Text>
+          <PdfEvidence sources={resultSources} grounding={resultGrounding} />
           {analysisDuration !== null && <View style={styles.inlineInfo}><Icon color={colors.textDim} name="clock" size={14} /><Text style={styles.durationText}>Completed in {formatDuration(analysisDuration)}</Text></View>}
           {outputId && (
             <FeedbackControls

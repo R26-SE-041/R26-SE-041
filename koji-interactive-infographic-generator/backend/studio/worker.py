@@ -29,13 +29,17 @@ def process_job(repo, pipeline, job):
         message = str(exc)[:500] if isinstance(exc,(RuntimeError,ValueError)) else "Generation service unavailable. Retry from history."
         try:
             repo.update_job(job,status="failed",stage="failed",error=message)
+            if job["kind"] == "document_index":
+                from studio.documents import Documents
+                Documents().fail(job,message)
             if job["kind"]=="analysis":
                 a=job["payload"]["analysis"]
                 repo.append_interaction(str(job["user_id"]),str(job["generation_id"]),
                     {"id":a["id"],"mode":a["mode"],"question":a.get("question") or
                         ("Identify selected object" if a["mode"]=="identify" else "Explain selected region"),
                      "answer":"","selection":a["interaction"],"structureId":a.get("structure_id"),
-                     "status":"failed","error":message,"jobId":str(job["id"])})
+                     "status":"failed","error":message,"jobId":str(job["id"]),
+                     "documentIds":a.get("document_ids",[])})
             if job["kind"] in {"generate","sketch","enhance"}:
                 repo.append_chat_event(str(job["user_id"]),job["payload"].get("chat_id") or str(job["id"]),
                     str(job["id"])+":error","error",{"message":message,"jobId":str(job["id"])})

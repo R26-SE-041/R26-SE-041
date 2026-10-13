@@ -64,11 +64,20 @@ class Repository:
             elif payload["kind"] == "analysis":
                 a = payload["analysis"]
                 chat_id = source["metadata"].get("chatId") or str(source["id"])
+                # Validate under the same per-user lock used by PDF removal.
+                if a.get("document_ids"):
+                    cur.execute("""select id,status from koji_documents where user_id=%s and chat_id=%s
+                        and id=any(%s::uuid[])""",(user_id,chat_id,a["document_ids"]))
+                    selected = cur.fetchall()
+                    if len(selected) != len(set(a["document_ids"])):
+                        raise LookupError("Selected PDF not found")
+                    if any(row["status"] != "ready" for row in selected):
+                        raise ValueError("Wait until selected PDFs are ready")
                 self._chat_event(cur,user_id,chat_id,a["id"],"interaction",
                     {"id":a["id"],"mode":a["mode"],"question":a.get("question") or
                         ("Identify selected object" if a["mode"]=="identify" else "Explain selected region"),
                      "answer":"","selection":a["interaction"],"structureId":a.get("structure_id"),
-                     "status":"queued","jobId":job_id},str(source["id"]))
+                     "status":"queued","jobId":job_id,"documentIds":a.get("document_ids",[])},str(source["id"]))
             return job
 
     def claim(self):
@@ -251,6 +260,8 @@ class Repository:
             paths=[path for row in cur.fetchall() for path in (row["image_path"],row["thumbnail_path"],row["glb_path"]) if path]
             cur.execute("select data->>'glbPath' as path from koji_chat_events where user_id=%s and chat_id=%s and kind='threed'",(user_id,chat_id))
             paths.extend(row["path"] for row in cur.fetchall() if row["path"] and row["path"].startswith(user_id+"/"))
+            cur.execute("select storage_path from koji_documents where user_id=%s and chat_id=%s",(user_id,chat_id))
+            paths.extend(row["storage_path"] for row in cur.fetchall())
             remove_assets(list(set(paths)))
             cur.execute("delete from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s",(user_id,chat_id))
             cur.execute("delete from koji_chats where user_id=%s and id=%s",(user_id,chat_id))

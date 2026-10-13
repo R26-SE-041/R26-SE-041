@@ -19,6 +19,7 @@
     "base64-arraybuffer": "^1.0.2",
     "expo": "~57.0.11",
     "expo-asset": "~57.0.2",
+    "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.2",
     "expo-gl": "~57.0.2",
     "expo-sharing": "~57.0.2",

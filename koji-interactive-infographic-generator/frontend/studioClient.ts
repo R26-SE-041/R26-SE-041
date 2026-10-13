@@ -9,10 +9,10 @@ export function configureStudio(token?: string) {
 }
 export function studioOwner() { return currentOwner; }
 export function cloudEnabled() { return Boolean(STUDIO_API_URL && currentToken); }
-export async function studioRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function studioRequest<T>(path: string, init: RequestInit = {}, origin = STUDIO_API_URL): Promise<T> {
   const owner = studioOwner();
   let response: Response;
-  try { response = await fetch(STUDIO_API_URL.replace(/\/$/, "") + path, {
+  try { response = await fetch(origin.replace(/\/$/, "") + path, {
     ...init, headers: { "Content-Type":"application/json", ...(currentToken ? { Authorization:"Bearer "+currentToken } : {}), ...init.headers },
   }); } catch (failure) {
     if (failure && typeof failure === "object" && "message" in failure && typeof failure.message === "string" && /fetch|network|load failed/i.test(failure.message)) throw new Error("Unable to reach your cloud workspace. Check your connection and retry.");

@@ -31,6 +31,7 @@ export const EVAL_AGENT_URL =
   "https://agal-koji--eval-agent-api.modal.run";
 
 const configuredStudioUrl = process.env.EXPO_PUBLIC_STUDIO_API_URL?.trim() ?? "";
+export const STUDIO_API_ORIGIN = configuredStudioUrl;
 // Hosted web builds can reach the CPU API through the site's own origin.
 export const STUDIO_API_URL = configuredStudioUrl && typeof window !== "undefined" && process.env.NODE_ENV === "production"
   ? process.env.EXPO_PUBLIC_STUDIO_PROXY_PATH?.trim() || configuredStudioUrl

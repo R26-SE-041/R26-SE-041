@@ -25,6 +25,8 @@ def configured_endpoints():
 
 def required_services(payload):
     kind = payload["kind"]
+    if kind == "document_index":
+        return set()
     return {"prompt"} if kind == "enhance" else {"sketch"} if kind == "sketch" else {"image"} if kind == "generate" else {"interactive"} if kind in {"labels","analysis"} else {"threed"}
 
 def quality_rank(value):
@@ -95,6 +97,10 @@ class Pipeline:
 
     def run(self,job):
         kind = job["kind"]
+        if kind == "document_index":
+            from studio.documents import index_document
+            self.repo.update_job(job,stage="indexing PDF")
+            return index_document(job,self.storage)
         if kind=="enhance":
             self.repo.update_job(job,stage="enhancing")
             p=job["payload"]
@@ -210,19 +216,46 @@ class Pipeline:
         image = self.storage.download(source["image_path"])
         if job["kind"] == "analysis":
             a=p["analysis"]
-            data=self.invoke(job,"interactive","/analyze",
-                {"image_base64":image,"speed_mode":p["speed_mode"],
-                 **{key:value for key,value in a.items() if key!="id"}},"analysis")
+            from studio.documents import Documents, evidence_context, checked_pdf_answer
+            selected = a.get("document_ids",[])
+            sources = []
+            grounding = "image"
+            payload = {"image_base64":image,"speed_mode":p["speed_mode"],"enable_rag":False,
+                       **{key:value for key,value in a.items() if key not in {"id","document_ids"}}}
+            if selected:
+                chat_id = source["metadata"].get("chatId") or str(source["id"])
+                Documents().selected(str(job["user_id"]),chat_id,selected)
+                identification = self.invoke(job,"interactive","/analyze",
+                    {**payload,"mode":"identify","question":None},"identify_for_pdf")
+                raw_concept = (identification.get("identified_concept") or identification.get("response_text") or "").strip()
+                if not raw_concept:
+                    raise RuntimeError("The selected part could not be identified. Select a clearer region and try again.")
+                concept = raw_concept.splitlines()[0][:160]
+                query = f"{concept}\n{a.get('question') or a['mode']}"
+                chunks = Documents().retrieve(str(job["user_id"]),chat_id,selected,query)
+                context,sources = evidence_context(chunks)
+                if not chunks:
+                    data = {"response_text":"I could not find relevant information in the selected PDFs for this image question. Try another source or rephrase your question. Deselect all PDFs to ask for an image-based explanation."}
+                    grounding = "no_match"
+                else:
+                    data = self.invoke(job,"interactive","/analyze",
+                        {**payload,"pdf_context":context,"pdf_concept":concept},"analysis")
+                    grounding = "pdf"
+            else:
+                data = self.invoke(job,"interactive","/analyze",payload,"analysis")
             answer=data.get("response_text")
             if not isinstance(answer,str) or not answer.strip():
                 raise RuntimeError("Analysis returned no answer")
+            if grounding == "pdf":
+                answer = checked_pdf_answer(answer,sources)
             if not self.repo.heartbeat(job):
                 raise RuntimeError("Worker lease lost")
             self.repo.append_interaction(str(job["user_id"]),str(p["generation_id"]),
                 {"id":a["id"],"mode":a["mode"],"question":a.get("question") or
                     ("Identify selected object" if a["mode"]=="identify" else "Explain selected region"),
                  "answer":answer,"selection":a["interaction"],"structureId":a.get("structure_id"),
-                 "status":"completed","jobId":str(job["id"])})
+                 "status":"completed","jobId":str(job["id"]),"documentIds":selected,
+                 "sources":sources,"grounding":grounding})
             return {"history_id":str(p["generation_id"]),"interaction_id":a["id"]}
         if job["kind"] == "labels":
             anatomy = source["metadata"].get("anatomy") or {}
