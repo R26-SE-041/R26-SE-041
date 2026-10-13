@@ -1,7 +1,7 @@
 """Cloud-only Hugging Face migration for VoiceLearn model volumes.
 
-No model bytes pass through the developer workstation. Existing private Hub
-repositories are verified before ``prefetch_visakan`` runs against Visakan.
+No model bytes pass through the developer workstation. Run against an explicitly
+selected workspace; private Hub downloads require its authorized HF secret.
 """
 
 from __future__ import annotations
@@ -88,7 +88,11 @@ def inspect_existing_repos() -> dict[str, object]:
     volumes={"/models": model_volume, "/bge_models": bge_volume},
 )
 def prefetch_visakan() -> dict[str, object]:
-    """Download all production model files directly from HF into Visakan volumes."""
+    """Prepare production volumes in the explicitly selected Modal workspace.
+
+    The historical function name is retained for existing deployment scripts.
+    Use ``modal run --profile <workspace>`` to choose the destination.
+    """
     import json
 
     from huggingface_hub import snapshot_download
@@ -104,6 +108,7 @@ def prefetch_visakan() -> dict[str, object]:
         cache_dir: str | None = None,
         local_dir: str | None = None,
         allow_patterns: list[str] | None = None,
+        revision: str | None = None,
         volume: modal.Volume = model_volume,
     ) -> None:
         try:
@@ -113,6 +118,7 @@ def prefetch_visakan() -> dict[str, object]:
                 cache_dir=cache_dir,
                 local_dir=local_dir,
                 allow_patterns=allow_patterns,
+                revision=revision,
                 token=token,
                 max_workers=4,
             )
@@ -149,7 +155,13 @@ def prefetch_visakan() -> dict[str, object]:
     fetch("osmapi/tamil-asr-qwen3", cache_dir="/models/tamil-asr-qwen3")
     fetch("hexgrad/Kokoro-82M", cache_dir="/models/huggingface")
     fetch("ai4bharat/IndicF5", cache_dir="/models")
-    fetch("ai4bharat/indic-parler-tts", cache_dir="/models/indic-parler-tts")
+    # Match the production offline loader rather than changing refs/main to a
+    # newer gated snapshot whose model files may be inaccessible.
+    fetch("ai4bharat/indic-parler-tts", cache_dir="/models/indic-parler-tts",
+          revision="7b527af5ee8ed1f9a28d80b19703ed9bb8ba10ca")
+    fetch("google/flan-t5-large", cache_dir="/models/indic-parler-tts",
+          revision="0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a",
+          allow_patterns=["tokenizer*", "special_tokens_map.json", "spiece.model"])
     fetch("BAAI/bge-m3", cache_dir="/bge_models", volume=bge_volume)
     fetch("BAAI/bge-reranker-v2-m3", cache_dir="/bge_models", volume=bge_volume)
 

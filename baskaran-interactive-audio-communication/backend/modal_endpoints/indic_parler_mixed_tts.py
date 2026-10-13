@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 
 # ── Modal image ───────────────────────────────────────────────────────────────
 # Build a clean Debian environment with:
-#   * parler-tts (HuggingFace GitHub HEAD — required for indic-parler-tts)
+#   * parler-tts (pinned working HuggingFace GitHub revision)
 #   * transformers >= 4.40  (description tokenizer T5 + multilingual prompt tokenizer)
 #   * torch with CUDA (GPU inference at float16)
 #   * soundfile + scipy for WAV encoding
@@ -44,21 +44,22 @@ image = (
     )
     .pip_install(
         # Core PyTorch — install before parler-tts to guarantee GPU wheels
-        "torch>=2.4.0",
-        "torchaudio>=2.4.0",
+        "torch==2.13.0",
+        "torchaudio==2.11.0",
         # HuggingFace parler-tts from source — required for indic-parler-tts multilingual support
-        "git+https://github.com/huggingface/parler-tts.git",
+        "git+https://github.com/huggingface/parler-tts.git@d108732cd57788ec86bc857d99a6cabd66663d68",
         # Transformers — must be >= 4.40 for SDPA and multilingual tokenizer compatibility
-        "transformers>=4.40.0,<5",
-        "accelerate>=0.26.0",
+        "transformers==4.46.1",
+        "accelerate==1.14.0",
         # Audio / IO
-        "soundfile>=0.12.1",
-        "scipy>=1.11.4",
+        "soundfile==0.14.0",
+        "scipy==1.17.1",
+        "numpy==2.4.6",
         # Modal / FastAPI
-        "fastapi[standard]>=0.115.0",
-        "pydantic>=2.0.0",
+        "fastapi[standard]==0.141.1",
+        "pydantic==2.13.5",
         # HuggingFace hub for model download + caching
-        "huggingface_hub>=0.24.0",
+        "huggingface_hub==0.36.2",
     )
 )
 
@@ -76,6 +77,10 @@ model_volume = modal.Volume.from_name("voicelearn-models", create_if_missing=Tru
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MODEL_ID = "ai4bharat/indic-parler-tts"
+# This complete snapshot exists in every workspace. Its inference files match
+# the live model; pinning avoids incomplete newer refs after gated HF downloads.
+MODEL_REVISION = "7b527af5ee8ed1f9a28d80b19703ed9bb8ba10ca"
+DESCRIPTION_REVISION = "0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a"
 CACHE_DIR = "/models"
 MODEL_CACHE_PATH = f"{CACHE_DIR}/indic-parler-tts"
 
@@ -263,8 +268,10 @@ class IndicParlerMixedTTS:
         # ── Model weights ─────────────────────────────────────────────────────
         self._model = ParlerTTSForConditionalGeneration.from_pretrained(
             MODEL_ID,
+            revision=MODEL_REVISION,
             cache_dir=MODEL_CACHE_PATH,
             token=token,
+            local_files_only=True,
             torch_dtype=dtype,
             attn_implementation="eager",
         ).to(self._device)
@@ -278,8 +285,10 @@ class IndicParlerMixedTTS:
         # Prompt tokenizer: the multilingual vocab (Tamil, English, other Indic scripts)
         self._prompt_tokenizer = AutoTokenizer.from_pretrained(
             MODEL_ID,
+            revision=MODEL_REVISION,
             cache_dir=MODEL_CACHE_PATH,
             token=token,
+            local_files_only=True,
         )
         # Upstream Parler-TTS batch inference requires left-padded token batches.
         self._prompt_tokenizer.padding_side = "left"
@@ -289,8 +298,10 @@ class IndicParlerMixedTTS:
         print(f"[IndicParlerMixedTTS] Description encoder: {description_encoder_name}")
         self._description_tokenizer = AutoTokenizer.from_pretrained(
             description_encoder_name,
+            revision=DESCRIPTION_REVISION,
             cache_dir=MODEL_CACHE_PATH,
             token=token,
+            local_files_only=True,
         )
         self._description_tokenizer.padding_side = "left"
 

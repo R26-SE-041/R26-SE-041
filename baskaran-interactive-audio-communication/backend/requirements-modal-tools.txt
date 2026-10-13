@@ -1,0 +1,3 @@
+# Administrative workspace tooling; not needed by the FastAPI HTTP client.
+modal==1.6.1
+httpx==0.27.2

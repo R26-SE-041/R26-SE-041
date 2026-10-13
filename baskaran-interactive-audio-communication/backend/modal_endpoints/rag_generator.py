@@ -249,7 +249,7 @@ class RAGGenerator:
             )
         with open(adapter_config_path, "r", encoding="utf-8") as handle:
             adapter_config = json.load(handle)
-        if adapter_config.get("base_model_name_or_path") != _BASE_MODEL_ID:
+        if adapter_config.get("base_model_name_or_path") != "google/gemma-4-12B-it":
             raise RuntimeError("Gemma V2 adapter declares an incompatible base model")
         if str(adapter_config.get("peft_type", "")).upper() != "LORA":
             raise RuntimeError("Gemma V2 adapter is not a PEFT LoRA adapter")
