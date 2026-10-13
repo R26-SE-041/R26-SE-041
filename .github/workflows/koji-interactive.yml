@@ -108,6 +108,7 @@ jobs:
       - run: python ../ci/check.py
       - name: Test deployment routing and artifact boundaries
         run: |
+          python -c "from pathlib import Path; assert all(b'\r' not in p.read_bytes() for p in Path('../deploy/aws').glob('*.sh')), 'Deployment scripts require LF line endings'"
           bash -n ../deploy/aws/activate.sh ../deploy/aws/install_receiver.sh
           python -m unittest discover -s ../ci/tests -p 'test_*.py'
       - name: Package tested CPU API and worker

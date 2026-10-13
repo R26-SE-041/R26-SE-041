@@ -15,6 +15,12 @@ mkdir -p "$control"
 for name in deploy_service.py activate.sh; do
     install -m 700 "$source_dir/$name" "$control/$name"
 done
+python3 - "$control/activate.sh" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_bytes(path.read_bytes().replace(b'\r\n', b'\n'))
+PY
 printf 'KOJI_DEPLOY_TOKEN=%s\n' "$token" > "$control/.env"
 unset token
 sudo -n install -m 644 "$source_dir/koji-deploy.service" /etc/systemd/system/koji-deploy.service
