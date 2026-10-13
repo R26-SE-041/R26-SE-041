@@ -222,3 +222,9 @@ output ratings. The authenticated Studio API saves ratings directly in the
 existing feedback and preference-pair tables with private owner access. Rating
 saves do not depend on the external orchestrator. Studio readiness checks this
 storage before deployment.
+
+# Modal account switching
+
+The Studio backend supports checked runtime switching between `kojithan-y`,
+`ikojikn`, and `agal-koji`, with rollback and preserved job routing.
+See [setup and commands](docs/modal-accounts.md).

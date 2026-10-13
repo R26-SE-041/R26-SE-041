@@ -1,5 +1,8 @@
 # Koji deployment
 
+For switching the live GPU agents between the three Modal workspaces without
+rebuilding the frontend or restarting jobs, see [Modal accounts](../../docs/modal-accounts.md).
+
 The Koji workflow is independent of the other research components. Only changes under `koji-interactive-infographic-generator/` or its workflow trigger this pipeline. Root README and research-document changes do not deploy Koji.
 
 ## Release behavior

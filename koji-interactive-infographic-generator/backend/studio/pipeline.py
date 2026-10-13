@@ -1,6 +1,5 @@
 """Model orchestration shared by the durable worker; GPU services stay on Modal."""
 from __future__ import annotations
-import os
 import math
 import time
 from urllib.parse import urlparse
@@ -8,14 +7,13 @@ from uuid import UUID, uuid5, NAMESPACE_URL
 import requests
 from studio.repository import Repository
 from studio.storage import Storage
-
-SERVICES = {"prompt":"PROMPT_AGENT_URL","image":"IMAGE_AGENT_URL","sketch":"SKETCH_AGENT_URL",
-    "interactive":"INTERACTIVE_AGENT_URL","evaluation":"EVAL_AGENT_URL","threed":"THREED_AGENT_URL"}
+from studio.modal_accounts import SERVICES, routing_endpoints
 
 def configured_endpoints():
     result = {}
+    routing = routing_endpoints()
     for name,env in SERVICES.items():
-        url = os.getenv(env, "").rstrip("/")
+        url = routing.get(name, "").rstrip("/")
         parsed = urlparse(url)
         if url and (parsed.scheme not in {"https","http"} or not parsed.netloc or parsed.username or parsed.password):
             raise ValueError(f"Invalid {env}")

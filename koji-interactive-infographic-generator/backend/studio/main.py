@@ -14,6 +14,7 @@ from studio.repository import Repository
 from studio.storage import Storage
 from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback
 from studio.pipeline import configured_endpoints, required_services
+from studio.modal_accounts import routing_endpoints
 from studio.documents import Documents, MAX_PDF_BYTES, filename_for_upload, public_document
 
 load_dotenv()
@@ -82,6 +83,7 @@ def health():
 
 @app.get("/ready")
 def ready():
+    configured_endpoints()
     missing=[key for key in ("DATABASE_URL","SUPABASE_URL","SUPABASE_ANON_KEY","SUPABASE_SERVICE_ROLE_KEY") if not os.getenv(key)]
     if missing:
         raise HTTPException(503,"Configure backend settings: "+", ".join(missing))
@@ -406,7 +408,7 @@ async def proxy_post(service: str,path: str,request: Request,user_id: str=Depend
 async def legacy_feedback(path: str,request: Request):
     if path not in {"feedback","memory/context","memory/settings","memory/preferences","memory/clear"} and not path.startswith("memory/preferences/"):
         raise HTTPException(404,"Route not found")
-    url = os.getenv("ORCHESTRATOR_URL","").rstrip("/")
+    url = routing_endpoints().get("orchestrator", "")
     if not url:
         raise HTTPException(503,"Feedback service is not configured")
     from starlette.concurrency import run_in_threadpool

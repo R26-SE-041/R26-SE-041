@@ -373,12 +373,17 @@ function Home({ accessToken, studioSession }: AppProps) {
 
   useEffect(() => {
     let mounted = true;
-    const check = async (url: string, setter: (health: Health) => void, timeoutMs = 5_000) => {
+    const check = async (url: string, setter: (health: Health) => void, timeoutMs = 5_000, service?: string) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetch(`${url}/health`, {
-          headers: { Accept: "application/json" },
+        const throughStudio = Boolean(service && STUDIO_API_URL);
+        if (throughStudio && !accessToken) return;
+        const healthUrl = throughStudio
+          ? `${STUDIO_API_URL.replace(/\/$/, '')}/agents/${service}/health`
+          : `${url}/health`;
+        const response = await fetch(healthUrl, {
+          headers: { Accept: "application/json", ...(throughStudio ? { Authorization: `Bearer ${accessToken}` } : {}) },
           signal: controller.signal,
         });
         const body = await response.json().catch(() => null);
@@ -391,17 +396,17 @@ function Home({ accessToken, studioSession }: AppProps) {
       }
     };
     const checkAll = () => {
-      void check(PROMPT_AGENT_URL, setPromptHealth);
-      void check(IMAGE_AGENT_URL, setImageHealth);
-      void check(INTERACTIVE_AGENT_URL, setInteractiveHealth);
-      void check(EVAL_AGENT_URL, setEvalHealth, 30_000);
-      void check(THREED_AGENT_URL, setThreedHealth, 30_000);
+      void check(PROMPT_AGENT_URL, setPromptHealth, 5_000, 'prompt');
+      void check(IMAGE_AGENT_URL, setImageHealth, 5_000, 'image');
+      void check(INTERACTIVE_AGENT_URL, setInteractiveHealth, 5_000, 'interactive');
+      void check(EVAL_AGENT_URL, setEvalHealth, 30_000, 'evaluation');
+      void check(THREED_AGENT_URL, setThreedHealth, 30_000, 'threed');
       void check(BACKEND_HEALTH_URL, setBackendHealth);
     };
     checkAll();
     const refresh = setInterval(checkAll, 15_000);
     return () => { mounted = false; clearInterval(refresh); };
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1_000);
