@@ -94,7 +94,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
   const button = { minHeight: 44, justifyContent: "center" as const, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border };
   const locked = disabled || busy || loading;
   return <View style={{ gap: 12, padding: 12, borderRadius: 10, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-    <Pressable accessibilityRole="button" accessibilityLabel="PDF sources" accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="PDF sources" aria-expanded={expanded} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={{ color: colors.text, fontWeight: "600" }}>PDF sources <Text style={{ color: colors.textDim, fontWeight: "400" }}>· Optional</Text></Text>
         <Text accessibilityLiveRegion="polite" style={{ color: colors.textDim, fontSize: 12 }}>{selected.length ? `${selected.length} PDF${selected.length === 1 ? "" : "s"} selected` : "Image only"}</Text>
@@ -113,7 +113,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
       {!loading && documents.length === 0 && <Text style={{ color: colors.textDim }}>Upload PDFs once to use them with any workspace image.</Text>}
       {documents.map(item => <View key={item.id} style={{ gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          <Pressable accessibilityRole="checkbox" accessibilityLabel={`Use ${item.filename}`} accessibilityState={{ checked: selected.includes(item.id), disabled: locked || item.status !== "ready" }} disabled={locked || item.status !== "ready"} onPress={() => onSelectionChange(selected.includes(item.id) ? selected.filter(id => id !== item.id) : [...selected, item.id])} style={{ flex: 1, flexDirection: "row", gap: 10, paddingVertical: 8, opacity: item.status === "ready" ? 1 : .6 }}>
+          <Pressable accessibilityRole="checkbox" accessibilityLabel={`Use ${item.filename}`} aria-checked={selected.includes(item.id)} accessibilityState={{ checked: selected.includes(item.id), disabled: locked || item.status !== "ready" }} disabled={locked || item.status !== "ready"} onPress={() => onSelectionChange(selected.includes(item.id) ? selected.filter(id => id !== item.id) : [...selected, item.id])} style={{ flex: 1, flexDirection: "row", gap: 10, paddingVertical: 8, opacity: item.status === "ready" ? 1 : .6 }}>
             <Text style={{ color: colors.primaryBright }}>{selected.includes(item.id) ? "☑" : "☐"}</Text>
             <Text style={{ color: colors.text, flex: 1 }}>{item.filename}</Text>
           </Pressable>
