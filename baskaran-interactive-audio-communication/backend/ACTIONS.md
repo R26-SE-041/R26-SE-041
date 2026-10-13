@@ -1,5 +1,8 @@
 # Document actions and audio revision
 
+Additional generation, playback, flashcard and saved-library commands are documented
+in [EXTENDED_COMMANDS.md](EXTENDED_COMMANDS.md).
+
 This feature belongs only to the Baskaran component. Existing Q&A endpoints,
 language routing, model deployments and benchmark tables are unchanged.
 The study page has a separate **Document actions and audio revision** panel. Its microphone

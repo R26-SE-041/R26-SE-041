@@ -27,6 +27,15 @@ export interface DocumentActionResult {
   progress?: string
   sections?: RevisionSection[]
   summary_language: ActionLanguage
+  flashcards?: { question: string; answer: string; source_quote: string }[]
+  target_duration?: number | null
+  style?: string
+}
+
+export interface SavedAction {
+  action_id: string; filename: string; language: ActionLanguage; intent: string
+  document_id: string; revision_mode: RevisionMode; audio_duration: number | null
+  style?: string; scope?: string; created_at?: string | null
 }
 
 async function request(path: string, init: RequestInit = {}, timeout = 10_000): Promise<Response> {
@@ -54,11 +63,19 @@ export async function documentActionCapabilities(): Promise<ActionCapabilities> 
   return (await request('/api/v1/actions/capabilities')).json()
 }
 
-export async function startDocumentAction(command: string, documentId: string, sessionId: string, language: ActionLanguage = 'english', revisionMode: RevisionMode = 'single'): Promise<string> {
+export async function startDocumentAction(command: string, documentId: string, sessionId: string, language: ActionLanguage = 'english', revisionMode: RevisionMode = 'single', sourceActionId?: string, sectionId?: number, provider?: 'direct' | 'openclaw_mcp'): Promise<string> {
   const result = await request('/api/v1/actions', {
-    method: 'POST', body: JSON.stringify({ command, document_id: documentId, session_id: sessionId, language, revision_mode: revisionMode }),
+    method: 'POST', body: JSON.stringify({ command, document_id: documentId, session_id: sessionId, language, revision_mode: revisionMode, source_action_id: sourceActionId, section_id: sectionId, provider }),
   }, 30_000)
   return (await result.json()).action_id
+}
+
+export async function listSavedActions(): Promise<SavedAction[]> {
+  return (await request('/api/v1/actions/saved')).json()
+}
+
+export async function deleteSavedAction(id: string): Promise<void> {
+  await request(`/api/v1/actions/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmed: true }) })
 }
 
 export async function retryRevisionAudio(id: string): Promise<string> {

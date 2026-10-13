@@ -21,6 +21,10 @@ async def call_tool(name: str, action_id: str):
         response = await client.post(f"{base.rstrip('/')}/api/v1/actions/tools/{name}",
             headers={"X-Action-Bridge-Secret": secret}, json={"action_id": action_id})
         if not response.is_success:
+            if response.status_code == 409:
+                detail = response.json()
+                if detail.get("next_tool"):
+                    return {"error": detail["detail"], "next_tool": detail["next_tool"], "workflow_complete": False}
             raise ValueError("VoiceLearn tool failed; inspect the application's action status.")
         return response.json()
 
@@ -47,6 +51,18 @@ async def create_revision_audio(action_id: str) -> dict:
 async def save_audio_revision(action_id: str) -> dict:
     """Save and verify transcript plus WAV audio. Create revision audio first."""
     return await call_tool("save_audio_revision", action_id)
+
+
+@mcp.tool()
+async def create_flashcards(action_id: str) -> dict:
+    """Generate source-supported flashcards for this ticket. Follow next_tool."""
+    return await call_tool("create_flashcards", action_id)
+
+
+@mcp.tool()
+async def save_flashcards(action_id: str) -> dict:
+    """Save and verify the prepared flashcard deck. Create flashcards first."""
+    return await call_tool("save_flashcards", action_id)
 
 
 if os.environ.get("VOICELEARN_MCP_ENABLE_PING") == "true":

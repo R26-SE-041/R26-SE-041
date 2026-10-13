@@ -36,7 +36,7 @@ async def check(ping):
             await session.initialize()
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
-            expected = {"summarize_document", "save_summary", "create_revision_audio", "save_audio_revision"}
+            expected = {"summarize_document", "save_summary", "create_revision_audio", "save_audio_revision", "create_flashcards", "save_flashcards"}
             if ping:
                 expected.add("ping_tool")
             if names != expected:
@@ -59,7 +59,7 @@ async def check(ping):
                 response = await session.call_tool("ping_tool", {})
                 if not response.isError:
                     raise RuntimeError("Ping must not execute when disabled.")
-                print("Disabled ping check passed; only the four production tools are exposed.")
+                print("Disabled ping check passed; only the six production tools are exposed.")
     print("Gateway/model feasibility is a separate check: check_openclaw_actions.py")
 
 

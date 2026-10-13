@@ -52,6 +52,169 @@ def start(client, doc, session, command):
     return response.json()["action_id"]
 
 
+@pytest.mark.parametrize("command,expected", [
+    ("Create an audio revision of this section only and save it", {"intent": "audio_revision", "scope": "section"}),
+    ("Create a one-minute audio revision and save it", {"intent": "audio_revision", "style": "one_minute", "target_duration": 60}),
+    ("Please create a one minute audio revision and save it.", {"intent": "audio_revision", "style": "one_minute", "target_duration": 60}),
+    ("Create a detailed audio revision and save it", {"intent": "audio_revision", "style": "detailed"}),
+    *[(f"Create an audio revision in {lang.title()} and save it", {"intent": "audio_revision", "language": lang}) for lang in ("english", "tamil", "sinhala")],
+    ("Create flashcards from this document and save them", {"intent": "flashcards"}),
+    ("Create flashcards from this document and email them", None),
+])
+def test_new_command_contracts(command, expected):
+    from app.services.action_commands import parse_generation
+    assert parse_generation(command) == expected
+
+
+def test_duration_and_explicit_language_override(env, monkeypatch):
+    _, doc, session, app = env
+    monkeypatch.setattr(service, "run_action", AsyncMock())
+    with TestClient(app) as client:
+        for command, language, style, mode, target in [
+            ("Create a one-minute audio revision and save it", "english", "one_minute", "single", 60),
+            ("Create a detailed audio revision and save it", "english", "detailed", "single", None),
+            *[(f"Create an audio revision in {lang.title()} and save it", lang, "short", "single", None) for lang in ("tamil", "sinhala", "english")],
+        ]:
+            response = client.post("/api/v1/actions", json={"command": command, "document_id": doc, "session_id": session,
+                                  "language": "english", "revision_mode": "sectioned" if target else "single"})
+            assert response.status_code == 202
+            ticket = store.get(response.json()["action_id"])
+            assert (ticket["language"], ticket["style"], ticket["revision_mode"], ticket["target_duration"]) == (language, style, mode, target)
+
+
+def test_section_only_uses_verified_original_span_and_owner(env, monkeypatch):
+    settings, doc, session, app = env
+    settings.actions_sectioned_enabled = True
+    monkeypatch.setattr(service, "run_action", AsyncMock())
+    source = "Lecture about normalization."
+    parent = store.create("alice", session, doc, "audio_revision", revision_mode="sectioned")
+    store.update(parent, source_hash=service.revision_sections.source_hash(source), sections=[
+        {"id": 0, "source_start": 0, "source_end": len(source), "source_text": source}])
+    payload = {"command": "Create an audio revision of this section only and save it", "document_id": doc, "session_id": session}
+    with TestClient(app) as client:
+        assert client.post("/api/v1/actions", json=payload).status_code == 422
+        payload.update(source_action_id=parent, section_id=0)
+        response = client.post("/api/v1/actions", json=payload)
+        assert response.status_code == 202
+        ticket = store.get(response.json()["action_id"])
+        assert ticket["selected_source"]["text"] == source and ticket["revision_mode"] == "sectioned"
+        store.update(parent, source_hash="changed")
+        assert client.post("/api/v1/actions", json=payload).status_code == 409
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "bob"}
+        assert client.post("/api/v1/actions", json=payload).status_code == 404
+
+
+def test_flashcards_saved_downloaded_and_cannot_be_saved_as_summary(env, monkeypatch):
+    _, doc, session, app = env
+    cards = [{"question": "What does normalization reduce?", "answer": "Duplication.", "source_quote": "Lecture about normalization."}]
+    monkeypatch.setattr(service, "generate_flashcards", AsyncMock(return_value=cards))
+    with TestClient(app) as client:
+        ticket = start(client, doc, session, "Create flashcards from this document and save them")
+        value = client.get(f"/api/v1/actions/{ticket}").json()
+        assert value["status"] == "complete" and value["saved"]
+        assert value["trace"] == ["create_flashcards", "save_flashcards"]
+        assert value["filename"] == "lecture-flashcards.json" and "flashcards" in value["confirmation"]
+        downloaded = client.get(f"/api/v1/actions/{ticket}/download")
+        assert downloaded.status_code == 200 and downloaded.json()["cards"] == cards
+        assert client.post("/api/v1/actions", json={"command": "Save the summary", "document_id": doc, "session_id": session}).status_code == 409
+        assert len(client.get("/api/v1/actions/saved").json()) == 1
+        assert client.request("DELETE", f"/api/v1/actions/{ticket}", json={"confirmed": False}).status_code == 409
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "bob"}
+        assert client.get("/api/v1/actions/saved").json() == []
+        assert client.request("DELETE", f"/api/v1/actions/{ticket}", json={"confirmed": True}).status_code == 404
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "alice"}
+        artifact = store.artifact(store.get(ticket)["flashcards_id"], "json")
+        assert client.request("DELETE", f"/api/v1/actions/{ticket}", json={"confirmed": True}).status_code == 200
+        assert not artifact.exists()
+        assert client.get(f"/api/v1/actions/{ticket}").status_code == 404
+        assert local_document_store.get_document(doc, "alice")
+
+
+def test_delete_keeps_shared_summary_file(env):
+    _, doc, session, app = env
+    with TestClient(app) as client:
+        first = start(client, doc, session, "Summarize this document and save it")
+        second = start(client, doc, session, "Save the summary")
+        path = store.artifact(store.get(second)["summary_id"])
+        assert client.request("DELETE", f"/api/v1/actions/{first}", json={"confirmed": True}).status_code == 200
+        assert path.exists() and client.get(f"/api/v1/actions/{second}/download").status_code == 200
+
+
+def test_saved_library_accepts_legacy_records_without_language(env):
+    import json
+    _, doc, session, app = env
+    ticket = store.create("alice", session, doc, "summarize_and_save")
+    with store.connection() as db:
+        row = db.execute("SELECT data FROM actions WHERE id=?", (ticket,)).fetchone()
+        data = json.loads(row["data"])
+        data.pop("language")
+        data.update(saved=True, status="complete")
+        db.execute("UPDATE actions SET data=? WHERE id=?", (json.dumps(data), ticket))
+    with TestClient(app) as client:
+        response = client.get("/api/v1/actions/saved")
+        assert response.status_code == 200 and response.json()[0]["language"] == "english"
+
+
+def test_agent_wrong_tool_order_is_recoverable(env):
+    settings, doc, session, app = env
+    ticket = store.create("alice", session, doc, "audio_revision")
+    store.update(ticket, summary="Prepared transcript", summary_id=uuid4().hex, trace=["summarize_document"])
+    with TestClient(app) as client:
+        response = client.post("/api/v1/actions/tools/save_audio_revision", json={"action_id": ticket},
+                               headers={"X-Action-Bridge-Secret": settings.actions_bridge_secret})
+        assert response.status_code == 409 and response.json()["next_tool"] == "create_revision_audio"
+        assert store.get(ticket)["error"] is None
+
+
+def test_explicit_direct_mode_does_not_change_default_provider(env, monkeypatch):
+    settings, doc, session, app = env
+    settings.actions_provider = "openclaw_mcp"
+    gateway = AsyncMock(return_value=None)
+    monkeypatch.setattr(service, "run_openclaw", gateway)
+    with TestClient(app) as client:
+        response = client.post("/api/v1/actions", json={"command": "Summarize this document and save it",
+                              "document_id": doc, "session_id": session, "provider": "direct"})
+        ticket = response.json()["action_id"]
+        value = client.get(f"/api/v1/actions/{ticket}").json()
+        assert value["status"] == "complete" and value["provider"] == "direct"
+        gateway.assert_not_awaited()
+        default_ticket = start(client, doc, session, "Summarize this document and save it")
+        assert store.get(default_ticket)["provider"] == "openclaw_mcp"
+        assert store.get(default_ticket)["status"] == "failed"
+        assert settings.actions_provider == "openclaw_mcp"
+
+
+@pytest.mark.asyncio
+async def test_selected_section_generation_keeps_full_document_offsets(env, monkeypatch):
+    _, doc, session, _ = env
+    text = "Lecture about normalization."
+    selected = {"start": 8, "end": len(text), "text": text[8:], "source_hash": service.revision_sections.source_hash(text)}
+    ticket = store.create("alice", session, doc, "audio_revision", revision_mode="sectioned")
+    store.update(ticket, selected_source=selected)
+    generate = AsyncMock(return_value=[{"id": 0, "source_start": 0, "source_end": len(text[8:]),
+        "source_text": text[8:], "title": "Selected", "script": "About normalization.", "script_language": "english"}])
+    monkeypatch.setattr(service.revision_sections, "generate_sections", generate)
+    await service.prepare_sectioned_revision(ticket)
+    generate.assert_awaited_once_with(text[8:], target=1)
+    section = store.get(ticket)["sections"][0]
+    assert section["source_start"] == 8 and section["source_end"] == len(text)
+    assert store.get(ticket)["source_hash"] == selected["source_hash"]
+
+
+@pytest.mark.asyncio
+async def test_flashcard_quotes_are_checked_against_source(env, monkeypatch):
+    import json
+    from app.services import modal_client
+    content = "Normalization reduces duplication."
+    model = AsyncMock(return_value={"answer": json.dumps({"cards": [{"question": "What is reduced?", "answer": "Duplication", "source_id": 0}]})})
+    monkeypatch.setattr(modal_client, "call_answer_generator", model)
+    card = (await service.generate_flashcards(content, "english"))[0]
+    assert card["source_start"] == 0 and card["source_quote"] == content
+    model.return_value = {"answer": json.dumps({"cards": [{"question": "What is reduced?", "answer": "Cost", "source_id": 9}]})}
+    with pytest.raises(ValueError, match="unverifiable"):
+        await service.generate_flashcards(content, "english")
+
+
 def test_combined_action_actual_file_and_owner_isolation(env):
     _, doc, session, app = env
     with TestClient(app) as client:

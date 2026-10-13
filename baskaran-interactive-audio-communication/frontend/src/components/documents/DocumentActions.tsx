@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { RevisionNavigator } from './RevisionNavigator'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
+import { extraCommands, normalizeCommand, isPlaybackCommand, controlPlayback } from './audioCommands'
 import { synthesizeSpeech } from '@/lib/api'
 import { documentActionCapabilities, startDocumentAction, getDocumentAction,
-  downloadDocumentAction, downloadRevisionAudio, retryRevisionAudio, type ActionCapabilities, type RevisionMode, type RevisionSection, type ActionLanguage, type DocumentActionResult } from './actionsApi'
+  downloadDocumentAction, downloadRevisionAudio, retryRevisionAudio, listSavedActions, deleteSavedAction,
+  type SavedAction, type ActionCapabilities, type RevisionMode, type RevisionSection, type ActionLanguage, type DocumentActionResult } from './actionsApi'
 import type { DocumentItem } from '@/types'
 
 const labels: Record<string, string> = {
@@ -29,9 +31,15 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
   const [documentId, setDocumentId] = useState('')
   const [command, setCommand] = useState('')
   const [language, setLanguage] = useState<ActionLanguage>('english')
+  const [voiceLanguage, setVoiceLanguage] = useState<ActionLanguage>('english')
   const [revisionMode, setRevisionMode] = useState<RevisionMode>('sectioned')
+  const [executionProvider, setExecutionProvider] = useState<'direct' | 'openclaw_mcp'>('openclaw_mcp')
   const [currentTime, setCurrentTime] = useState(0)
   const [showSections, setShowSections] = useState(true)
+  const [selectedSection, setSelectedSection] = useState(0)
+  const [savedActions, setSavedActions] = useState<SavedAction[]>([])
+  const [deletePending, setDeletePending] = useState<string | null>(null)
+  const [flipped, setFlipped] = useState<number[]>([])
   const replayEnd = useRef<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
@@ -51,12 +59,66 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     mounted.current = true
     session.current = sessionStorage.getItem('voicelearn-action-session') || crypto.randomUUID()
     sessionStorage.setItem('voicelearn-action-session', session.current)
-    documentActionCapabilities().then(value => { if (mounted.current) setCapabilities(value) }).catch(() => undefined)
+    documentActionCapabilities().then(value => { if (mounted.current) { setCapabilities(value); setExecutionProvider(value.provider === 'direct' ? 'direct' : 'openclaw_mcp') } }).catch(() => undefined)
+    void refreshSaved()
     return () => { mounted.current = false; controller.current?.abort() }
   }, [])
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl) }, [audioUrl])
 
+  async function refreshSaved() {
+    try { const values = await listSavedActions(); if (mounted.current) setSavedActions(values) }
+    catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Saved revisions could not be loaded.') }
+  }
+
+  async function openSaved(item: SavedAction) {
+    if (active.current) return
+    active.current = true; setBusy(true); setError(null); setAudioError(null)
+    try {
+      const value = await getDocumentAction(item.action_id)
+      if (!mounted.current) return
+      setResult(value); setDocumentId(item.document_id); setLanguage(value.language)
+      setAudioUrl(null); setCurrentTime(0); setSelectedSection(0); setFlipped([]); replayEnd.current = null
+      setStatus('Saved result opened')
+      if (value.audio_ready) {
+        const blob = await downloadRevisionAudio(item.action_id)
+        if (mounted.current) setAudioUrl(URL.createObjectURL(blob))
+      }
+    } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Saved result could not be opened.') }
+    finally { active.current = false; if (mounted.current) setBusy(false) }
+  }
+
+  async function confirmDelete() {
+    if (!deletePending || active.current) return
+    active.current = true; setBusy(true); setError(null)
+    try {
+      await deleteSavedAction(deletePending)
+      if (result?.action_id === deletePending) { audioPlayer.current?.pause(); setResult(null); setAudioUrl(null); setCurrentTime(0) }
+      setDeletePending(null); setStatus('Saved result deleted'); await refreshSaved()
+    } catch (err) { setError(err instanceof Error ? err.message : 'Delete failed.') }
+    finally { active.current = false; setBusy(false) }
+  }
+
   async function execute(retryActionId?: string) {
+    if (!retryActionId && !active.current) {
+      const text = normalizeCommand(command)
+      if (text === 'delete this saved revision') {
+        if (!result?.saved) { setError('Open a saved revision from the library first.'); return }
+        setDeletePending(result.action_id); setError(null); return
+      }
+      if (isPlaybackCommand(command)) {
+        if (!audioPlayer.current || !audioUrl || result?.intent !== 'audio_revision') { setError('Generate or open a saved audio revision first.'); return }
+        try {
+          const controlled = await controlPlayback(command, audioPlayer.current, result.sections ?? [])
+          replayEnd.current = controlled.replayEnd ?? null
+          setCurrentTime(audioPlayer.current.currentTime); setPlaybackRate(String(audioPlayer.current.playbackRate))
+          setStatus(controlled.message); setError(null)
+        } catch (err) { setError(err instanceof Error ? err.message : 'Playback command failed.') }
+        return
+      }
+      if (text === 'create an audio revision of this section only and save it' && !result?.sections?.length) {
+        setError('Generate or open a sectioned revision and choose its source section first.'); return
+      }
+    }
     if (active.current || (!retryActionId && (!command.trim() || !documentId))) return
     const sectioned = retryActionId ? result?.revision_mode === 'sectioned' : capabilities?.sectioned_enabled && revisionMode === 'sectioned'
     active.current = true
@@ -66,14 +128,15 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     const abort = new AbortController()
     controller.current = abort
     try {
-      const id = retryActionId ? await retryRevisionAudio(retryActionId) : await startDocumentAction(command.trim(), documentId, session.current, language, capabilities?.sectioned_enabled ? revisionMode : 'single')
+      const id = retryActionId ? await retryRevisionAudio(retryActionId) : await startDocumentAction(command.trim(), documentId, session.current, language, capabilities?.sectioned_enabled ? revisionMode : 'single', result?.action_id, selectedSection, executionProvider)
       const deadline = Date.now() + (sectioned ? 1_920_000 : 720_000)
       while (!abort.signal.aborted && Date.now() < deadline) {
         const value = await getDocumentAction(id, abort.signal)
         if (!mounted.current) return
         setStatus(value.progress && !['complete', 'partial', 'failed'].includes(value.status) ? value.progress : labels[value.status] || value.status)
         if (['complete', 'partial', 'failed'].includes(value.status)) {
-          setResult(value); setError(value.error)
+          setResult(value); setError(value.error); setSelectedSection(0); setFlipped([])
+          setLanguage(value.language); void refreshSaved()
           if (value.audio_ready) {
             try {
               const blob = await downloadRevisionAudio(value.action_id, abort.signal)
@@ -81,7 +144,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
             } catch {
               if (mounted.current) setAudioError('Revision audio could not be loaded. Your transcript is still available; retry the audio download.')
             }
-          } else if (value.status === 'complete' && value.intent !== 'audio_revision') {
+          } else if (value.status === 'complete' && !['audio_revision', 'flashcards'].includes(value.intent)) {
             try {
               const blob = await synthesizeSpeech(value.confirmation, value.language)
               if (mounted.current && !abort.signal.aborted) setAudioUrl(URL.createObjectURL(blob))
@@ -110,7 +173,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
       const blob = await downloadDocumentAction(result.action_id)
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
-      anchor.href = url; anchor.download = `lecture-${result.intent === 'audio_revision' ? 'revision' : 'summary'}-${result.summary_language}.txt`; anchor.click()
+      anchor.href = url; anchor.download = result.intent === 'flashcards' ? `lecture-flashcards-${result.language}.json` : `lecture-${result.intent === 'audio_revision' ? 'revision' : 'summary'}-${result.summary_language}.txt`; anchor.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) { setError(err instanceof Error ? err.message : 'Download failed.') }
     finally { setDownloading(false) }
@@ -134,6 +197,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     if (!player || section.start_seconds === null) return
     replayEnd.current = replayOnly ? section.end_seconds : null
     player.currentTime = section.start_seconds
+    setSelectedSection(section.id)
     setCurrentTime(section.start_seconds)
     void player.play().catch(() => setAudioError('Press Play in the audio player to begin playback.'))
   }
@@ -143,12 +207,17 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     <section className="mt-6 rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
       <h2 className="text-lg font-semibold">Document actions and audio revision</h2>
       <p className="mt-2 text-sm">Summarize your document or create a short spoken revision with a transcript and audio download. Limit: {capabilities.max_document_chars.toLocaleString()} extracted characters.</p>
-      <label htmlFor="action-language" className="mt-4 block text-sm">Command and output language</label>
+      <label htmlFor="action-provider" className="mt-4 block text-sm">Execution mode</label>
+      <select id="action-provider" className="nb-input mt-2 w-full" disabled={busy} value={executionProvider} onChange={event => setExecutionProvider(event.target.value as 'direct' | 'openclaw_mcp')}>
+        <option value="openclaw_mcp">OpenClaw agent</option><option value="direct">Direct backend</option>
+      </select>
+      <p className="mt-2 text-sm">Direct backend runs the same generation and save workflow when OpenClaw is unavailable. Your chosen mode is used; it does not switch automatically.</p>
+      <label htmlFor="action-language" className="mt-4 block text-sm">Output language</label>
       <select id="action-language" className="nb-input mt-2 w-full" value={language} disabled={busy}
         onChange={event => {
           const selected = event.target.value as ActionLanguage
-          setLanguage(selected); setCommand(examples[selected].audio)
-          setResult(null); setAudioUrl(null); setError(null); setAudioError(null); setStatus('')
+          setLanguage(selected)
+          setError(null); setAudioError(null); setStatus('')
         }}>
         {(['english', 'tamil', 'sinhala'] as const).map(value => <option key={value} value={value}>{languageLabels[value]}</option>)}
       </select>
@@ -168,27 +237,52 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
           <option key={doc.document_id} value={doc.document_id}>{doc.filename}</option>
         ))}
       </select>
-      <div className="mt-4"><VoiceRecorder key={language} language={language} disabled={busy}
+      <label htmlFor="voice-command-language" className="mt-4 block text-sm">Voice command language</label>
+      <select id="voice-command-language" className="nb-input mt-2 w-full" value={voiceLanguage} disabled={busy} onChange={event => {
+        const selected = event.target.value as ActionLanguage
+        setVoiceLanguage(selected); setCommand(examples[selected].audio)
+      }}>{(['english', 'tamil', 'sinhala'] as const).map(value => <option key={value} value={value}>{languageLabels[value]}</option>)}</select>
+      <p className="mt-2 text-sm">The new listed commands use English. You can speak an English command and generate Tamil or Sinhala audio by selecting a different output language.</p>
+      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy}
         onTranscript={value => { setCommand(value.transcript); setError(null) }} onError={setError} /></div>
-      <label htmlFor="action-command" className="mt-4 block text-sm">{languageLabels[language]} command</label>
+      <label htmlFor="action-command" className="mt-4 block text-sm">{languageLabels[voiceLanguage]} command</label>
       <textarea id="action-command" className="nb-input mt-2 w-full" rows={2} value={command}
-        disabled={busy} onChange={event => setCommand(event.target.value)} placeholder={examples[language].audio} />
-      <p className="mt-2 text-sm">Supported commands: {examples[language].summary}; {examples[language].save}; {examples[language].combined}; {examples[language].audio}.</p>
+        disabled={busy} onChange={event => setCommand(event.target.value)} placeholder={examples[voiceLanguage].audio} />
+      <p className="mt-2 text-sm">Supported commands: {examples[voiceLanguage].summary}; {examples[voiceLanguage].save}; {examples[voiceLanguage].combined}; {examples[voiceLanguage].audio}.</p>
       <p className="mt-2 text-sm">Use the displayed phrases. After speaking, check or edit the recognized command before running it.</p>
+      <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">All supported commands</summary>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">{extraCommands.map(value => <button key={value} className="vl-btn-secondary text-left" disabled={busy} onClick={() => setCommand(value)}>{value}</button>)}</div>
+        <p className="mt-2">Playback commands control the loaded audio. Commands naming Tamil, Sinhala or English override the output language selection. Section-only generation uses the source section selected below.</p>
+      </details>
+      {!!result?.sections?.length && <label className="mt-3 block text-sm" htmlFor="source-section">Source section for section-only revision
+        <select id="source-section" className="nb-input mt-2 w-full" value={selectedSection} disabled={busy} onChange={event => setSelectedSection(Number(event.target.value))}>
+          {result.sections.map(section => <option key={section.id} value={section.id}>{section.id + 1}. {section.title}</option>)}
+        </select>
+      </label>}
       <button className="vl-btn-primary mt-4" disabled={busy || !documentId || !command.trim()} onClick={() => void execute()}>
         {busy ? status : 'Run action'}
       </button>
-      <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[language].audio)}>Use audio revision command</button>
+      <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[voiceLanguage].audio)}>Use audio revision command</button>
       <p className="mt-2 text-sm" role="status">{!busy && status} {result?.provider === 'openclaw_mcp' ? 'OpenClaw' : result?.provider === 'direct' ? 'Direct backend' : ''}</p>
       {error && <p role="alert" className="mt-3 text-sm" style={{ color: 'var(--warning)' }}>{error}</p>}
       {result?.status === 'partial' && result.revision_mode === 'sectioned' && result.summary_language === result.language
         && !!result.sections?.length && result.sections.every(section => section.script_language === result.language) &&
         <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>Retry audio using prepared transcript</button>}
-      {result?.summary && <div className="mt-5">
+      {result?.summary && result.intent !== 'flashcards' && <div className="mt-5">
         {result.intent === 'audio_revision' && <h3 className="mb-3 font-semibold">Audio revision transcript</h3>}
         <p className="mb-3 text-sm">Transcript language: {languageLabels[result.summary_language]}</p>
         {(!(result.sections?.length) || !showSections) && <MarkdownContent content={result.summary} />}
       </div>}
+      {!!result?.flashcards?.length && <div className="mt-5"><h3 className="font-semibold">{result.saved ? 'Saved revision flashcards' : 'Revision flashcards'}</h3>
+        <p className="mt-2 text-sm">Flip each card to reveal its answer. Source quotes are from the original document.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">{result.flashcards.map((card, index) => <article key={index} className="rounded-xl border p-4">
+          <p className="font-semibold">{index + 1}. {card.question}</p>
+          <button className="vl-btn-secondary mt-3" aria-expanded={flipped.includes(index)} onClick={() => setFlipped(values => values.includes(index) ? values.filter(i => i !== index) : [...values, index])}>{flipped.includes(index) ? 'Hide answer' : 'Reveal answer'}</button>
+          {flipped.includes(index) && <p className="mt-3 whitespace-pre-wrap">{card.answer}</p>}
+          <details className="mt-3 text-sm"><summary>Supporting source</summary><blockquote className="mt-2 whitespace-pre-wrap">{card.source_quote}</blockquote></details>
+        </article>)}</div>
+      </div>}
+      {result?.target_duration && <p className="mt-3 text-sm">Target: about {result.target_duration} seconds. Actual audio: {result.audio_duration ? `${Math.round(result.audio_duration)} seconds` : 'not ready'}. Speaking time varies by language and voice.</p>}
       {!!result?.sections?.length && <div className="mt-4">
         <label className="text-sm"><input type="checkbox" checked={showSections} onChange={event => {
           setShowSections(event.target.checked); replayEnd.current = null
@@ -197,7 +291,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
       </div>}
       {!!result?.sections?.length && showSections && <RevisionNavigator key={result.action_id} actionId={result.action_id} sections={result.sections}
         currentTime={currentTime} audioReady={!!audioUrl} onPlay={playSection} />}
-      {(result?.saved || (result?.intent === 'audio_revision' && result.summary)) && <button className="vl-btn-secondary mt-4" disabled={downloading} onClick={() => void download()}>{downloading ? 'Downloading…' : result?.intent === 'audio_revision' ? 'Download transcript (.txt)' : 'Download summary (.txt)'}</button>}
+      {(result?.saved || (result?.intent === 'audio_revision' && result.summary)) && <button className="vl-btn-secondary mt-4" disabled={downloading} onClick={() => void download()}>{downloading ? 'Downloading…' : result?.intent === 'flashcards' ? 'Download flashcards (.json)' : result?.intent === 'audio_revision' ? 'Download transcript (.txt)' : 'Download summary (.txt)'}</button>}
       {result?.audio_saved && <button className="vl-btn-secondary ml-3 mt-4" disabled={downloading} onClick={() => void downloadAudio()}>Download revision audio (.wav)</button>}
       {result?.intent === 'audio_revision' && result.trace.length > 0 && <p className="mt-3 text-sm">Completed: {Array.from(new Set(result.trace)).map(tool => toolLabels[tool] || tool).join(' → ')}</p>}
       {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
@@ -215,6 +309,24 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
         }}><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select>
       </label>}
       {audioError && <p className="mt-2 text-sm">{audioError}</p>}
+      <div className="mt-6 border-t pt-4"><h3 className="font-semibold">Saved revisions and flashcards</h3>
+        <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void refreshSaved()}>Refresh saved library</button>
+        {!savedActions.length && <p className="mt-2 text-sm">No saved results yet.</p>}
+        <ul className="mt-3 space-y-2">{savedActions.map(item => <li key={item.action_id} className="rounded-xl border p-3">
+          <p className="text-sm">{item.filename} · {item.language} · {item.intent === 'flashcards' ? 'Flashcards' : item.intent === 'audio_revision' ? `${item.revision_mode} audio revision` : 'Summary'}{item.audio_duration ? ` · ${Math.round(item.audio_duration)} seconds` : ''}</p>
+          <p className="mt-1 text-xs">{item.scope === 'section' ? 'Selected section only' : item.style === 'one_minute' ? 'One-minute target' : item.style === 'detailed' ? 'Detailed revision' : ''}{item.created_at ? ` · ${new Date(item.created_at).toLocaleString()}` : ''}</p>
+          <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void openSaved(item)}>Open</button>
+          <button className="vl-btn-secondary ml-2 mt-2" disabled={busy} onClick={() => setDeletePending(item.action_id)}>Delete</button>
+        </li>)}</ul>
+      </div>
+      {deletePending && <div role="dialog" aria-modal="true" aria-labelledby="delete-revision-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="w-full max-w-md rounded-xl p-6" style={{ background: 'var(--surface, #fff)' }}>
+          <h3 id="delete-revision-title" className="font-semibold">Delete this saved result?</h3>
+          <p className="mt-3 text-sm">{savedActions.find(item => item.action_id === deletePending)?.filename}. This removes this saved result and its unshared files. The original document stays available.</p>
+          <button autoFocus className="vl-btn-secondary mt-4" disabled={busy} onClick={() => setDeletePending(null)}>Cancel</button>
+          <button className="vl-btn-primary ml-3 mt-4" disabled={busy} onClick={() => void confirmDelete()}>{busy ? 'Deleting…' : 'Confirm delete'}</button>
+        </div>
+      </div>}
     </section>
   )
 }

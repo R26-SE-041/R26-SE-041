@@ -4,6 +4,7 @@ import json
 import secrets
 import sqlite3
 import time
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -38,6 +39,7 @@ def connection():
 def create(user_id, session_id, document_id, intent, previous=None, language="english", revision_mode="single"):
     ticket = secrets.token_urlsafe(32)
     data = {"status": "queued", "summary": None, "summary_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "filename": None, "saved": False, "error": None, "trace": [],
             "audio_id": None, "audio_saved": False, "audio_duration": None,
             "language": language, "summary_language": "english",
@@ -77,10 +79,47 @@ def latest(user_id, session_id, document_id, language="english"):
             AND document_id=? ORDER BY rowid DESC""", (user_id, session_id, document_id)).fetchall()
     for row in rows:
         action = get(row["id"], user_id)
-        if (action["summary"] and action.get("language", "english") == language
+        if (action["intent"] != "flashcards" and action["summary"] and action.get("language", "english") == language
                 and action.get("summary_language", "english") == language):
             return action
     return None
+
+
+def saved_actions(user_id):
+    with connection() as db:
+        rows = db.execute("SELECT * FROM actions WHERE user_id=? ORDER BY rowid DESC", (user_id,)).fetchall()
+    return [{**dict(row), **json.loads(row["data"])} for row in rows
+            if json.loads(row["data"]).get("saved")]
+
+
+def _artifacts(data):
+    refs = set()
+    for key, ext in (("summary_id", "txt"), ("audio_id", "wav"), ("manifest_id", "json"), ("flashcards_id", "json")):
+        if data.get(key):
+            refs.add((data[key], ext))
+    for section in data.get("sections", []):
+        if section.get("audio_id"):
+            refs.add((section["audio_id"], "wav"))
+    return refs
+
+
+def delete_saved(ticket, user_id):
+    """Delete only this owned, closed record and artifacts no other ticket references."""
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT * FROM actions WHERE id=? AND user_id=?", (ticket, user_id)).fetchone()
+        if row is None:
+            raise ValueError("Action not found.")
+        data = json.loads(row["data"])
+        if not data.get("saved") or data["status"] not in {"complete", "partial", "failed"}:
+            raise ValueError("Only a finished saved revision or deck can be deleted.")
+        db.execute("DELETE FROM actions WHERE id=? AND user_id=?", (ticket, user_id))
+        remaining = set()
+        for other in db.execute("SELECT data FROM actions"):
+            remaining.update(_artifacts(json.loads(other["data"])))
+        # Only validated server IDs under files/ can be removed; never recurse.
+        for identifier, ext in _artifacts(data) - remaining:
+            artifact(identifier, ext).unlink(missing_ok=True)
 
 
 def artifact(summary_id, extension="txt"):

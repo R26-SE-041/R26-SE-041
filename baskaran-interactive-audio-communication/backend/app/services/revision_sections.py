@@ -38,15 +38,15 @@ def split_source(text, target=3):
             for i, (a, b) in enumerate(zip(boundaries, boundaries[1:]))]
 
 
-async def generate_sections(text):
+async def generate_sections(text, target=3, words=80):
     from app.services.modal_client import call_answer_generator
     from app.services.summary_text import plain_summary, clean_summary
-    spans = split_source(text)
+    spans = split_source(text, target)
     supplied = "\n\n".join(f"SOURCE SECTION {s['id']}:\n{s['source_text']}" for s in spans)
     response = await call_answer_generator(
         'Return ONLY a JSON object with key "sections", a list of objects containing '
         '"id" (the supplied integer), "title" (short English title), and "script". '
-        f'Return exactly {len(spans)} sections in source order. Each script is at most 80 words of '
+        f'Return exactly {len(spans)} sections in source order. Each script is at most {words} words of '
         'natural spoken English, grounded ONLY in its corresponding SOURCE SECTION. '
         'Use shorter scripts for short passages; never pad with new facts to reach a word count. '
         'Preserve important facts and numbers. Do not borrow facts from other sections. '

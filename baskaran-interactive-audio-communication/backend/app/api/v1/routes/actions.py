@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
@@ -41,6 +41,13 @@ class ActionRequest(BaseModel):
     session_id: UUID
     language: Literal["english", "tamil", "sinhala"] = "english"
     revision_mode: Literal["single", "sectioned"] = "single"
+    source_action_id: str | None = Field(default=None, min_length=20, max_length=100)
+    section_id: int | None = Field(default=None, ge=0, le=2)
+    provider: Literal["direct", "openclaw_mcp"] | None = None
+
+
+class DeleteRequest(BaseModel):
+    confirmed: bool = False
 
 
 class ToolRequest(BaseModel):
@@ -58,20 +65,46 @@ def capabilities():
 
 @router.post("", status_code=202)
 async def start_action(body: ActionRequest, tasks: BackgroundTasks, user_id: Annotated[str, Depends(owner)]):
+    from app.services.action_commands import parse_generation
+    options = parse_generation(body.command) or {}
+    language = options.get("language", body.language)
     intent = service.classify(body.command)
     if not intent:
         raise HTTPException(422, "Command not recognized. Use one of the displayed command examples for your language.")
-    if body.revision_mode == "sectioned" and intent == "audio_revision" and not getattr(get_settings(), "actions_sectioned_enabled", False):
+    mode = "single" if options.get("style") == "one_minute" else body.revision_mode
+    if options.get("scope") == "section":
+        mode = "sectioned"
+    if mode == "sectioned" and intent == "audio_revision" and not getattr(get_settings(), "actions_sectioned_enabled", False):
         raise HTTPException(422, "Sectioned audio revision is disabled. Select Single audio.")
     document_id, session_id = str(body.document_id), str(body.session_id)
     try:
         await service.document_bytes(document_id, user_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    previous = store.latest(user_id, session_id, document_id, body.language) if intent == "save" else None
+    selected_source = None
+    if options.get("scope") == "section":
+        if body.source_action_id is None or body.section_id is None:
+            raise HTTPException(422, "Select a source section from an existing sectioned revision first.")
+        source_action = owned(body.source_action_id, user_id)
+        if source_action["document_id"] != document_id:
+            raise HTTPException(409, "Select a section belonging to this document.")
+        sections = source_action.get("sections", [])
+        if body.section_id >= len(sections):
+            raise HTTPException(422, "Selected source section does not exist.")
+        filename, content = await service.document_bytes(document_id, user_id)
+        text = service.extract(filename, content)
+        section = sections[body.section_id]
+        if (service.revision_sections.source_hash(text) != source_action.get("source_hash") or
+                text[section["source_start"]:section["source_end"]] != section["source_text"]):
+            raise HTTPException(409, "Source changed. Create a new sectioned revision first.")
+        selected_source = {"start": section["source_start"], "end": section["source_end"],
+                           "text": section["source_text"], "source_hash": source_action["source_hash"]}
+    previous = store.latest(user_id, session_id, document_id, language) if intent == "save" else None
     if intent == "save" and not previous:
         raise HTTPException(409, "Generate a summary for this document in the selected language first.")
-    ticket = store.create(user_id, session_id, document_id, intent, previous, body.language, body.revision_mode if intent == "audio_revision" else "single")
+    ticket = store.create(user_id, session_id, document_id, intent, previous, language, mode if intent == "audio_revision" else "single")
+    store.update(ticket, style=options.get("style", "short"), target_duration=options.get("target_duration"),
+                 selected_source=selected_source, requested_provider=body.provider)
     tasks.add_task(service.run_action, ticket)
     return {"action_id": ticket}
 
@@ -88,6 +121,28 @@ def owned(action_id, user_id):
     return action
 
 
+@router.get("/saved")
+def saved(user_id: Annotated[str, Depends(owner)]):
+    return [{"action_id": item["id"], "filename": item.get("filename") or "Saved document", "language": item.get("language", "english"),
+             "intent": item["intent"], "document_id": item["document_id"],
+             "style": item.get("style", "short"), "scope": "section" if item.get("selected_source") else "document",
+             "created_at": item.get("created_at"),
+             "revision_mode": item.get("revision_mode", "single"), "audio_duration": item.get("audio_duration")}
+            for item in store.saved_actions(user_id)]
+
+
+@router.delete("/{action_id}")
+def delete_action(action_id: str, body: DeleteRequest, user_id: Annotated[str, Depends(owner)]):
+    owned(action_id, user_id)
+    if not body.confirmed:
+        raise HTTPException(409, "Confirm deletion of this saved revision first.")
+    try:
+        store.delete_saved(action_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"deleted": True}
+
+
 @router.get("/{action_id}")
 def action_status(action_id: str, user_id: Annotated[str, Depends(owner)]):
     action = owned(action_id, user_id)
@@ -101,9 +156,11 @@ def action_status(action_id: str, user_id: Annotated[str, Depends(owner)]):
                         "sinhala": "ඔබගේ සාරාංශය සූදානම් කර සුරකින ලදී."}[language]
     return {"action_id": action_id, "status": action["status"], "summary": clean_summary(action["summary"]) if action["summary"] else None,
             "saved": saved, "error": action["error"], "provider": action.get("provider"),
-            "filename": ("lecture-revision.txt" if action["intent"] == "audio_revision" else "lecture-summary.txt") if saved else None,
+            "filename": ("lecture-flashcards.json" if action["intent"] == "flashcards" else "lecture-revision.txt" if action["intent"] == "audio_revision" else "lecture-summary.txt") if saved else None,
             "download_path": f"/api/v1/actions/{action_id}/download" if saved else None,
             "intent": action["intent"], "trace": action["trace"],
+            "flashcards": action.get("flashcards", []), "style": action.get("style", "short"),
+            "target_duration": action.get("target_duration"),
             "revision_mode": action.get("revision_mode", "single"), "progress": action.get("progress"),
             "sections": [{key: section.get(key) for key in
                          ("id", "title", "script", "script_language", "duration", "start_seconds", "end_seconds")}
@@ -111,7 +168,7 @@ def action_status(action_id: str, user_id: Annotated[str, Depends(owner)]):
             "audio_ready": audio_ready, "audio_saved": bool(action.get("audio_saved") and audio_ready),
             "audio_duration": action.get("audio_duration"),
             "language": language, "summary_language": action.get("summary_language", "english"),
-            "confirmation": ("Your audio revision is ready and saved." if action.get("audio_saved")
+            "confirmation": ("Your flashcards are ready and saved." if action["intent"] == "flashcards" and saved else "Your audio revision is ready and saved." if action.get("audio_saved")
                              else confirmation)}
 
 
@@ -151,6 +208,7 @@ async def retry_audio(action_id: str, tasks: BackgroundTasks, user_id: Annotated
     ticket = store.create(user_id, previous["session_id"], previous["document_id"], "audio_revision",
                           previous, previous["language"], "sectioned")
     store.update(ticket, sections=sections, source_hash=previous["source_hash"], retry_of=action_id)
+    store.update(ticket, requested_provider=previous.get("requested_provider"))
     tasks.add_task(service.run_action, ticket)
     return {"action_id": ticket}
 
@@ -167,6 +225,12 @@ async def download(action_id: str, user_id: Annotated[str, Depends(owner)]):
     if transcript_only:
         return Response(plain_summary(action["summary"]), media_type="text/plain", headers={
             "Content-Disposition": 'attachment; filename="lecture-revision.txt"'})
+    if action["intent"] == "flashcards":
+        path = store.artifact(action["flashcards_id"], "json")
+        if not path.is_file():
+            raise HTTPException(404, "Saved flashcards file is unavailable.")
+        return Response(path.read_text(encoding="utf-8"), media_type="application/json", headers={
+            "Content-Disposition": 'attachment; filename="lecture-flashcards.json"'})
     path = store.artifact(action["summary_id"])
     if not path.is_file():
         raise HTTPException(404, "Saved summary file is unavailable.")
@@ -223,6 +287,10 @@ async def bridge(tool_name: str, body: ToolRequest,
         raise HTTPException(401, "Invalid tool bridge credentials.")
     try:
         return await service.execute_tool(tool_name, body.action_id)
+    except service.ToolOrderError as exc:
+        action = store.get(body.action_id)
+        missing = [name for name in service.required_tools(action["intent"]) if name not in action["trace"]]
+        return JSONResponse(status_code=409, content={"detail": str(exc), "next_tool": missing[0] if missing else None})
     except ValueError as exc:
         try:
             action = store.get(body.action_id)
