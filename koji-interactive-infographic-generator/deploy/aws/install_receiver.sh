@@ -8,6 +8,7 @@ control="$root/deploy-control"
 test -d "$root/backend/studio"
 test -f "$root/backend/.env"
 IFS= read -r token
+token="${token%$'\r'}"
 [[ "$token" =~ ^[a-f0-9]{64}$ ]] || { echo 'Expected a 64-character random deployment token' >&2; exit 2; }
 umask 077
 mkdir -p "$control"
