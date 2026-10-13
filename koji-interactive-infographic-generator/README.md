@@ -119,8 +119,10 @@ The default local backend check skips database integration tests if no test data
 
 ## Optional PDFs for image questions
 
-In the interactive image view, **Study sources** accepts multiple PDFs attached to
-the current cloud conversation. Students can select any combination of ready files
+In the interactive image view, **Workspace PDF library** accepts multiple PDFs saved to
+the signed-in student's personal workspace. Upload once and reuse them with any
+image or conversation. Deleting a conversation keeps the library and its index.
+Students can select any combination of ready files
 for each question, select all, or clear selection for an image-based explanation.
 Newly processed uploads are selected automatically; deliberate deselections are
 retained while studying. Reopening a conversation restores its last question's
@@ -128,15 +130,15 @@ selection. Each question saves its own document IDs and retrieved evidence.
 
 PDF indexing runs as a durable CPU worker job. Closing the browser does not stop
 processing. The panel shows processing, ready, and actionable failure states, with
-retry and removal controls. Limits are 10 files per conversation, 15 MiB per file,
+retry and removal controls. Limits are 10 files per workspace, 15 MiB per file,
 300 pages, and 2,000 text chunks. Existing per-user active-job limits also apply;
 large batches may need to finish indexing before more files are added.
 Encrypted files must be unlocked first. Textless PDFs need OCR before upload;
 partially scanned files report how many pages were skipped.
 
 Retrieval combines the visually identified concept with the student's question.
-Both semantic and keyword searches are filtered by authenticated owner,
-conversation, and selected document IDs. Factual explanations use the selected
+Both semantic and keyword searches are filtered by authenticated workspace owner
+and selected document IDs. Factual explanations use the selected
 PDF evidence without web or shared knowledge fallback. Missing evidence produces
 an explicit no-match response. Missing or invented source numbers produce an
 explicit unsupported-answer response. Citation validation checks source IDs,
@@ -145,7 +147,7 @@ Each reference opens a freshly signed private PDF URL at the original PDF page
 and can expand its source passage. Evidence stays visible in conversation history
 after PDF removal; its original link then reports that the file was removed.
 
-Apply **003_pdf_sources.sql** with `python -m studio.migrate` before using this
+Apply **003_pdf_sources.sql** and **004_workspace_pdf_library.sql** with `python -m studio.migrate` before using this
 feature. It adds component-owned document/chunk tables, pgvector, owner RLS, and
 PDF support in the existing private bucket. A custom `STUDIO_STORAGE_BUCKET`
 must also allow `application/pdf`. Deploy the Studio API, worker, frontend, and

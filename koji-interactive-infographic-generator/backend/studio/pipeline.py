@@ -223,8 +223,7 @@ class Pipeline:
             payload = {"image_base64":image,"speed_mode":p["speed_mode"],"enable_rag":False,
                        **{key:value for key,value in a.items() if key not in {"id","document_ids"}}}
             if selected:
-                chat_id = source["metadata"].get("chatId") or str(source["id"])
-                Documents().selected(str(job["user_id"]),chat_id,selected)
+                Documents().selected(str(job["user_id"]),selected)
                 identification = self.invoke(job,"interactive","/analyze",
                     {**payload,"mode":"identify","question":None},"identify_for_pdf")
                 raw_concept = (identification.get("identified_concept") or identification.get("response_text") or "").strip()
@@ -232,7 +231,7 @@ class Pipeline:
                     raise RuntimeError("The selected part could not be identified. Select a clearer region and try again.")
                 concept = raw_concept.splitlines()[0][:160]
                 query = f"{concept}\n{a.get('question') or a['mode']}"
-                chunks = Documents().retrieve(str(job["user_id"]),chat_id,selected,query)
+                chunks = Documents().retrieve(str(job["user_id"]),selected,query)
                 context,sources = evidence_context(chunks)
                 if not chunks:
                     data = {"response_text":"I could not find relevant information in the selected PDFs for this image question. Try another source or rephrase your question. Deselect all PDFs to ask for an image-based explanation."}

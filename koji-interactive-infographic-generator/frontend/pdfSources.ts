@@ -22,10 +22,10 @@ export interface PdfSource {
 
 export const MAX_PDF_BYTES = 15 * 1024 * 1024;
 export const MAX_PDF_FILES = 10;
-export const listPdfDocuments = (chatId: string) => studioRequest<PdfDocument[]>(
-  `/studio/chats/${encodeURIComponent(chatId)}/documents`);
-export const uploadPdfDocument = (chatId: string, filename: string, body: BodyInit) => studioRequest<PdfDocument>(
-  `/studio/chats/${encodeURIComponent(chatId)}/documents?filename=${encodeURIComponent(filename)}`,
+export const listPdfDocuments = () => studioRequest<PdfDocument[]>(
+  `/studio/documents`);
+export const uploadPdfDocument = (filename: string, body: BodyInit) => studioRequest<PdfDocument>(
+  `/studio/documents?filename=${encodeURIComponent(filename)}`,
   { method: "POST", headers: { "Content-Type": "application/pdf" }, body }, STUDIO_API_ORIGIN);
 export const removePdfDocument = (id: string) => studioRequest(`/studio/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const retryPdfDocument = (id: string) => studioRequest<PdfDocument>(`/studio/documents/${encodeURIComponent(id)}/retry`, { method: "POST" });

@@ -37,7 +37,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
     setDocuments([]); setError(null); setLoading(enabled);
     const refresh = async () => {
       try {
-        const rows = await listPdfDocuments(chatId!);
+        const rows = await listPdfDocuments();
         if (!active) return;
         setDocuments(rows); setLoading(false); setError(null);
         if (firstLoad && restoreSelection) rows.forEach(row => known.current.add(row.id));
@@ -68,7 +68,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
     if (result.canceled) return;
     try {
       if (!mounted.current || scope.current !== current) return;
-      if (documents.length + result.assets.length > MAX_PDF_FILES) throw new Error(`Attach up to ${MAX_PDF_FILES} PDFs per conversation.`);
+      if (documents.length + result.assets.length > MAX_PDF_FILES) throw new Error(`Store up to ${MAX_PDF_FILES} PDFs in your workspace.`);
       for (const asset of result.assets) {
         if (!mounted.current || scope.current !== current) return;
         if (!asset.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose PDF files only.");
@@ -81,7 +81,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
           const encoded = await filesystem.readAsStringAsync(asset.uri, { encoding: filesystem.EncodingType.Base64 });
           body = decode(encoded);
         }
-        const row = await uploadPdfDocument(current, asset.name, body);
+        const row = await uploadPdfDocument(asset.name, body);
         if (mounted.current && scope.current === current) setDocuments(previous => [...previous.filter(item => item.id !== row.id), row]);
       }
     } finally {
@@ -92,9 +92,9 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
   const button = { minHeight: 44, justifyContent: "center" as const, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border };
   const locked = disabled || busy || loading;
   return <View style={{ gap: 12, padding: 16, borderRadius: 12, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-    <Text style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>Study sources · optional PDFs</Text>
-    <Text style={{ color: colors.textMuted }}>Choose the files to use for your next image question. Answers include PDF page references.</Text>
-    {!enabled ? <Text style={{ color: colors.textDim }}>Sign in to a cloud workspace and save this image to attach PDFs.</Text> : <>
+    <Text style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>Workspace PDF library · optional PDFs</Text>
+    <Text style={{ color: colors.textMuted }}>Upload once and use these PDFs with any image in your workspace. Select the files for each question; answers include PDF page references.</Text>
+    {!enabled ? <Text style={{ color: colors.textDim }}>Sign in to a cloud workspace and save this image to use your PDF library.</Text> : <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <Pressable accessibilityRole="button" disabled={locked || documents.length >= MAX_PDF_FILES} onPress={() => void upload()} style={[button, locked && { opacity: .5 }]}><Text style={{ color: colors.primaryBright }}>Upload PDFs</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={locked} onPress={() => onSelectionChange(documents.filter(item => item.status === "ready").map(item => item.id))} style={button}><Text style={{ color: colors.text }}>Select all ready</Text></Pressable>

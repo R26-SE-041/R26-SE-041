@@ -129,11 +129,11 @@ test('PDF uploads send raw bytes with authentication and encoded filenames', asy
     client.configureStudio('session-token');
     const sources = loadModule('pdfSources.ts', globals, cache);
     const body = new Uint8Array([37, 80, 68, 70]);
-    await sources.uploadPdfDocument('chat/one', 'My notes & diagrams.pdf', body);
+    await sources.uploadPdfDocument('My notes & diagrams.pdf', body);
     assert.equal(calls[0].init.body, body);
     assert.equal(calls[0].init.headers['Content-Type'], 'application/pdf');
     assert.equal(calls[0].init.headers.Authorization, 'Bearer session-token');
-    assert.match(calls[0].url, /chat%2Fone\/documents\?filename=My%20notes%20%26%20diagrams.pdf/);
+    assert.match(calls[0].url, /studio\/documents\?filename=My%20notes%20%26%20diagrams.pdf/);
   } finally {
     if (previous === undefined) delete process.env.EXPO_PUBLIC_STUDIO_API_URL;
     else process.env.EXPO_PUBLIC_STUDIO_API_URL = previous;
@@ -147,10 +147,10 @@ test('hosted PDF uploads use the backend origin while metadata keeps the proxy',
     const globals = { window: {}, fetch: async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => [] }; } };
     const client = loadModule('studioClient.ts', globals, cache); client.configureStudio('session-token');
     const sources = loadModule('pdfSources.ts', globals, cache);
-    await sources.uploadPdfDocument('chat', 'notes.pdf', new Uint8Array([37, 80, 68, 70]));
-    await sources.listPdfDocuments('chat');
-    assert.match(calls[0].url, /^https:\/\/api.example\/studio\/chats\/chat\/documents/);
-    assert.equal(calls[1].url, '/studio-api/studio/chats/chat/documents');
+    await sources.uploadPdfDocument('notes.pdf', new Uint8Array([37, 80, 68, 70]));
+    await sources.listPdfDocuments();
+    assert.match(calls[0].url, /^https:\/\/api.example\/studio\/documents/);
+    assert.equal(calls[1].url, '/studio-api/studio/documents');
     assert.equal(calls[0].init.headers.Authorization, 'Bearer session-token');
   } finally {
     for (const key of ['NODE_ENV', 'EXPO_PUBLIC_STUDIO_API_URL', 'EXPO_PUBLIC_STUDIO_PROXY_PATH']) {

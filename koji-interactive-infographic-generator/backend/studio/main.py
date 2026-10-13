@@ -89,6 +89,10 @@ def ready():
     with connection() as conn,conn.cursor() as cur:
         cur.execute("select 1 from koji_chats limit 1")
         cur.execute("select 1 from koji_documents limit 1")
+        cur.execute("""select attnotnull from pg_attribute
+            where attrelid='public.koji_documents'::regclass and attname='chat_id'""")
+        if cur.fetchone()[0]:
+            raise HTTPException(503,"Apply the workspace PDF library migration before deploying")
     return {"status":"ok"}
 
 @app.post("/studio/jobs",status_code=202)
@@ -103,7 +107,7 @@ def start_job(body: JobRequest,user_id: str=Depends(require_user)):
             source = repo.get_history(user_id,str(body.generation_id))
             if not source:
                 raise LookupError("Source generation not found")
-            documents.selected(user_id,source["metadata"].get("chatId") or str(source["id"]),
+            documents.selected(user_id,
                                [str(value) for value in body.analysis.document_ids])
         job = repo.create_job(user_id,payload,endpoints)
     except LookupError:
@@ -119,17 +123,19 @@ def start_job(body: JobRequest,user_id: str=Depends(require_user)):
     return public_job(job)
 
 
-@app.get("/studio/chats/{chat_id}/documents")
-def list_documents(chat_id: str,user_id: str=Depends(require_user)):
-    if not repo.get_chat(user_id,chat_id):
+@app.get("/studio/documents")
+@app.get("/studio/chats/{chat_id}/documents",include_in_schema=False)
+def list_documents(user_id: str=Depends(require_user),chat_id: str | None=None):
+    if chat_id is not None and not repo.get_chat(user_id,chat_id):
         raise HTTPException(404,"Conversation not found")
-    return [public_document(row) for row in documents.list(user_id,chat_id)]
+    return [public_document(row) for row in documents.list(user_id)]
 
 
-@app.post("/studio/chats/{chat_id}/documents",status_code=202)
-async def upload_document(chat_id: str,request: Request,filename: str=Query(max_length=180),user_id: str=Depends(require_user)):
+@app.post("/studio/documents",status_code=202)
+@app.post("/studio/chats/{chat_id}/documents",status_code=202,include_in_schema=False)
+async def upload_document(request: Request,filename: str=Query(max_length=180),user_id: str=Depends(require_user),chat_id: str | None=None):
     from starlette.concurrency import run_in_threadpool
-    if not await run_in_threadpool(repo.get_chat,user_id,chat_id):
+    if chat_id is not None and not await run_in_threadpool(repo.get_chat,user_id,chat_id):
         raise HTTPException(404,"Conversation not found")
     if request.headers.get("content-type","").split(";")[0].lower() != "application/pdf":
         raise HTTPException(415,"Upload a PDF file")
@@ -145,15 +151,15 @@ async def upload_document(chat_id: str,request: Request,filename: str=Query(max_
     if not content.startswith(b"%PDF-"):
         raise HTTPException(422,"This file is not a valid PDF")
     # Run network/database work in a thread, keeping the async request loop free.
-    return await run_in_threadpool(store_document,user_id,chat_id,name,bytes(content))
+    return await run_in_threadpool(store_document,user_id,name,bytes(content))
 
 
-def store_document(user_id,chat_id,filename,content):
+def store_document(user_id,filename,content):
     document_id = str(uuid4())
     storage = Storage()
     path = storage.upload(f"{user_id}/documents/{document_id}.pdf",base64.b64encode(content).decode("ascii"),"application/pdf")
     try:
-        row = documents.register(user_id,chat_id,document_id,filename,path,len(content))
+        row = documents.register(user_id,document_id,filename,path,len(content))
         return public_document(row)
     except Exception as exc:
         storage.remove([path])
@@ -168,7 +174,7 @@ def store_document(user_id,chat_id,filename,content):
 def document_url(document_id: UUID,user_id: str=Depends(require_user)):
     row = documents.get(user_id,str(document_id))
     if not row:
-        raise HTTPException(404,"PDF was removed from this conversation")
+        raise HTTPException(404,"PDF was removed from your workspace")
     return {"url":Storage().signed_url(row["storage_path"])}
 
 
