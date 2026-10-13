@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && python3 -m venv /opt/mcp \
     && /opt/mcp/bin/pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1
 WORKDIR /opt/voicelearn
-COPY backend/openclaw_mcp.py ./openclaw_mcp.py
-COPY deploy/ec2/openclaw.json ./openclaw.json
+COPY --chmod=644 backend/openclaw_mcp.py ./openclaw_mcp.py
+COPY --chmod=644 deploy/ec2/openclaw.json ./openclaw.json
 USER node
 CMD ["openclaw", "gateway", "run", "--port", "18789"]
