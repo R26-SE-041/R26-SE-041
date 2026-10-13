@@ -7,6 +7,16 @@ Production website: https://voicelearn-audio.vercel.app/study-assistant
 The backend-pending notice is visible until a backend URL is configured. API
 calls are blocked while it is pending so SPA HTML cannot crash document lists.
 
+Verified on 2026-10-13: production HTTPS page and `/study-assistant` return 200,
+`/test` redirects to `/study-assistant`, direct-route refresh works, desktop and
+390px mobile views have no page errors or horizontal overflow, and no backend
+requests are sent while connection is pending. A push to the configured branch
+triggered a successful production build. Local type-check/export and seven unit
+tests passed. Browser regressions passed across all twenty scenarios; the long
+eleven-navigation test needed a 90-second total budget and the two affected
+scenarios passed when rerun sequentially. AI workflows in browser regressions
+use mocked endpoints, not a hosted EC2 backend.
+
 ## Git-connected project
 
 - Repository: `R26-SE-041/R26-SE-041`

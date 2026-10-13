@@ -20,6 +20,8 @@ async function openAudio(page: Page) {
 }
 
 test('Expo root, all original URLs, legacy redirect and browser navigation', async ({page}) => {
+  // This test performs eleven full navigations against the Expo dev server.
+  test.setTimeout(90_000)
   await mockBackend(page)
   const errors: string[]=[];page.on('pageerror', e=>errors.push(e.message))
   for (const route of ['/', '/documents', '/login', '/register', '/study-assistant', '/dashboard/documents', '/dashboard/history', '/dashboard']) {
