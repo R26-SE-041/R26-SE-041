@@ -10,6 +10,7 @@ Sign-in and signup have separate pages at `/signin` and `/signup`. Password assi
 - Signup stores the display name in user metadata. Confirmation-enabled signup shows the verification screen; it does not create a signed-in session prematurely.
 - Email links return to `/auth/callback`. Recovery links show a new-password form. Successful password updates sign this device out and request sign-in with the new password.
 - Logout is scoped to this device. Other components using the same Supabase project are unaffected.
+- Signed-in users can open the account menu and choose **Change password**. The app verifies their current password against the authenticated account before saving the new password. This flow keeps the user signed in and does not request a recovery email. Forgotten-password recovery from the sign-in screen still requires working email delivery.
 - The EC2 API verifies bearer tokens with the same project's Auth user endpoint. Owner IDs come from verified identity, never from client fields. Jobs, conversations and private assets keep their existing owner checks.
 - `GET /studio/account` returns only ID, email, display name and email-confirmed status after token verification. The backend never receives signup/sign-in passwords.
 

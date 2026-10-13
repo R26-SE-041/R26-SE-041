@@ -1276,7 +1276,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={20} />
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Studio settings" onPress={() => setSettingsOpen(true)} style={styles.themeToggle}><Icon name="help" color={colors.text} size={20} /></Pressable>
-                {STUDIO_API_URL && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} />}
+                {STUDIO_API_URL && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} changePassword={studioSession.changePassword} />}
                 </View>
               </View>
               <View nativeID="studio-hero" style={[styles.heroGrid, screenWidth < 600 && { gap: 16, paddingBottom: 8 }]}>

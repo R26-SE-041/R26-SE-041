@@ -15,6 +15,9 @@ export function validateNewPassword(password: string, confirmation: string) {
 }
 export function authMessage(error: unknown): string {
   const value = error as { code?: string; status?: number; message?: string };
+  if (value?.code === "email_address_not_authorized") return "Email delivery is unavailable for this address. Contact the project administrator to restore email delivery.";
+  if (value?.code === "over_email_send_rate_limit") return "The email sending limit has been reached. Please wait and try again later. Contact the project administrator if this continues.";
+  if (value?.message && /error sending (?:recovery|confirmation) email/i.test(value.message)) return "We couldn't send the email. Please try again later or contact the project administrator.";
   if (value?.status === 429 || value?.code?.includes("rate_limit")) return "Too many attempts. Please wait a few minutes and try again.";
   if (value?.code === "invalid_credentials") return "Email or password is incorrect.";
   if (value?.code === "email_not_confirmed") return "Confirm your email before signing in. You can resend the verification email below.";
@@ -60,6 +63,20 @@ export function createAuthActions(auth: Auth, redirectTo: string) {
     async updatePassword(password: string, confirmation: string) {
       validateNewPassword(password, confirmation);
       const { error } = await auth.updateUser({ password });
+      check(error);
+    },
+    async changePassword(currentPassword: string, password: string, confirmation: string) {
+      validateNewPassword(password, confirmation);
+      if (!currentPassword) throw new Error("Enter your current password.");
+      if (currentPassword === password) throw new Error("Choose a different password from your current password.");
+      const { data: { user }, error: userError } = await auth.getUser();
+      check(userError);
+      if (!user?.email) throw new Error("Sign in again before changing your password.");
+      const { data, error: signInError } = await auth.signInWithPassword({ email: user.email, password: currentPassword });
+      if (authErrorCode(signInError) === "invalid_credentials") throw new Error("Your current password is incorrect.");
+      check(signInError);
+      if (!data.session) throw new Error("Sign in again before changing your password.");
+      const { error } = await auth.updateUser({ password, current_password: currentPassword });
       check(error);
     },
     async signOut() {

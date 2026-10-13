@@ -77,3 +77,55 @@ test('unconfirmed login preserves its code for conditional verification controls
  catch(error){ assert.equal(authErrorCode(error),'email_not_confirmed'); assert.match(error.message,/Confirm your email/); }
  assert.equal(authErrorCode(new Error('network failure')),null);
 });
+
+test('reset email delivery failures reject with actionable errors and preserve provider codes',async()=>{
+ for (const [error,message] of [
+  [{code:'email_address_not_authorized',status:400},/Email delivery is unavailable/],
+  [{code:'over_email_send_rate_limit',status:429},/email sending limit/],
+  [{code:'unexpected_failure',status:500,message:'Error sending recovery email'},/couldn't send the email/],
+ ]) {
+  const {auth,actions}=fixture();
+  auth.resetPasswordForEmail=async()=>({data:null,error});
+  await assert.rejects(actions.resetPassword('a@example.com'),failure=>message.test(failure.message)&&authErrorCode(failure)===error.code);
+ }
+});
+
+test('signed-in password changes verify the authenticated account before updating without email or signout',async()=>{
+ const {auth,actions,calls}=fixture({access_token:'session'});
+ auth.getUser=async()=>({data:{user:{email:'signed-in@example.com'}},error:null});
+ await actions.changePassword('old-password','new-password','new-password');
+ assert.deepEqual(JSON.parse(JSON.stringify(calls)),[
+  {method:'signInWithPassword',args:[{email:'signed-in@example.com',password:'old-password'}]},
+  {method:'updateUser',args:[{password:'new-password',current_password:'old-password'}]},
+ ]);
+});
+
+test('invalid password-change inputs never reach Auth',async()=>{
+ const {actions,calls}=fixture();
+ await assert.rejects(actions.changePassword('','new-password','new-password'),/current password/);
+ await assert.rejects(actions.changePassword('old-password','new-password','different'),/match/);
+ await assert.rejects(actions.changePassword('old-password','short','short'),/8 characters/);
+ await assert.rejects(actions.changePassword('old-password','old-password','old-password'),/different password/);
+ assert.equal(calls.length,0);
+});
+
+test('missing sessions and incorrect current passwords never update a password',async()=>{
+ const {auth,actions,calls}=fixture();
+ auth.getUser=async()=>({data:{user:null},error:null});
+ await assert.rejects(actions.changePassword('old-password','new-password','new-password'),/Sign in again/);
+ assert.equal(calls.length,0);
+ auth.getUser=async()=>({data:{user:{email:'signed-in@example.com'}},error:null});
+ auth.signInWithPassword=async()=>({data:{session:null},error:{code:'invalid_credentials'}});
+ await assert.rejects(actions.changePassword('wrong-password','new-password','new-password'),/current password is incorrect/);
+ assert.equal(calls.length,0);
+ auth.signInWithPassword=async()=>({data:{session:null},error:null});
+ await assert.rejects(actions.changePassword('old-password','new-password','new-password'),/Sign in again/);
+ assert.equal(calls.length,0);
+});
+
+test('password update failures are surfaced after successful current-password verification',async()=>{
+ const {auth,actions}=fixture({access_token:'session'});
+ auth.getUser=async()=>({data:{user:{email:'signed-in@example.com'}},error:null});
+ auth.updateUser=async()=>({data:null,error:{code:'weak_password',message:'Password is too weak'}});
+ await assert.rejects(actions.changePassword('old-password','new-password','new-password'),failure=>authErrorCode(failure)==='weak_password');
+});
