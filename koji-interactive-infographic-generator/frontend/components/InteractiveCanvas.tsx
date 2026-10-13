@@ -192,7 +192,7 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
     const turnId = createOutputId("question");
     const turnQuestion = analysisMode === "ask" ? customQuestion.trim() : analysisMode === "identify" ? "Identify selected object" : "Explain selected region";
     const selection = { ...currentSelection, coords: [...currentSelection.coords] };
-    const documentIds = [...selectedDocuments];
+    const documentIds = analysisMode === "ask" ? [...selectedDocuments] : [];
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
@@ -307,7 +307,6 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
       {editingLabels && onAnnotationsChange && <AnnotationEditor aspectRatio={aspectRatio} imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
 
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
-      <PdfSourcesPanel key={conversation} chatId={conversation} selected={selectedDocuments} onSelectionChange={setSelectedDocuments} disabled={isLoading} restoreSelection={lastSelection.current !== undefined} />
 
       {!editingLabels && <View
         {...panResponder.panHandlers}
@@ -346,15 +345,18 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
             <ModeButton active={analysisMode === "ask"} icon="help" label="Ask Question" onPress={() => setAnalysisMode("ask")} />
           </View>
           {analysisMode === "ask" && (
-            <TextInput
-              onChangeText={setCustomQuestion}
-              onSubmitEditing={() => void runAnalysis()}
-              placeholder="e.g. What is the role of this organelle?"
-              placeholderTextColor={colors.textDim}
-              returnKeyType="send"
-              style={styles.questionInput}
-              value={customQuestion}
-            />
+            <View style={{ gap: 12 }}>
+              <TextInput
+                onChangeText={setCustomQuestion}
+                onSubmitEditing={() => void runAnalysis()}
+                placeholder="e.g. What is the role of this organelle?"
+                placeholderTextColor={colors.textDim}
+                returnKeyType="send"
+                style={styles.questionInput}
+                value={customQuestion}
+              />
+              <PdfSourcesPanel key={conversation} chatId={conversation} selected={selectedDocuments} onSelectionChange={setSelectedDocuments} disabled={isLoading} restoreSelection />
+            </View>
           )}
           <Pressable
             disabled={isLoading || (analysisMode === "ask" && !customQuestion.trim())}
@@ -366,7 +368,7 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
             <Text style={shared.buttonText}>
               {isLoading
                 ? selectionType === "point" ? "SAM 2 and Qwen2.5-VL analyzing..." : "Qwen2.5-VL analyzing selected region..."
-                : "Analyze Selected Region"}
+                : analysisMode === "ask" ? "Ask Question" : "Analyze Selected Region"}
             </Text>
           </Pressable>
         </View>
