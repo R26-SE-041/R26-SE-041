@@ -1,18 +1,12 @@
 'use client'
 
-/**
- * /dashboard/documents — Document Library
- * Full light-mode redesign — NotebookLM style
- */
-
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { listDocuments, askDocument } from '@/lib/api'
 import { UploadZone } from '@/components/documents/UploadZone'
 import { DocumentList } from '@/components/documents/DocumentList'
-import { listDocuments, askDocument } from '@/lib/api'
 import type { DocumentItem, Language, AskResponse, ChunkReference } from '@/types'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import Link from 'next/link'
+import { MarkdownContent } from '@/components/ui/MarkdownContent'
+import Link from '@/web/navigation'
 
 const LANG_OPTIONS: { value: Language; label: string; flag: string }[] = [
   { value: 'english', label: 'English', flag: '🇬🇧' },
@@ -20,7 +14,7 @@ const LANG_OPTIONS: { value: Language; label: string; flag: string }[] = [
   { value: 'sinhala', label: 'Sinhala', flag: '🇱🇰' },
 ]
 
-export default function DashboardDocumentsPage() {
+export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentItem[]>([])
   const [loading, setLoading]     = useState(true)
   const [question, setQuestion]   = useState('')
@@ -28,11 +22,12 @@ export default function DashboardDocumentsPage() {
   const [asking, setAsking]       = useState(false)
   const [response, setResponse]   = useState<AskResponse | null>(null)
   const [askError, setAskError]   = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listDocuments()
       .then(setDocuments)
-      .catch(() => {/* handled by api client */})
+      .catch((e) => console.error('Failed to load documents', e))
       .finally(() => setLoading(false))
   }, [])
 
@@ -62,89 +57,94 @@ export default function DashboardDocumentsPage() {
   const totalChunks = documents.reduce((s, d) => s + d.chunk_count, 0)
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--c-bg)', transition: 'background 0.25s' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: '#F5F4EF' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="nb-header sticky top-0 z-20">
+      <header className="nb-header sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--c-blue)' }}>
+              style={{ background: '#1A73E8' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}
                 strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Link href="/dashboard" className="font-medium transition-colors" style={{ color: 'var(--c-ink-faint)' }}>
-                Voice Q&amp;A
-              </Link>
-              <span style={{ color: 'var(--c-ink-ghost)' }}>/</span>
-              <span className="font-semibold" style={{ color: 'var(--c-ink)' }}>Documents</span>
-            </div>
+            <span className="font-semibold text-sm text-ink">VoiceLearn AI</span>
           </div>
-          <div className="flex items-center gap-2">
+          <nav className="flex items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="text-xs font-medium text-ink-faint hover:text-ink hover:bg-sand-200 px-3 py-2 rounded-lg transition-all inline-flex items-center gap-1.5"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              </svg>
+              Voice Q&amp;A
+            </Link>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-3 py-1"
-              style={{ background: 'var(--c-blue-soft)', border: '1px solid var(--c-blue-border)', color: 'var(--c-blue)' }}>
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse-slow" style={{ background: 'var(--c-blue)' }} />
-              RAG Active
+              style={{ background: '#EEF3FD', border: '1px solid rgba(26,115,232,0.2)', color: '#1A73E8' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse-slow" />
+              Document Library
             </span>
-            <ThemeToggle />
-          </div>
+          </nav>
         </div>
       </header>
 
-      {/* ── Body ────────────────────────────────────────────────────────── */}
+      {/* ── Main ────────────────────────────────────────────────────────── */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-5 py-8 flex flex-col gap-6">
 
         {/* Page title */}
         <div className="pt-2">
-          <h1 className="text-2xl font-semibold text-ink tracking-tight">Document Library</h1>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">Your Lecture Library</h1>
           <p className="text-sm text-ink-faint mt-1">Upload your slides, notes, and readings — then ask questions in any language.</p>
         </div>
 
-        {/* Stats bar */}
+        {/* ── Stats bar ── */}
         <div className="nb-card px-5 py-4 flex items-center gap-6">
-          <StatBadge label="Documents" value={documents.length} />
+          <Stat label="Documents" value={documents.length} />
           <div style={{ width: 1, height: 32, background: 'rgba(0,0,0,0.07)' }} />
-          <StatBadge label="Indexed chunks" value={totalChunks} />
+          <Stat label="Indexed chunks" value={totalChunks} />
           <div style={{ width: 1, height: 32, background: 'rgba(0,0,0,0.07)' }} />
-          <StatBadge label="Formats" value="PDF · PPTX · DOCX · XLSX · TXT · MD" small />
+          <Stat label="Formats" value="6" suffix="types" />
         </div>
 
-        {/* Upload + List grid */}
+        {/* ── Two columns: upload + list ── */}
         <div className="grid sm:grid-cols-2 gap-4">
+          {/* Upload */}
           <div className="nb-card p-5 flex flex-col gap-4">
-            <p className="nb-label">Upload Lecture File</p>
+            <p className="nb-label">Upload Document</p>
             <UploadZone onUploaded={handleUploaded} />
           </div>
 
+          {/* Document list */}
           <div className="nb-card p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="nb-label">Your Library</p>
+              <p className="nb-label">Your Documents</p>
               {documents.length > 0 && (
                 <span className="text-xs text-ink-faint font-medium">
                   {documents.length} file{documents.length !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
+
             {loading ? (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner label="Loading documents…" />
-              </div>
+              <div className="text-center py-8 text-sm text-ink-faint">Loading…</div>
             ) : (
               <DocumentList documents={documents} onDeleted={handleDeleted} />
             )}
           </div>
         </div>
 
-        {/* Ask / RAG panel */}
+        {/* ── Ask panel ── */}
         <div className="nb-card p-6 sm:p-8 flex flex-col gap-5">
           <div>
             <p className="nb-label mb-1">Ask Your Documents</p>
             <p className="text-xs text-ink-faint">
-              Type your question — AI searches your library and generates a grounded answer.
+              Type or paste a question — the AI searches your uploaded files and answers with citations.
             </p>
           </div>
 
@@ -161,15 +161,16 @@ export default function DashboardDocumentsPage() {
             ))}
           </div>
 
-          {/* Input row */}
+          {/* Input */}
           <div className="flex gap-3">
             <input
               id="ask-input"
+              ref={inputRef}
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-              placeholder="e.g. Explain backpropagation, What is the law of supply and demand…"
+              placeholder="e.g. What is backpropagation? Explain the law of demand..."
               disabled={asking}
               className="nb-input flex-1"
             />
@@ -189,7 +190,9 @@ export default function DashboardDocumentsPage() {
           </div>
 
           {documents.length === 0 && !loading && (
-            <p className="text-xs text-ink-faint -mt-2">↑ Upload at least one document first.</p>
+            <p className="text-xs text-ink-faint -mt-2">
+              ↑ Upload at least one document before asking questions.
+            </p>
           )}
 
           {/* Error */}
@@ -212,11 +215,13 @@ export default function DashboardDocumentsPage() {
                 </p>
               )}
 
+              {/* Answer box */}
               <div className="rounded-xl p-5" style={{ background: '#EEF3FD', border: '1px solid rgba(26,115,232,0.15)' }}>
                 <p className="nb-label mb-2" style={{ color: '#1A73E8' }}>Answer</p>
-                <p className="text-sm text-ink leading-relaxed">{response.answer}</p>
+                <MarkdownContent content={response.answer} className="text-sm" />
               </div>
 
+              {/* References */}
               {response.references.length > 0 && (
                 <div>
                   <p className="nb-label mb-3">Sources ({response.references.length})</p>
@@ -256,7 +261,7 @@ export default function DashboardDocumentsPage() {
           <span>·</span>
           <span>Qwen2.5-3B Prompt Enhancer</span>
           <span>·</span>
-          <span>ChromaDB · MiniLM Embeddings</span>
+          <span>ChromaDB · MiniLM</span>
           <span>·</span>
           <span>Supabase Storage</span>
         </div>
@@ -265,10 +270,13 @@ export default function DashboardDocumentsPage() {
   )
 }
 
-function StatBadge({ label, value, small }: { label: string; value: number | string; small?: boolean }) {
+function Stat({ label, value, suffix }: { label: string; value: number | string; suffix?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className={`font-bold text-ink ${small ? 'text-sm' : 'text-xl'}`}>{value}</span>
+      <span className="text-xl font-bold text-ink">
+        {value}
+        {suffix && <span className="text-sm font-normal text-ink-faint ml-1.5">{suffix}</span>}
+      </span>
       <span className="text-xs text-ink-faint font-medium">{label}</span>
     </div>
   )

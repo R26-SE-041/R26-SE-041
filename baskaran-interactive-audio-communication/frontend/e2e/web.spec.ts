@@ -1,0 +1,204 @@
+import { expect, test, type Page } from '@playwright/test'
+import { mockBackend, silentWav } from './backendMock'
+
+async function start(page: Page) {
+  const state = await mockBackend(page)
+  await page.goto('/study-assistant')
+  await expect(page.getByRole('heading', {name:'Learn with your voice'})).toBeVisible()
+  await expect(page.locator('#action-document')).toBeVisible()
+  return state
+}
+async function run(page: Page, command: string) {
+  await page.locator('#action-command').fill(command)
+  await page.getByRole('button',{name:'Run action',exact:true}).click()
+}
+async function openAudio(page: Page) {
+  const row = page.locator('li').filter({hasText:'sectioned audio revision'}).first()
+  await row.getByRole('button',{name:'Open',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Audio revision transcript',exact:true})).toBeVisible()
+  await expect.poll(() => page.locator('audio').last().evaluate(el => Number.isFinite((el as HTMLAudioElement).duration))).toBe(true)
+}
+
+test('Expo root, all original URLs, legacy redirect and browser navigation', async ({page}) => {
+  await mockBackend(page)
+  const errors: string[]=[];page.on('pageerror', e=>errors.push(e.message))
+  for (const route of ['/', '/documents', '/login', '/register', '/study-assistant', '/dashboard/documents', '/dashboard/history', '/dashboard']) {
+    await page.goto(route)
+    await expect(page.getByTestId('expo-web-root')).toBeAttached()
+  }
+  await page.goto('/test');await expect(page).toHaveURL(/\/study-assistant$/)
+  await page.goto('/login');await page.getByRole('link',{name:'Register',exact:true}).click()
+  await expect(page).toHaveURL(/\/register$/);await page.goBack();await expect(page).toHaveURL(/\/login$/)
+  expect(errors).toEqual([])
+})
+
+test('theme survives refresh, response languages and study mode switching', async ({page}) => {
+  await start(page)
+  await page.getByRole('button',{name:/Switch to .* mode/}).click()
+  const theme = await page.locator('html').getAttribute('data-theme')
+  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme!)
+  await page.getByRole('button',{name:'Tamil',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Tamil',exact:true})).toHaveAttribute('aria-pressed','true')
+  await page.getByRole('button',{name:'Sinhala',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Sinhala',exact:true})).toHaveAttribute('aria-pressed','true')
+  await page.getByRole('button',{name:'English',exact:true}).click()
+  await page.getByRole('button',{name:'Muscle Tutor',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Document actions and audio revision'})).toHaveCount(0)
+  await page.getByRole('button',{name:'Document Study',exact:true}).click()
+  await expect(page.locator('#action-command')).toBeVisible()
+  await page.locator('#action-command').scrollIntoViewIfNeeded()
+  await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBeGreaterThan(0)
+})
+
+test('document upload and removal preserve indexed documents workflow', async ({page}) => {
+  const state = await start(page)
+  await page.locator('input[type=file][accept=".pdf,.pptx,.docx,.xlsx,.txt,.md"]').setInputFiles({name:'new-notes.txt',mimeType:'text/plain',buffer:Buffer.from('Study notes.')})
+  const row = page.locator('li').filter({hasText:'new-notes.txt'})
+  await expect(row).toBeVisible();expect(state.uploads).toBe(1)
+  await row.getByRole('button',{name:'Remove new-notes.txt',exact:true}).click()
+  await expect(row).toHaveCount(0)
+})
+
+test('audio upload, transcription, question correction, answer audio and IndexedDB history', async ({page}) => {
+  const state = await start(page)
+  await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'question.wav',mimeType:'audio/wav',buffer:silentWav(1)})
+  await page.locator('#voice-submit-btn').click()
+  await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toHaveValue('Explain dogs.')
+  await page.getByRole('button',{name:'Fix Transcript',exact:true}).click()
+  await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toHaveValue('Explain dogs clearly.')
+  await page.getByRole('button',{name:'Ask →',exact:true}).click()
+  await expect(page.getByText('Dogs are domesticated mammals.',{exact:true}).first()).toBeVisible()
+  expect(state.asks[0].document_grounded).toBe(true)
+  await expect.poll(()=>state.tts).toBe(1)
+  await page.reload()
+  const history = page.getByRole('button',{name:/Explain dogs clearly/})
+  await expect(history).toBeVisible()
+  await history.click()
+  await page.getByRole('button',{name:'Delete this entry',exact:true}).click()
+  await expect(history).toHaveCount(0)
+  expect(state.transcriptions).toBe(1)
+})
+
+test('Muscle Tutor quick prompts submit without document grounding', async ({page}) => {
+  const state = await start(page)
+  await page.getByRole('button',{name:'Muscle Tutor',exact:true}).click()
+  const tutor = page.locator('section').filter({has:page.getByRole('heading',{name:'Muscle Tutor',exact:true})})
+  await tutor.getByRole('button',{name:/Biceps/i}).first().click()
+  await tutor.getByRole('button').last().click()
+  await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Ask →',exact:true}).click()
+  await expect.poll(()=>state.asks.length).toBe(1)
+  expect(state.asks[0].document_grounded).toBe(false)
+})
+
+test('Sinhala answer editing and explicit speech approval are retained', async ({page}) => {
+  const state = await start(page)
+  await page.getByRole('button',{name:'Sinhala',exact:true}).click()
+  await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'question.wav',mimeType:'audio/wav',buffer:silentWav(1)})
+  await page.locator('#voice-submit-btn').click()
+  await expect(page.locator('textarea[aria-label]').first()).toHaveValue('Explain dogs.')
+  await page.getByRole('button',{name:'අසන්න →',exact:true}).click()
+  await page.getByRole('button',{name:'Edit Answer',exact:true}).click()
+  expect(state.tts).toBe(0)
+  await page.getByRole('textbox',{name:'Edit Sinhala answer',exact:true}).fill('බල්ලන් ගෘහස්ථ සතුන් වේ.')
+  await page.getByRole('button',{name:'Save Changes',exact:true}).click()
+  await page.getByRole('button',{name:'Accept & Generate Speech',exact:true}).click()
+  await expect.poll(()=>state.tts).toBe(1)
+  expect(state.asks[0].language).toBe('sinhala')
+})
+
+for (const command of ['Summarize this document','Save the summary','Summarize this document and save it']) {
+  test(`existing summary UI: ${command}`, async ({page}) => {
+    const state = await start(page)
+    await page.locator('#action-document').selectOption('doc-1')
+    await run(page,command)
+    await expect(page.getByText('A concise document summary.',{exact:true})).toBeVisible()
+    expect(state.actions[0].command).toBe(command)
+    const download = page.waitForEvent('download')
+    await page.getByRole('button',{name:'Download summary (.txt)',exact:true}).click()
+    expect((await download).suggestedFilename()).toBe('lecture-summary-english.txt')
+  })
+}
+
+test('microphone records a synthetic browser stream and submits its transcript', async ({page,context}) => {
+  await context.grantPermissions(['microphone'])
+  const state = await start(page)
+  await page.getByRole('button',{name:'Start recording',exact:true}).first().click()
+  await expect(page.getByRole('button',{name:'Stop recording',exact:true})).toBeVisible()
+  // Wait for the browser MediaRecorder to produce a nonempty audio chunk.
+  await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Stop recording',exact:true}).click()
+  await expect(page.locator('#voice-submit-btn')).toBeVisible()
+  await page.locator('#voice-submit-btn').click()
+  await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toHaveValue('Explain dogs.')
+  expect(state.transcriptions).toBe(1)
+})
+
+const generations = [
+  'Create a short audio revision of this document and save it',
+  'Create a one-minute audio revision and save it',
+  'Create a detailed audio revision and save it',
+  'Create an audio revision in Tamil and save it',
+  'Create an audio revision in Sinhala and save it',
+  'Create an audio revision in English and save it',
+  'Create flashcards from this document and save them',
+]
+for (const command of generations) test(`generation UI: ${command}`, async ({page}) => {
+  const state = await start(page)
+  await page.locator('#action-document').selectOption('doc-1')
+  await page.locator('#action-provider').selectOption('direct')
+  await run(page, command)
+  await expect(page.getByRole('heading',{name:command.includes('flashcards') ? 'Saved revision flashcards' : 'Audio revision transcript',exact:true})).toBeVisible()
+  expect(state.actions).toHaveLength(1)
+  expect(state.actions[0]).toMatchObject({command,document_id:'doc-1',provider:'direct'})
+  if (command.includes('flashcards')) {
+    await page.getByRole('button',{name:'Reveal answer',exact:true}).click()
+    await expect(page.getByText('A domesticated mammal.',{exact:true})).toBeVisible()
+    const download = page.waitForEvent('download')
+    await page.getByRole('button',{name:'Download flashcards (.json)',exact:true}).click()
+    expect((await download).suggestedFilename()).toBe('lecture-flashcards-english.json')
+  } else {
+    const download = page.waitForEvent('download')
+    await page.getByRole('button',{name:'Download revision audio (.wav)',exact:true}).click()
+    expect((await download).suggestedFilename()).toMatch(/^lecture-revision-(english|tamil|sinhala)\.wav$/)
+  }
+})
+
+test('source inspection, selected-section-only request and transcript download', async ({page}) => {
+  const state = await start(page);await openAudio(page)
+  await page.getByRole('button',{name:'View source',exact:true}).first().click()
+  await expect(page.getByText('Original source passage about dogs.',{exact:true})).toBeVisible()
+  await page.locator('#source-section').selectOption('1')
+  await run(page,'Create an audio revision of this section only and save it')
+  await expect.poll(()=>state.actions.length).toBe(1)
+  expect(state.actions[0]).toMatchObject({source_action_id:'audio-1',section_id:1})
+  const download = page.waitForEvent('download')
+  await page.getByRole('button',{name:'Download transcript (.txt)',exact:true}).click()
+  expect((await download).suggestedFilename()).toBe('lecture-revision-english.txt')
+})
+
+test('all twelve playback commands control existing audio without generation requests', async ({page}) => {
+  const state = await start(page);await openAudio(page)
+  const player = page.locator('audio').last()
+  for (const command of ['Play the audio','Pause the audio','Resume the audio','Stop the audio','Play the next section','Play the previous section','Replay this section','Play section two','Skip forward ten seconds','Go back ten seconds','Set playback speed to 0.75','Set playback speed to 1.25']) {
+    await run(page,command)
+    await expect(page.getByRole('button',{name:'Run action',exact:true})).toBeEnabled()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  }
+  await expect.poll(()=>player.evaluate(el=>(el as HTMLAudioElement).playbackRate)).toBe(1.25)
+  expect(state.actions).toHaveLength(0)
+})
+
+test('saved library refresh/reopen and confirmed deletion leave document available', async ({page}) => {
+  const state = await start(page);await openAudio(page)
+  await page.reload();await openAudio(page)
+  await run(page,'Delete this saved revision')
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();expect(state.deletions).toHaveLength(0)
+  await run(page,'Delete this saved revision')
+  await page.getByRole('button',{name:'Confirm delete',exact:true}).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(state.deletions).toEqual([{confirmed:true}])
+  await expect(page.locator('#action-document')).toContainText('Lecture.pdf')
+  expect(state.actions).toHaveLength(0)
+})

@@ -1,10 +1,5 @@
-import Link from 'next/link'
-import type { Metadata } from 'next'
+import Link from '@/web/navigation'
 
-export const metadata: Metadata = {
-  title: 'VoiceLearn AI — Voice-Powered Study Assistant',
-  description: 'Upload your lecture documents and ask questions using your voice. Get grounded answers in English, Tamil, or Sinhala.',
-}
 
 const features = [
   {

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useRouter } from '@/web/navigation'
+import Link from '@/web/navigation'
 import { createClient } from '@/lib/supabase'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 

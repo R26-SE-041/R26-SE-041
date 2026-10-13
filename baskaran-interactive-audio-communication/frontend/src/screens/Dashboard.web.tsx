@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSessionStore } from '@/store/sessionStore'
 import { useSession } from '@/hooks/useSession'
 import { LanguageSelector } from '@/components/voice/LanguageSelector'
@@ -10,8 +10,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import type { SessionMessage, TranscribeResponse } from '@/types'
 import { askDocument, saveHistory, saveHistoryAudio, synthesizeSpeech } from '@/lib/api'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import Link from '@/web/navigation'
+import { useRouter } from '@/web/navigation'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -120,10 +120,11 @@ export default function DashboardPage() {
 
   const handleError = useCallback((msg: string) => { setError(msg) }, [])
 
-  if (!authLoading && !user) {
-    router.replace('/login')
-    return null
-  }
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login')
+  }, [authLoading, user, router])
+
+  if (!authLoading && !user) return null
 
   if (authLoading) {
     return (

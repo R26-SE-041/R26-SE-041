@@ -5,6 +5,11 @@
 
 ## Architecture
 
+The browser frontend now runs on React Native + Expo + React Native Web.
+The existing UI and browser workflows are preserved; mobile builds are deferred.
+See [frontend/WEB_MIGRATION.md](frontend/WEB_MIGRATION.md) for run, export,
+hosting, verification and Next.js recovery instructions.
+
 English summary/save voice actions are documented in [backend/ACTIONS.md](backend/ACTIONS.md).
 The feature supports a direct backend fallback and an optional OpenClaw MCP path.
 English/Tamil/Sinhala document-to-audio revision reuses the existing language-specific TTS endpoints,
@@ -12,7 +17,7 @@ with a spoken transcript, WAV download and playback-speed controls.
 See ACTIONS.md for scope, live validation and remaining manual checks.
 
 ```
-Next.js Frontend  →  FastAPI Backend  →  LangGraph Agents  →  Modal.com AI Models
+Expo Web Frontend  →  FastAPI Backend  →  LangGraph Agents  →  Modal.com AI Models
                   ↕                  ↕
             Supabase Auth      ChromaDB Vectors
             Supabase Storage
@@ -42,7 +47,7 @@ cp backend/.env.example backend/.env
 
 # Frontend
 cp frontend/.env.example frontend/.env.local
-# → Fill in Supabase public keys
+# → Set EXPO_PUBLIC_API_URL to the backend's public address
 ```
 
 ### 2. Deploy Modal endpoints
@@ -94,7 +99,7 @@ voicelearn/
 │   └── tests/
 ├── frontend/
 │   └── src/
-│       ├── app/             # Next.js App Router pages
+│       ├── screens/         # Expo browser screens
 │       ├── components/      # voice/, chat/, documents/, ui/
 │       ├── hooks/           # useVoiceRecorder, useSession
 │       ├── lib/             # API client, Supabase client

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase'
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { API_URL as BASE_URL } from '@/lib/config'
 export type ActionLanguage = 'english' | 'tamil' | 'sinhala'
 export type RevisionMode = 'single' | 'sectioned'
 export interface RevisionSection {

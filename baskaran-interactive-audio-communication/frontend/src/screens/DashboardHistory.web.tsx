@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import Link from '@/web/navigation'
+import { useRouter } from '@/web/navigation'
 import { useEffect, useState } from 'react'
 import { getHistoryAudio, listHistory } from '@/lib/api'
 import { useSession } from '@/hooks/useSession'

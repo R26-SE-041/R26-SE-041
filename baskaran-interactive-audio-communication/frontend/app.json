@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "VoiceLearn AI",
+    "slug": "baskaran-voicelearn",
+    "version": "0.2.0",
+    "platforms": ["web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "VoiceLearn AI — Voice-Powered Study Assistant",
+      "description": "Ask questions about your study materials using your voice. Get answers in English, Tamil, or Sinhala."
+    }
+  }
+}

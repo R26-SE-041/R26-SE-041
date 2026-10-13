@@ -39,7 +39,7 @@ interface Result {
 }
 
 const ACCEPTED_DOCUMENTS = '.pdf,.pptx,.docx,.xlsx,.txt,.md'
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { API_URL } from '@/lib/config'
 
 async function correctTranscript(transcript: string, language: Language): Promise<string> {
   const response = await fetch(`${API_URL}/api/v1/documents/enhance`, {
@@ -274,7 +274,6 @@ export default function StudyAssistantPage() {
     }
 
     setPhase('transcript-ready')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language])
 
   /** Fill transcript from a quick-prompt chip click (Muscle Tutor mode). */

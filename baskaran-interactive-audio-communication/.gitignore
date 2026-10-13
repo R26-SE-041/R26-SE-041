@@ -43,3 +43,13 @@ local_documents/
 local_history/
 local_actions/
 .actions-runtime/
+.venv-official/
+.migration-backup/
+.expo/
+frontend/src/styles/generated.css
+frontend/test-results/
+frontend/playwright-report/
+# These are application sources, not Python's generated lib directory.
+!frontend/src/lib/
+!frontend/src/lib/**
+!frontend/.dockerignore
