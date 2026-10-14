@@ -80,6 +80,35 @@ For cloud Modal switching, use:
 It verifies the selected workspace before changing protected backend settings,
 retains the frontend URL and saved data, and restores settings if health fails.
 bootstrap.sh installs the isolated Python environment used by this helper.
+
+### Switch from your Windows laptop
+
+From the component folder, run PowerShell:
+
+```powershell
+.\switch-modal-cloud.ps1 krishnavaranan1
+.\switch-modal-cloud.ps1 -Status
+```
+
+The root-level helper uses your existing local OpenSSH key to run the verified
+EC2 switch script over SSH. It does not change the laptop backend configuration
+or upload credentials. Supported workspaces: visakanbaskaran, krishnavaranan1,
+krishnavaranan, varananrp. Use `-Preview` to inspect the target without connecting.
+The default EC2 address is 15.134.177.14 and the default key is
+`$env:USERPROFILE\.ssh\voicelearn-ec2-20261013`; override with `-HostName` and
+`-IdentityFile` on another laptop. OpenSSH, an authorized private key and a
+previously verified EC2 host key are required. Never bypass SSH host-key checks.
+If script execution is blocked, run the trusted checked-out script with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\switch-modal-cloud.ps1 krishnavaranan1
+```
+
+Git push is not required to select a workspace. Wait for the success message;
+switching restarts the backend, so finish active generation requests first. Live
+workspace verification runs model probes and may consume some Modal credits.
+Use `-Status` to check configuration without running inference. This helper does
+not select a workspace automatically when credits run out.
 Use configured names visakanbaskaran, krishnavaranan1, krishnavaranan, or varananrp.
 
 With CLOUD_USER_STORAGE=true, documents, Q&A history and revision/flashcard
