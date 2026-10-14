@@ -10,6 +10,7 @@ The Koji workflow is independent of the other research components. Only changes 
 - Pull requests and branch pushes run TypeScript, frontend unit tests, backend tests, and PostgreSQL integration checks on GitHub-hosted runners.
 - Production deployments run only from `main` or explicit `koji-release-*` tags, after both test jobs pass.
 - Frontend changes deploy the tested web artifact to the existing `koji-studio` Vercel project.
+- Koji frontend Git auto-deployments are disabled in its `vercel.json`; GitHub Actions is the release path. The research site (`learnx-research`) and audio frontend (`voicelearn-audio`) are separate Vercel projects outside this workflow. Their independent Git integration checks may appear on the same commit.
 - CPU backend changes deploy only `studio/` and `shared/` to EC2. Frontend-only changes do not restart the API or worker.
 - EC2 automatic deployment additionally requires `KOJI_EC2_DEPLOY_ENABLED=true`. Enable it after installing and verifying the authenticated HTTPS release receiver.
 - When a release changes both frontend and backend, the backend must succeed before the frontend is published.
