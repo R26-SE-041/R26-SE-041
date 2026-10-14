@@ -94,6 +94,8 @@ export default function StudyAssistantPage() {
   const [importingHistory, setImportingHistory] = useState(false)
   const lastQuestionAudioRef = useRef<Blob | null>(null)
   const currentHistoryEntryIdRef = useRef<string | null>(null)
+  const historySaveRef = useRef<Promise<string | null> | null>(null)
+  const historyAudioSaveRef = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     let active = true
@@ -187,6 +189,7 @@ export default function StudyAssistantPage() {
   const synthesizeAnswer = useCallback(async (answer: string, responseLanguage: Language, savingHistory?: Promise<string | null>) => {
     const requestId = ++audioRequestRef.current
     const historyId = currentHistoryEntryIdRef.current
+    const pendingHistory = savingHistory ?? historySaveRef.current
     setAudioLoading(true)
     setAudioError(null)
     setAudioApprovalPending(false)
@@ -199,9 +202,9 @@ export default function StudyAssistantPage() {
       if (requestId === audioRequestRef.current) {
         setAudioUrl(URL.createObjectURL(blob))
         setAudioLoading(false)
-        const savedHistoryId = savingHistory ? await savingHistory : historyId
-        if (savedHistoryId) {
-          void updateHistoryAudio(savedHistoryId, blob)
+        const savedHistoryId = pendingHistory ? await pendingHistory : historyId
+        if (savedHistoryId && requestId === audioRequestRef.current) {
+          historyAudioSaveRef.current = updateHistoryAudio(savedHistoryId, blob)
             .then(() => {
               setHistoryEntries((current) =>
                 current.map((item) => (item.id === savedHistoryId ? { ...item, answerAudio: blob } : item)))
@@ -339,6 +342,8 @@ export default function StudyAssistantPage() {
         answer.answer.startsWith("I couldn't generate") ||
         answer.answer.startsWith("I couldn't find relevant content")
       const savingHistory = persistHistoryEntry(question, answer.answer, answer.references, isDocumentGrounded)
+      historySaveRef.current = savingHistory
+      historyAudioSaveRef.current = Promise.resolve()
       if (!isErrorAnswer) {
         if (language === 'sinhala') {
           setAudioApprovalPending(true)
@@ -365,14 +370,28 @@ export default function StudyAssistantPage() {
 
     setResult({ ...result, answer: editedAnswer })
     setEditingAnswer(false)
+    audioRequestRef.current += 1
+    setAudioLoading(false)
+    setAudioUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
 
     const historyId = currentHistoryEntryIdRef.current
-    if (historyId) {
+    const pendingHistory = historySaveRef.current ?? Promise.resolve(historyId)
+    const pendingAudio = historyAudioSaveRef.current
+    historySaveRef.current = pendingHistory.then(async (savedHistoryId) => {
+      if (!savedHistoryId) return null
+      await pendingAudio
+      await updateHistoryAnswer(savedHistoryId, editedAnswer)
       setHistoryEntries((current) => current.map((item) => (
-        item.id === historyId ? { ...item, answer: editedAnswer, answerAudio: undefined, hasAnswerAudio: false } : item
+        item.id === savedHistoryId ? { ...item, answer: editedAnswer, answerAudio: undefined, hasAnswerAudio: false } : item
       )))
-      void updateHistoryAnswer(historyId, editedAnswer).catch(() => setHistoryError('Edited answer could not be synced. Please retry saving it.'))
-    }
+      return savedHistoryId
+    }).catch(() => {
+      setHistoryError('Edited answer could not be synced. Please retry saving it.')
+      return null
+    })
   }, [answerDraft, result])
 
   // ─── Fix Transcript ────────────────────────────────────────────────────────

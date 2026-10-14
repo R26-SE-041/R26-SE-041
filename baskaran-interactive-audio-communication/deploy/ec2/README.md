@@ -101,3 +101,7 @@ Do not call this deployment complete until AWS resources, DNS, package downloads
 authentication, actual Docker builds, MCP, saved-file persistence after restart,
 and the frontend-to-backend workflow have passed. Local tests cannot replace those
 remote checks.
+
+Latency changes and measured limits are recorded in [LATENCY_OPTIMIZATION.md](../../LATENCY_OPTIMIZATION.md).
+Deploy Modal source changes separately; the EC2 workflow only deploys the backend
+and OpenClaw configuration. Keep GPU minimum containers at zero when conserving credits.
