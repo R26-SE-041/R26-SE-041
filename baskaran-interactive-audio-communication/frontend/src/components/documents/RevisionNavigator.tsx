@@ -7,7 +7,7 @@ export function RevisionNavigator({ actionId, sections, currentTime, onPlay, aud
   actionId: string; sections: RevisionSection[]; currentTime: number; audioReady: boolean
   onPlay: (section: RevisionSection, replayOnly: boolean) => void
 }) {
-  const [source, setSource] = useState<{ section: number; filename: string; excerpt: string } | null>(null)
+  const [source, setSource] = useState<{ section: number; filename: string; excerpt: string; verification?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<number | null>(null)
   const controller = useRef<AbortController | null>(null)
@@ -46,6 +46,7 @@ export function RevisionNavigator({ actionId, sections, currentTime, onPlay, aud
       <div className="flex items-center justify-between"><h4 className="font-semibold">Source for section {source.section + 1}: {source.filename}</h4>
         <button className="vl-btn-secondary ml-2" onClick={() => setSource(null)}>Close source</button></div>
       <p className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap text-sm">{source.excerpt}</p>
+      {source.verification === 'saved_snapshot' && <p className="mt-2 text-sm">Saved source passage from when this revision was created. The original document is no longer available for verification.</p>}
     </aside>}
   </div>
 }

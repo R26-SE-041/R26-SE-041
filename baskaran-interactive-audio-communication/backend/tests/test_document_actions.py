@@ -231,6 +231,36 @@ def test_combined_action_actual_file_and_owner_isolation(env):
             "document_id": doc, "session_id": session}).status_code == 404
 
 
+def test_owned_saved_download_survives_missing_original(env):
+    _, doc, session, app = env
+    with TestClient(app) as client:
+        ticket = start(client, doc, session, "Summarize this document and save it")
+        assert local_document_store.delete_document(doc, "alice")
+        assert client.get(f"/api/v1/actions/{ticket}/download").status_code == 200
+        assert client.post("/api/v1/actions", json={"command": "Summarize this document",
+            "document_id": doc, "session_id": session}).status_code == 404
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "bob"}
+        assert client.get(f"/api/v1/actions/{ticket}/download").status_code == 404
+
+
+def test_saved_sectioned_audio_and_snapshot_survive_missing_original(env, monkeypatch):
+    doc, session, app, _, _ = section_fixture(env, monkeypatch)
+    with TestClient(app) as client:
+        response = client.post("/api/v1/actions", json={"command": "Create an audio revision of this document",
+            "document_id": doc, "session_id": session, "revision_mode": "sectioned"})
+        ticket = response.json()["action_id"]
+        assert local_document_store.delete_document(doc, "alice")
+        audio = client.get(f"/api/v1/actions/{ticket}/audio")
+        assert audio.status_code == 200 and audio.content.startswith(b"RIFF")
+        source = client.get(f"/api/v1/actions/{ticket}/sections/1/source")
+        assert source.status_code == 200
+        assert source.json()["verification"] == "saved_snapshot"
+        assert source.json()["excerpt"] == "Second topic."
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "bob"}
+        for suffix in ("audio", "download", "sections/1/source"):
+            assert client.get(f"/api/v1/actions/{ticket}/{suffix}").status_code == 404
+
+
 def test_save_later_uses_same_session_and_document(env):
     _, doc, session, app = env
     with TestClient(app) as client:

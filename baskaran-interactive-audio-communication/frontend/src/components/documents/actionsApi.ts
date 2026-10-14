@@ -95,6 +95,6 @@ export async function downloadRevisionAudio(id: string, signal?: AbortSignal): P
   return (await request(`/api/v1/actions/${encodeURIComponent(id)}/audio`, { signal }, 30_000)).blob()
 }
 
-export async function getRevisionSource(id: string, sectionId: number, signal?: AbortSignal): Promise<{ filename: string; excerpt: string; start: number; end: number }> {
+export async function getRevisionSource(id: string, sectionId: number, signal?: AbortSignal): Promise<{ filename: string; excerpt: string; start: number; end: number; verification?: 'saved_snapshot' | 'current_document' }> {
   return (await request(`/api/v1/actions/${encodeURIComponent(id)}/sections/${sectionId}/source`, { signal })).json()
 }

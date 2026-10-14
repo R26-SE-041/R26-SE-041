@@ -76,14 +76,30 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     try {
       const value = await getDocumentAction(item.action_id)
       if (!mounted.current) return
-      setResult(value); setDocumentId(item.document_id); setLanguage(value.language)
+      setResult(value); setDocumentId(documents.some(doc => doc.document_id === item.document_id) ? item.document_id : ''); setLanguage(value.language)
       setAudioUrl(null); setCurrentTime(0); setSelectedSection(0); setFlipped([]); replayEnd.current = null
       setStatus('Saved result opened')
       if (value.audio_ready) {
-        const blob = await downloadRevisionAudio(item.action_id)
-        if (mounted.current) setAudioUrl(URL.createObjectURL(blob))
+        await loadSavedAudio(item.action_id)
       }
     } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Saved result could not be opened.') }
+    finally { active.current = false; if (mounted.current) setBusy(false) }
+  }
+
+  async function loadSavedAudio(actionId: string) {
+    setAudioError(null)
+    try {
+      const blob = await downloadRevisionAudio(actionId)
+      if (mounted.current) setAudioUrl(URL.createObjectURL(blob))
+    } catch {
+      if (mounted.current) setAudioError('Saved audio could not be loaded. Your transcript is available. Retry loading the audio.')
+    }
+  }
+
+  async function retrySavedAudio() {
+    if (!result || active.current) return
+    active.current = true; setBusy(true)
+    try { await loadSavedAudio(result.action_id) }
     finally { active.current = false; if (mounted.current) setBusy(false) }
   }
 
@@ -308,7 +324,9 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
           if (audioPlayer.current) audioPlayer.current.playbackRate = Number(event.target.value)
         }}><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select>
       </label>}
-      {audioError && <p className="mt-2 text-sm">{audioError}</p>}
+      {audioError && <div className="mt-2"><p className="text-sm" role="alert">{audioError}</p>
+        {result?.audio_ready && !audioUrl && <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void retrySavedAudio()}>Retry loading audio</button>}
+      </div>}
       <div className="mt-6 border-t pt-4"><h3 className="font-semibold">Saved revisions and flashcards</h3>
         <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void refreshSaved()}>Refresh saved library</button>
         {!savedActions.length && <p className="mt-2 text-sm">No saved results yet.</p>}

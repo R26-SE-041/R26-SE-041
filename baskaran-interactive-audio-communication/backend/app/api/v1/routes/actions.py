@@ -218,10 +218,8 @@ async def download(action_id: str, user_id: Annotated[str, Depends(owner)]):
     transcript_only = action["intent"] == "audio_revision" and bool(action["summary"])
     if not transcript_only and (not action["saved"] or not action["summary_id"]):
         raise HTTPException(404, "No saved summary is available.")
-    try:
-        await service.document_bytes(action["document_id"], user_id)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
+    # Saved artifacts belong to this owned action, independently of whether the
+    # original document still exists (including imported legacy document IDs).
     if transcript_only:
         return Response(plain_summary(action["summary"]), media_type="text/plain", headers={
             "Content-Disposition": 'attachment; filename="lecture-revision.txt"'})
@@ -244,10 +242,6 @@ async def revision_audio(action_id: str, user_id: Annotated[str, Depends(owner)]
     action = owned(action_id, user_id)
     if not action.get("audio_id"):
         raise HTTPException(404, "No revision audio is available.")
-    try:
-        await service.document_bytes(action["document_id"], user_id)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
     path = store.artifact(action["audio_id"], "wav")
     if not path.is_file():
         raise HTTPException(404, "Revision audio file is unavailable.")
@@ -262,20 +256,27 @@ async def section_source(action_id: str, section_id: int, user_id: Annotated[str
     sections = action.get("sections", [])
     if section_id < 0 or section_id >= len(sections):
         raise HTTPException(404, "Revision section not found.")
+    section = sections[section_id]
     try:
         filename, content = await service.document_bytes(action["document_id"], user_id)
         text = service.extract(filename, content)
     except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
+        # An owned saved revision contains its original source snapshot. This is
+        # archival evidence, not a claim that a current document was verified.
+        if not action.get("saved") or not section.get("source_text"):
+            raise HTTPException(404, "No saved source passage is available.") from exc
+        return JSONResponse({"filename": action.get("filename") or "Original document",
+            "excerpt": section["source_text"], "start": section["source_start"],
+            "end": section["source_end"], "source_hash": action.get("source_hash"),
+            "verification": "saved_snapshot"}, headers={"Cache-Control": "private, no-store"})
     if service.revision_sections.source_hash(text) != action.get("source_hash"):
         raise HTTPException(409, "The source document changed. Generate a new revision.")
-    section = sections[section_id]
     excerpt = text[section["source_start"]:section["source_end"]]
     if excerpt != section["source_text"]:
         raise HTTPException(409, "The supporting source passage could not be verified.")
     return Response(json.dumps({"filename": filename, "excerpt": excerpt,
                     "start": section["source_start"], "end": section["source_end"],
-                    "source_hash": action["source_hash"]}), media_type="application/json",
+                    "source_hash": action["source_hash"], "verification": "current_document"}), media_type="application/json",
                     headers={"Cache-Control": "private, no-store"})
 
 @router.post("/tools/{tool_name}")

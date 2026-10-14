@@ -1,6 +1,29 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mockBackend, silentWav } from './backendMock'
 
+test('archived revision retries failed audio without requiring its original document', async ({page}) => {
+  const state = await mockBackend(page)
+  await page.route('**/api/v1/documents/', route => route.fulfill({json:[]}))
+  let attempts = 0
+  await page.route('**/api/v1/actions/audio-1/audio', route => {
+    attempts++
+    return attempts === 1 ? route.fulfill({status:503,json:{detail:'Temporary download failure'}})
+      : route.fulfill({contentType:'audio/wav',body:silentWav()})
+  })
+  await page.route('**/api/v1/actions/audio-1/sections/0/source', route => route.fulfill({json:{filename:'Archived.pdf',excerpt:'Archived source passage.',verification:'saved_snapshot'}}))
+  await page.goto('/study-assistant')
+  await page.locator('li').filter({hasText:'sectioned audio revision'}).first().getByRole('button',{name:'Open',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Audio revision transcript',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Play from here',exact:true}).first()).toBeDisabled()
+  await page.getByRole('button',{name:'Retry loading audio',exact:true}).click()
+  await expect(page.locator('audio').last()).toBeVisible()
+  await expect(page.getByRole('button',{name:'Play from here',exact:true}).first()).toBeEnabled()
+  await page.getByRole('button',{name:'View source',exact:true}).first().click()
+  await expect(page.getByText('Archived source passage.',{exact:true})).toBeVisible()
+  await expect(page.getByText(/Saved source passage from when this revision was created/)).toBeVisible()
+  expect(state.actions).toHaveLength(0)
+})
+
 async function start(page: Page) {
   const state = await mockBackend(page)
   await page.goto('/study-assistant')
