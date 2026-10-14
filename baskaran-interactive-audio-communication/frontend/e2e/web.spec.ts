@@ -1,6 +1,33 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mockBackend, silentWav } from './backendMock'
 
+test('large saved library stays compact with search, filters and five-item pages', async ({page}) => {
+  const state = await mockBackend(page)
+  const items = Array.from({length:29}, (_, i) => ({action_id:`saved-${i}`,document_id:'doc-1',filename:`Study notes ${String(i).padStart(2,'0')}.pdf`,
+    language:i % 2 ? 'tamil' : 'english',intent:i % 3 ? 'audio_revision' : 'flashcards',revision_mode:'sectioned',audio_duration:60,created_at:new Date(Date.UTC(2026,9,14,0,i)).toISOString()}))
+  await page.route('**/api/v1/actions/saved', route => route.fulfill({json:items}))
+  await page.goto('/study-assistant')
+  const library=page.getByRole('region',{name:'Saved revisions and flashcards'})
+  await expect(library.locator('li')).toHaveCount(5)
+  await expect(library.getByText('Page 1 of 6',{exact:true})).toBeVisible()
+  await library.getByRole('button',{name:'Next',exact:true}).click()
+  await expect(library.getByText('Page 2 of 6',{exact:true})).toBeVisible()
+  await library.getByLabel('Search documents').fill('Study notes 07')
+  await expect(library.locator('li')).toHaveCount(1)
+  await expect(library.getByText('Page 1 of 1',{exact:true})).toBeVisible()
+  await library.getByLabel('Saved item type').selectOption('flashcards')
+  await expect(library.getByText('No saved items match your search or filters.')).toBeVisible()
+  await library.getByRole('button',{name:'Clear filters',exact:true}).click()
+  await library.getByLabel('Saved item language').selectOption('tamil')
+  await expect(library.getByText('Showing 1–5 of 14',{exact:true})).toBeVisible()
+  await library.getByLabel('Saved item language').selectOption('all')
+  await library.screenshot({path:'.workspace-runtime/library-desktop.png'})
+  await page.setViewportSize({width:390,height:844})
+  await library.screenshot({path:'.workspace-runtime/library-mobile.png'})
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(state.actions).toHaveLength(0)
+})
+
 test('archived revision retries failed audio without requiring its original document', async ({page}) => {
   const state = await mockBackend(page)
   await page.route('**/api/v1/documents/', route => route.fulfill({json:[]}))
@@ -18,6 +45,9 @@ test('archived revision retries failed audio without requiring its original docu
   await page.getByRole('button',{name:'Retry loading audio',exact:true}).click()
   await expect(page.locator('audio').last()).toBeVisible()
   await expect(page.getByRole('button',{name:'Play from here',exact:true}).first()).toBeEnabled()
+  await page.locator('#action-command').fill('Pause the audio')
+  await expect(page.getByRole('button',{name:'Run action',exact:true})).toBeEnabled()
+  await page.getByRole('button',{name:'Run action',exact:true}).click()
   await page.getByRole('button',{name:'View source',exact:true}).first().click()
   await expect(page.getByText('Archived source passage.',{exact:true})).toBeVisible()
   await expect(page.getByText(/Saved source passage from when this revision was created/)).toBeVisible()

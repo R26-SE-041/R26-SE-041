@@ -29,6 +29,9 @@ interface HistoryPanelProps {
 }
 
 export function HistoryPanel({ entries, loading, onDelete, onClearAll }: HistoryPanelProps) {
+  const [page, setPage] = useState(1)
+  const pages = Math.max(1, Math.ceil(entries.length / 5))
+  const currentPage = Math.min(page, pages)
   if (loading) {
     return <p className="text-sm" style={{ color: 'var(--text-dim)' }}>Loading history…</p>
   }
@@ -59,10 +62,15 @@ export function HistoryPanel({ entries, loading, onDelete, onClearAll }: History
         </button>
       </div>
       <ul className="flex flex-col gap-3">
-        {entries.map((entry) => (
+        {entries.slice((currentPage - 1) * 5, currentPage * 5).map((entry) => (
           <HistoryEntryCard key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} />
         ))}
       </ul>
+      {pages > 1 && <nav aria-label="History pages" className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm">Page {currentPage} of {pages} · {entries.length} questions</span>
+        <div className="flex gap-2"><button className="vl-btn-secondary" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
+          <button className="vl-btn-secondary" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>Next</button></div>
+      </nav>}
     </div>
   )
 }

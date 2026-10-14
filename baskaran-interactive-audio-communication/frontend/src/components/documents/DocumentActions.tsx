@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { RevisionNavigator } from './RevisionNavigator'
+import { SavedLibrary } from './SavedLibrary'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { extraCommands, normalizeCommand, isPlaybackCommand, controlPlayback } from './audioCommands'
@@ -50,6 +51,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
   const [downloading, setDownloading] = useState(false)
   const [playbackRate, setPlaybackRate] = useState('1')
   const audioPlayer = useRef<HTMLAudioElement | null>(null)
+  const resultAnchor = useRef<HTMLDivElement | null>(null)
   const session = useRef('')
   const controller = useRef<AbortController | null>(null)
   const active = useRef(false)
@@ -79,6 +81,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
       setResult(value); setDocumentId(documents.some(doc => doc.document_id === item.document_id) ? item.document_id : ''); setLanguage(value.language)
       setAudioUrl(null); setCurrentTime(0); setSelectedSection(0); setFlipped([]); replayEnd.current = null
       setStatus('Saved result opened')
+      requestAnimationFrame(() => resultAnchor.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
       if (value.audio_ready) {
         await loadSavedAudio(item.action_id)
       }
@@ -275,15 +278,32 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
           {result.sections.map(section => <option key={section.id} value={section.id}>{section.id + 1}. {section.title}</option>)}
         </select>
       </label>}
-      <button className="vl-btn-primary mt-4" disabled={busy || !documentId || !command.trim()} onClick={() => void execute()}>
+      <button className="vl-btn-primary mt-4" disabled={busy || !command.trim() || (!documentId && !isPlaybackCommand(normalizeCommand(command)) && normalizeCommand(command) !== 'delete this saved revision')} onClick={() => void execute()}>
         {busy ? status : 'Run action'}
       </button>
       <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[voiceLanguage].audio)}>Use audio revision command</button>
       <p className="mt-2 text-sm" role="status">{!busy && status} {result?.provider === 'openclaw_mcp' ? 'OpenClaw' : result?.provider === 'direct' ? 'Direct backend' : ''}</p>
       {error && <p role="alert" className="mt-3 text-sm" style={{ color: 'var(--warning)' }}>{error}</p>}
+      {result && <div ref={resultAnchor} className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ scrollMarginTop: 110 }}>
+        <h3 className="font-semibold">Opened study result</h3><a className="vl-btn-secondary" href="#saved-library-title">Back to saved library</a>
+      </div>}
       {result?.status === 'partial' && result.revision_mode === 'sectioned' && result.summary_language === result.language
         && !!result.sections?.length && result.sections.every(section => section.script_language === result.language) &&
         <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>Retry audio using prepared transcript</button>}
+      {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
+        onTimeUpdate={() => {
+          const player = audioPlayer.current
+          if (!player) return
+          setCurrentTime(player.currentTime)
+          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { player.pause(); replayEnd.current = null }
+        }}
+        autoPlay={result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
+      {audioUrl && result?.intent === 'audio_revision' && <label className="mt-3 block text-sm">Playback speed
+        <select className="nb-input ml-3" value={playbackRate} onChange={event => {
+          setPlaybackRate(event.target.value)
+          if (audioPlayer.current) audioPlayer.current.playbackRate = Number(event.target.value)
+        }}><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select>
+      </label>}
       {result?.summary && result.intent !== 'flashcards' && <div className="mt-5">
         {result.intent === 'audio_revision' && <h3 className="mb-3 font-semibold">Audio revision transcript</h3>}
         <p className="mb-3 text-sm">Transcript language: {languageLabels[result.summary_language]}</p>
@@ -310,33 +330,10 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
       {(result?.saved || (result?.intent === 'audio_revision' && result.summary)) && <button className="vl-btn-secondary mt-4" disabled={downloading} onClick={() => void download()}>{downloading ? 'Downloading…' : result?.intent === 'flashcards' ? 'Download flashcards (.json)' : result?.intent === 'audio_revision' ? 'Download transcript (.txt)' : 'Download summary (.txt)'}</button>}
       {result?.audio_saved && <button className="vl-btn-secondary ml-3 mt-4" disabled={downloading} onClick={() => void downloadAudio()}>Download revision audio (.wav)</button>}
       {result?.intent === 'audio_revision' && result.trace.length > 0 && <p className="mt-3 text-sm">Completed: {Array.from(new Set(result.trace)).map(tool => toolLabels[tool] || tool).join(' → ')}</p>}
-      {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
-        onTimeUpdate={() => {
-          const player = audioPlayer.current
-          if (!player) return
-          setCurrentTime(player.currentTime)
-          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { player.pause(); replayEnd.current = null }
-        }}
-        autoPlay={result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
-      {audioUrl && result?.intent === 'audio_revision' && <label className="mt-3 block text-sm">Playback speed
-        <select className="nb-input ml-3" value={playbackRate} onChange={event => {
-          setPlaybackRate(event.target.value)
-          if (audioPlayer.current) audioPlayer.current.playbackRate = Number(event.target.value)
-        }}><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select>
-      </label>}
       {audioError && <div className="mt-2"><p className="text-sm" role="alert">{audioError}</p>
         {result?.audio_ready && !audioUrl && <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void retrySavedAudio()}>Retry loading audio</button>}
       </div>}
-      <div className="mt-6 border-t pt-4"><h3 className="font-semibold">Saved revisions and flashcards</h3>
-        <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void refreshSaved()}>Refresh saved library</button>
-        {!savedActions.length && <p className="mt-2 text-sm">No saved results yet.</p>}
-        <ul className="mt-3 space-y-2">{savedActions.map(item => <li key={item.action_id} className="rounded-xl border p-3">
-          <p className="text-sm">{item.filename} · {item.language} · {item.intent === 'flashcards' ? 'Flashcards' : item.intent === 'audio_revision' ? `${item.revision_mode} audio revision` : 'Summary'}{item.audio_duration ? ` · ${Math.round(item.audio_duration)} seconds` : ''}</p>
-          <p className="mt-1 text-xs">{item.scope === 'section' ? 'Selected section only' : item.style === 'one_minute' ? 'One-minute target' : item.style === 'detailed' ? 'Detailed revision' : ''}{item.created_at ? ` · ${new Date(item.created_at).toLocaleString()}` : ''}</p>
-          <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void openSaved(item)}>Open</button>
-          <button className="vl-btn-secondary ml-2 mt-2" disabled={busy} onClick={() => setDeletePending(item.action_id)}>Delete</button>
-        </li>)}</ul>
-      </div>
+      <SavedLibrary items={savedActions} busy={busy} selectedId={result?.action_id} onOpen={item => void openSaved(item)} onDelete={setDeletePending} onRefresh={() => void refreshSaved()} />
       {deletePending && <div role="dialog" aria-modal="true" aria-labelledby="delete-revision-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <div className="w-full max-w-md rounded-xl p-6" style={{ background: 'var(--surface, #fff)' }}>
           <h3 id="delete-revision-title" className="font-semibold">Delete this saved result?</h3>
