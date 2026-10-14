@@ -758,6 +758,34 @@ async def test_gateway_background_tool_is_awaited_and_missing_tools_continue(env
     assert action["trace"] == service.required_tools("audio_revision")
 
 
+@pytest.mark.asyncio
+async def test_gateway_recovery_discards_expired_conversation_handles(env, monkeypatch):
+    import httpx
+    import json
+    settings, doc, session, _ = env
+    settings.actions_provider = 'openclaw_mcp'
+    settings.openclaw_gateway_token = 'test-token'
+    ticket = store.create('alice', session, doc, 'summarize_and_save')
+    users = []
+    original_client = httpx.AsyncClient
+    async def gateway(request):
+        payload = json.loads(request.content)
+        users.append(payload['user'])
+        assert ticket in payload['messages'][0]['content']
+        if len(users) == 1:
+            await service.execute_tool('summarize_document', ticket)
+        else:
+            assert 'summarize_document' in payload['messages'][0]['content']
+            await service.execute_tool('save_summary', ticket)
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'Done'}}]})
+    monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **kwargs:
+        original_client(transport=httpx.MockTransport(gateway), **kwargs))
+    await service.run_action(ticket)
+    assert users == [f'voicelearn-action-{ticket}', f'voicelearn-action-{ticket}-resume-1']
+    assert store.get(ticket)['status'] == 'complete'
+    assert store.get(ticket)['trace'] == ['summarize_document', 'save_summary']
+
+
 @pytest.mark.parametrize("text", [
     "\n".join(["This is a long wrapped source line containing facts for revision." * 2 for _ in range(8)]),
     " ".join(["This is one factual sentence from a long unbroken source paragraph." for _ in range(15)]),

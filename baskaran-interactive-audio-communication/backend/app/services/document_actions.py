@@ -487,7 +487,7 @@ async def run_openclaw(action_id):
             headers={"Authorization": f"Bearer {settings.openclaw_gateway_token}"},
             json={"model": f"openclaw/{settings.openclaw_agent_id}", "stream": False,
                   # Isolate each action; previous summaries are resolved by our backend.
-                  "user": f"voicelearn-action-{action_id}",
+                  "user": f"voicelearn-action-{action_id}" + (f"-resume-{action['gateway_attempt']}" if action.get('gateway_attempt') else ''),
                   "messages": [{"role": "user", "content":
                       f"Execute {action['intent']} using the connected VoiceLearn MCP tools. "
                       f"Already completed tools: {list(dict.fromkeys(action['trace']))}. Call only missing required tools in order. "
@@ -500,6 +500,9 @@ async def run_openclaw(action_id):
                       "For flashcards call create_flashcards, then save_flashcards. "
                       "Tool results intentionally contain metadata only, never transcript text. "
                       "Follow the returned next_tool; do not repeat a completed tool to obtain text. "
+                      "Keep awaiting exec/wait calls until the backend reports each required tool completed. "
+                      "Do not finish with a statement that work is running in the background. "
+                      "Completed tools listed above are authoritative; ignore stale or expired code-mode run IDs. "
                       "Use the same action_id for every call. Call each required tool once; "
                       "sectioned generation can take several minutes, so await its result or wait for "
                       "the running call instead of starting it again. Never invent a result."}]})
@@ -515,6 +518,9 @@ async def run_action(action_id):
             store.update(action_id, status="processing", provider=provider)
             if provider == "openclaw_mcp":
                 for attempt in range(2):
+                    # Resume missing tools in a fresh gateway conversation so
+                    # expired code-mode wait handles cannot poison recovery.
+                    store.update(action_id, gateway_attempt=attempt)
                     gateway_error = None
                     try:
                         await run_openclaw(action_id)

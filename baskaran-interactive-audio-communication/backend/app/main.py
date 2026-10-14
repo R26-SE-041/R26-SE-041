@@ -32,9 +32,18 @@ async def lifespan(app: FastAPI):
     # Never import the heavy embedding stack during startup unless a complete
     # BGE-M3 cache is already present.  This keeps health and local document
     # management responsive when a download was interrupted.
-    bge_ready, bge_reason = bge_m3_cache_status()
+    if settings.use_modal_retrieval_models:
+        bge_ready = bool(settings.modal_bge_embed_url and settings.modal_bge_rerank_url)
+        bge_reason = 'Modal BGE endpoints configured' if bge_ready else 'Modal BGE endpoints missing'
+    else:
+        bge_ready, bge_reason = bge_m3_cache_status()
     if bge_ready:
-        if settings.chroma_host in {"localhost", "127.0.0.1", "local"}:
+        if settings.cloud_user_storage:
+            # Cloud metadata includes documents migrated from another machine;
+            # validate its IDs even when the local Chroma index already exists.
+            from app.services.ingestion import reindex_stored_documents
+            await reindex_stored_documents()
+        elif settings.chroma_host in {"localhost", "127.0.0.1", "local"}:
             from app.db.chroma import persistent_index_status
             from app.services.local_document_store import list_all_documents
 
