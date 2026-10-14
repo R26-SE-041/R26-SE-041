@@ -168,3 +168,7 @@ import that device's entries into their account. The import retains timestamps
 and recordings, is idempotent per account/source ID, and removes each local entry
 only after its cloud save succeeds. Localhost and Vercel are separate browser
 origins; import history from the origin where the old entries were stored.
+For old localhost:3000 entries, export the laptop frontend with the real public
+API/Supabase settings and permit http://localhost:3000 in the backend CORS list.
+Local cloud mode requires sign-in; the import button confirms the destination
+account and only removes an entry after its cloud save succeeds.

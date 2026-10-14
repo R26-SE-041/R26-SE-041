@@ -59,6 +59,11 @@ create index if not exists saved_actions_owner_date on public.saved_actions(user
 revoke all on public.study_history,public.saved_actions from anon,authenticated;
 grant select on public.study_history,public.saved_actions to authenticated;
 grant all on public.study_history,public.saved_actions to service_role;
+-- Original-file paths must be minted by the backend, not supplied via direct
+-- client SQL writes that could point an owned record at another owner's file.
+revoke all on public.documents,public.sessions from anon,authenticated;
+grant select on public.documents,public.sessions to authenticated;
+grant all on public.documents,public.sessions to service_role;
 do $$ begin
   if not exists(select 1 from pg_policies where schemaname='public' and tablename='study_history' and policyname='Read own history') then
     create policy "Read own history" on public.study_history for select to authenticated using ((select auth.uid())=user_id);
