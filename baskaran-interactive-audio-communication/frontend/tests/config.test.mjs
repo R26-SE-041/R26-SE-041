@@ -6,7 +6,7 @@ function config(host, api) {
   const script = `globalThis.window={location:{hostname:${JSON.stringify(host)}}};
     const m=await import('./src/lib/config.ts');
     let error=null;try{m.requireBackend()}catch(e){error=e.message}
-    console.log(JSON.stringify({url:m.API_URL,ready:m.BACKEND_CONFIGURED,error}));`
+    console.log(JSON.stringify({url:m.API_URL,ready:m.BACKEND_CONFIGURED,error,authRequired:m.AUTH_REQUIRED}));`
   const env = { ...process.env }
   delete env.EXPO_PUBLIC_API_URL
   if (api !== undefined) env.EXPO_PUBLIC_API_URL = api
@@ -16,7 +16,7 @@ function config(host, api) {
 }
 
 test('local development still uses the existing localhost backend', () => {
-  assert.deepEqual(config('localhost'), {url:'http://localhost:8000',ready:true,error:null})
+  assert.deepEqual(config('localhost'), {url:'http://localhost:8000',ready:true,error:null,authRequired:false})
 })
 test('public frontend without backend blocks API calls instead of reading SPA HTML', () => {
   const result = config('voicelearn-audio.vercel.app')
@@ -25,5 +25,9 @@ test('public frontend without backend blocks API calls instead of reading SPA HT
   assert.match(result.error, /Backend connection is pending/)
 })
 test('configured HTTPS backend enables hosted API calls and strips trailing slash', () => {
-  assert.deepEqual(config('voicelearn-audio.vercel.app','https://api.example.com/'), {url:'https://api.example.com',ready:true,error:null})
+  assert.deepEqual(config('voicelearn-audio.vercel.app','https://api.example.com/'), {url:'https://api.example.com',ready:true,error:null,authRequired:true})
+})
+
+test('localhost connected to a public cloud backend requires account authentication', () => {
+  assert.equal(config('localhost','https://api.example.com').authRequired,true)
 })

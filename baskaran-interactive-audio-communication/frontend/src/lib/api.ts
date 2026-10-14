@@ -119,13 +119,18 @@ export async function synthesizeSpeech(text: string, language: Language): Promis
 }
 
 export async function saveHistory(question: string, answer: string, language: Language,
-  references: ChunkReference[], audio?: Blob): Promise<HistoryItem> {
+  references: ChunkReference[], audio?: Blob,
+  options?: { questionAudio?: Blob; documentGrounded?: boolean; sourceId?: string; createdAt?: string }): Promise<HistoryItem> {
   const form = new FormData()
   form.append('question', question)
   form.append('answer', answer)
   form.append('language', language)
   form.append('references', JSON.stringify(references))
   if (audio) form.append('audio_file', audio, 'answer.wav')
+  if (options?.questionAudio) form.append('question_audio', options.questionAudio, 'question.audio')
+  form.append('document_grounded', String(options?.documentGrounded ?? true))
+  if (options?.sourceId) form.append('source_id', options.sourceId)
+  if (options?.createdAt) form.append('created_at', options.createdAt)
   const { data } = await api.post<HistoryItem>('/api/v1/history', form)
   return data
 }
@@ -145,6 +150,17 @@ export async function saveHistoryAudio(historyId: string, audio: Blob): Promise<
 export async function getHistoryAudio(historyId: string): Promise<Blob> {
   const { data } = await api.get<Blob>(`/api/v1/history/${historyId}/audio`, { responseType: 'blob' })
   return data
+}
+
+export async function getHistoryQuestionAudio(id: string): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/api/v1/history/${id}/question-audio`, { responseType: 'blob' })
+  return data
+}
+export async function editHistoryAnswer(id: string, answer: string) {
+  await api.patch(`/api/v1/history/${id}`, { answer })
+}
+export async function deleteCloudHistory(id?: string) {
+  await api.delete('/api/v1/history' + (id ? `/${id}` : ''), { data: { confirmed: true } })
 }
 
 export async function login(email: string, password: string) {

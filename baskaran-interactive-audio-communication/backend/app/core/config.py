@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     debug: bool = False
     require_auth: bool = False  # True for public EC2 deployments; local demo stays unchanged.
     use_supabase_documents: bool | None = None
+    cloud_user_storage: bool = False  # Enable only after cloud schema/data migration.
     chroma_data_path: str = ""
 
     @field_validator("debug", mode="before")

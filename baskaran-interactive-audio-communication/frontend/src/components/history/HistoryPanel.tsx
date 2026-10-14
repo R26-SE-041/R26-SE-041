@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
-import type { LocalHistoryEntry } from '@/lib/historyDb'
+import type { HistoryEntry } from '@/lib/studyHistory'
+import { CLOUD_HISTORY } from '@/lib/studyHistory'
+import { getHistoryAudio, getHistoryQuestionAudio } from '@/lib/api'
 
 const LANGUAGE_LABEL: Record<string, string> = {
   english: 'English',
@@ -20,7 +22,7 @@ function formatTimestamp(iso: string): string {
 }
 
 interface HistoryPanelProps {
-  entries: LocalHistoryEntry[]
+  entries: HistoryEntry[]
   loading: boolean
   onDelete: (id: string) => void
   onClearAll: () => void
@@ -37,7 +39,7 @@ export function HistoryPanel({ entries, loading, onDelete, onClearAll }: History
         className="rounded-[16px] px-5 py-4 text-sm"
         style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
       >
-        No questions yet. Your voice chats, transcripts, and answers will appear here — saved privately in this browser.
+        {CLOUD_HISTORY ? 'No questions yet. Your questions, answers and audio will appear here — saved to your account across devices.' : 'No questions yet. Your voice chats, transcripts, and answers will appear here — saved privately in this browser.'}
       </p>
     )
   }
@@ -65,32 +67,38 @@ export function HistoryPanel({ entries, loading, onDelete, onClearAll }: History
   )
 }
 
-function HistoryEntryCard({ entry, onDelete }: { entry: LocalHistoryEntry; onDelete: () => void }) {
+function HistoryEntryCard({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [questionAudioUrl, setQuestionAudioUrl] = useState<string | null>(null)
   const [answerAudioUrl, setAnswerAudioUrl] = useState<string | null>(null)
+  const [audioError, setAudioError] = useState<string | null>(null)
 
   // Object URLs are created only while a card is expanded and revoked on
   // collapse/unmount, so we never leak blob URLs for entries the user isn't viewing.
   useEffect(() => {
     if (!expanded) return
     const urls: string[] = []
-    if (entry.questionAudio) {
-      const url = URL.createObjectURL(entry.questionAudio)
-      urls.push(url)
-      setQuestionAudioUrl(url)
+    let active = true
+    setAudioError(null)
+    const load = async (blob: Blob | undefined, cloudAudio: boolean | undefined, question: boolean) => {
+      try {
+        const content = blob ?? (entry.cloud && cloudAudio ? await (question ? getHistoryQuestionAudio(entry.id) : getHistoryAudio(entry.id)) : null)
+        if (!active || !content) return
+        const url = URL.createObjectURL(content)
+        urls.push(url)
+        if (question) setQuestionAudioUrl(url)
+        else setAnswerAudioUrl(url)
+      } catch { if (active) setAudioError('Audio could not be loaded. Collapse and reopen this entry to retry.') }
     }
-    if (entry.answerAudio) {
-      const url = URL.createObjectURL(entry.answerAudio)
-      urls.push(url)
-      setAnswerAudioUrl(url)
-    }
+    void load(entry.questionAudio, entry.hasQuestionAudio, true)
+    void load(entry.answerAudio, entry.hasAnswerAudio, false)
     return () => {
+      active = false
       urls.forEach((url) => URL.revokeObjectURL(url))
       setQuestionAudioUrl(null)
       setAnswerAudioUrl(null)
     }
-  }, [expanded, entry.questionAudio, entry.answerAudio])
+  }, [expanded, entry.id, entry.cloud, entry.questionAudio, entry.answerAudio, entry.hasQuestionAudio, entry.hasAnswerAudio])
 
   return (
     <li
@@ -114,7 +122,7 @@ function HistoryEntryCard({ entry, onDelete }: { entry: LocalHistoryEntry; onDel
             <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-dim)' }}>
               {LANGUAGE_LABEL[entry.language] ?? entry.language}
             </span>
-            {(entry.questionAudio || entry.answerAudio) && (
+            {(entry.questionAudio || entry.answerAudio || entry.hasQuestionAudio || entry.hasAnswerAudio) && (
               <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>🔊 audio saved</span>
             )}
           </div>
@@ -145,6 +153,7 @@ function HistoryEntryCard({ entry, onDelete }: { entry: LocalHistoryEntry; onDel
 
       {expanded && (
         <div className="mt-4 flex flex-col gap-4 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+          {audioError && <p role="alert" className="text-xs" style={{ color: 'var(--danger)' }}>{audioError}</p>}
           <div>
             <p className="vl-label mb-1.5">Question</p>
             <p className="text-sm" style={{ color: 'var(--text)' }}>{entry.transcript}</p>

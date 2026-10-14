@@ -4,11 +4,13 @@ import json
 import secrets
 import sqlite3
 import time
+import tempfile
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.services import cloud_user_store as cloud
 
 
 def root() -> Path:
@@ -50,6 +52,13 @@ def create(user_id, session_id, document_id, intent, previous=None, language="en
     if previous:
         data.update({key: previous[key] for key in ("summary", "summary_id", "filename")})
         data["summary_language"] = previous.get("summary_language", "english")
+    if cloud.enabled():
+        cloud.owner_path(user_id, 'validate-owner')
+        cloud.request('POST', '/rest/v1/saved_actions', json={
+            'id': ticket, 'user_id': user_id, 'session_id': session_id,
+            'document_id': document_id, 'intent': intent,
+            'expires': time.time() + data['timeout_seconds'] + 60, 'data': data})
+        return ticket
     with connection() as db:
         db.execute("INSERT INTO actions VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (ticket, user_id, session_id, document_id, intent,
@@ -58,6 +67,17 @@ def create(user_id, session_id, document_id, intent, previous=None, language="en
 
 
 def get(ticket, user_id=None):
+    if cloud.enabled():
+        params = {'id': 'eq.' + ticket, 'select': '*'}
+        if user_id is not None:
+            params['user_id'] = 'eq.' + user_id
+        rows = cloud.request('GET', '/rest/v1/saved_actions', params=params)
+        if not rows:
+            raise ValueError('Action not found.')
+        action = {**rows[0], **rows[0]['data']}
+        if action.get('saved'):
+            restore_artifacts(action)
+        return action
     with connection() as db:
         row = db.execute("SELECT * FROM actions WHERE id=?", (ticket,)).fetchone()
     if row is None or (user_id is not None and row["user_id"] != user_id):
@@ -66,6 +86,14 @@ def get(ticket, user_id=None):
 
 
 def update(ticket, **fields):
+    if cloud.enabled():
+        if fields.get('saved'):
+            action = get(ticket)
+            publish_artifacts({**action, **fields})
+        rows = cloud.request('POST', '/rest/v1/rpc/patch_saved_action', json={'ticket': ticket, 'patch': fields})
+        if not rows:
+            raise ValueError('Action not found.')
+        return
     with connection() as db:
         row = db.execute("SELECT data FROM actions WHERE id=?", (ticket,)).fetchone()
         data = json.loads(row["data"])
@@ -74,6 +102,19 @@ def update(ticket, **fields):
 
 
 def latest(user_id, session_id, document_id, language="english"):
+    if cloud.enabled():
+        rows = cloud.request('GET', '/rest/v1/saved_actions', params={
+            'user_id': 'eq.' + user_id, 'session_id': 'eq.' + session_id,
+            'document_id': 'eq.' + document_id, 'select': '*', 'order': 'created_at.desc'})
+        for row in rows:
+            action = {**row, **row['data']}
+            if (action['intent'] != 'flashcards' and action.get('summary')
+                    and action.get('language', 'english') == language
+                    and action.get('summary_language', 'english') == language):
+                if action.get('saved'):
+                    restore_artifacts(action)
+                return action
+        return None
     with connection() as db:
         rows = db.execute("""SELECT id FROM actions WHERE user_id=? AND session_id=?
             AND document_id=? ORDER BY rowid DESC""", (user_id, session_id, document_id)).fetchall()
@@ -86,6 +127,10 @@ def latest(user_id, session_id, document_id, language="english"):
 
 
 def saved_actions(user_id):
+    if cloud.enabled():
+        rows = cloud.request('GET', '/rest/v1/saved_actions', params={
+            'user_id': 'eq.' + user_id, 'saved': 'eq.true', 'select': '*', 'order': 'created_at.desc'})
+        return [{**row, **row['data']} for row in rows]
     with connection() as db:
         rows = db.execute("SELECT * FROM actions WHERE user_id=? ORDER BY rowid DESC", (user_id,)).fetchall()
     return [{**dict(row), **json.loads(row["data"])} for row in rows
@@ -105,6 +150,21 @@ def _artifacts(data):
 
 def delete_saved(ticket, user_id):
     """Delete only this owned, closed record and artifacts no other ticket references."""
+    if cloud.enabled():
+        action = get(ticket, user_id)
+        if not action.get('saved') or action['status'] not in {'complete', 'partial', 'failed'}:
+            raise ValueError('Only a finished saved revision or deck can be deleted.')
+        others = cloud.request('GET', '/rest/v1/saved_actions', params={
+            'user_id': 'eq.' + user_id, 'id': 'neq.' + ticket, 'select': 'data'})
+        remaining = set()
+        for other in others:
+            remaining.update(_artifacts(other['data']))
+        removable = _artifacts(action) - remaining
+        cloud.remove('revisions', [cloud.owner_path(user_id, f'{identifier}.{ext}') for identifier, ext in removable])
+        cloud.request('DELETE', '/rest/v1/saved_actions', params={'id': 'eq.' + ticket, 'user_id': 'eq.' + user_id})
+        for identifier, ext in removable:
+            artifact(identifier, ext).unlink(missing_ok=True)
+        return
     with connection() as db:
         db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT * FROM actions WHERE id=? AND user_id=?", (ticket, user_id)).fetchone()
@@ -131,3 +191,26 @@ def artifact(summary_id, extension="txt"):
     path = root() / "files" / f"{summary_id}.{extension}"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def publish_artifacts(action):
+    """A saved flag is committed only after every referenced object is uploaded."""
+    for identifier, extension in _artifacts(action):
+        path = artifact(identifier, extension)
+        mime = {'txt': 'text/plain', 'json': 'application/json', 'wav': 'audio/wav'}[extension]
+        cloud.upload('revisions', cloud.owner_path(action['user_id'], path.name), path.read_bytes(), mime)
+
+
+def restore_artifacts(action):
+    """Local files are disposable playback/generation cache, not the saved library."""
+    for identifier, extension in _artifacts(action):
+        path = artifact(identifier, extension)
+        if not path.is_file():
+            content = cloud.download('revisions', cloud.owner_path(action['user_id'], path.name))
+            with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.tmp', delete=False) as file:
+                temporary = Path(file.name)
+                file.write(content)
+            try:
+                temporary.replace(path)
+            finally:
+                temporary.unlink(missing_ok=True)

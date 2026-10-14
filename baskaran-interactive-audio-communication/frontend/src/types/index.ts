@@ -51,6 +51,8 @@ export interface HistoryItem {
   language: Language
   references: ChunkReference[]
   has_audio: boolean
+  has_question_audio?: boolean
+  document_grounded?: boolean
   created_at: string
 }
 

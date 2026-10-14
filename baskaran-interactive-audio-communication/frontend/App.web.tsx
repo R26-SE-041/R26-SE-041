@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { Fragment, useEffect, type ReactNode } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ThemeProvider } from '@/components/ui/ThemeProvider'
@@ -53,7 +53,7 @@ function RequireSession({ children }: { children: ReactNode }) {
   if (!AUTH_REQUIRED) return children
   if (loading) return <main className="p-8">Checking your session...</main>
   if (!user) return <Navigate to="/login" replace />
-  return children
+  return <Fragment key={user?.id ?? 'demo'}>{children}</Fragment>
 }
 
 // Preserve CSS page flow: native flex sizing must not shrink browser controls.

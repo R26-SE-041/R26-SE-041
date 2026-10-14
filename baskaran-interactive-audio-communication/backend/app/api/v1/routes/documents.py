@@ -81,6 +81,15 @@ def _is_supabase_configured() -> bool:
 async def _try_supabase_insert(document_id: str, user_id: str, filename: str,
                                 file_type: str, storage_path: str, chunk_count: int) -> None:
     """Try to insert into Supabase DB — silently skip if not configured."""
+    if getattr(get_settings(), 'cloud_user_storage', False):
+        from app.services import cloud_user_store as cloud
+        try:
+            await asyncio.to_thread(cloud.request, 'POST', '/rest/v1/documents', json={
+                'id': document_id, 'user_id': user_id, 'filename': filename,
+                'file_type': file_type, 'storage_path': storage_path, 'chunk_count': chunk_count})
+        except Exception as exc:
+            raise HTTPException(503, 'Document metadata could not be saved to the cloud. Please retry.') from exc
+        return
     try:
         from app.db.supabase import get_supabase
         async def insert():
@@ -104,6 +113,16 @@ async def _try_supabase_insert(document_id: str, user_id: str, filename: str,
 
 async def _try_supabase_storage(user_id: str, filename: str, content: bytes) -> str:
     """Try to upload to Supabase Storage — return empty string if not configured."""
+    if getattr(get_settings(), 'cloud_user_storage', False):
+        from app.services import cloud_user_store as cloud
+        from app.services.storage import _content_type
+        from pathlib import Path
+        path = cloud.owner_path(user_id, uuid.uuid4().hex + Path(filename).suffix.lower())
+        try:
+            await asyncio.to_thread(cloud.upload, 'documents', path, content, _content_type(filename))
+        except Exception as exc:
+            raise HTTPException(503, 'Document could not be saved to cloud storage. Please retry.') from exc
+        return path
     try:
         from app.services.storage import upload_document
         path = await asyncio.wait_for(
@@ -228,6 +247,15 @@ async def list_documents(
     user_id = current_user["sub"] if current_user else "guest"
 
     # Try Supabase first if configured
+    if getattr(get_settings(), 'cloud_user_storage', False):
+        from app.services import cloud_user_store as cloud
+        try:
+            rows = await asyncio.to_thread(cloud.request, 'GET', '/rest/v1/documents', params={
+                'user_id': 'eq.' + user_id, 'select': '*', 'order': 'created_at.desc'})
+            return [DocumentListItem(document_id=uuid.UUID(row['id']), filename=row['filename'],
+                    file_type=row['file_type'], chunk_count=row['chunk_count'], uploaded_at=row['created_at']) for row in rows]
+        except Exception as exc:
+            raise HTTPException(503, 'Documents could not be loaded from the cloud. Please retry.') from exc
     if _is_supabase_configured():
         try:
             from app.db.supabase import get_supabase

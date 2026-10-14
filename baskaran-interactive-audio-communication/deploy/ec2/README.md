@@ -82,10 +82,20 @@ retains the frontend URL and saved data, and restores settings if health fails.
 bootstrap.sh installs the isolated Python environment used by this helper.
 Use configured names visakanbaskaran, krishnavaranan1, krishnavaranan, or varananrp.
 
-Document files and metadata use Supabase; saved revision transcripts, WAVs and
-flashcards currently persist on EC2 EBS. They are not uploaded to the Supabase
-audio bucket. Persistent EBS is not an off-server backup; set up backups before
-depending on this demo deployment for irreplaceable user data.
+With CLOUD_USER_STORAGE=true, documents, Q&A history and revision/flashcard
+metadata persist in Supabase PostgreSQL. Original files use the private documents
+bucket; transcripts, manifests, decks and WAVs use revisions; question/answer
+recordings use study-history. Authenticated backend APIs check ownership before
+serving any private file. Temporary generation/playback caches and vector indexes
+remain on EC2, but deleting those caches does not delete the cloud saved library.
+
+Apply supabase.sql before enabling cloud storage. migrate_cloud_storage.py copies
+and verifies existing owned SQLite records without deleting originals. A legacy
+guest library requires an explicitly approved --guest-owner auth UUID. Windows
+snapshots can use --source-root containing actions/, history/ and documents/;
+immutable SQLite reads support read-only snapshot mounts. Keep migration archives
+private and remove temporary copies after verification. Supabase persistence is
+not a substitute for independent backups of irreplaceable data.
 
 Do not call this deployment complete until AWS resources, DNS, package downloads,
 authentication, actual Docker builds, MCP, saved-file persistence after restart,

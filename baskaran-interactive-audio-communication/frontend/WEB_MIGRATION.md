@@ -154,3 +154,17 @@ validation and responsive-layout checks still run. Remove the test Supabase
 environment overrides and run
 `node node_modules/expo/bin/cli export --platform web --clear` before using the
 normal local application. Clearing Metro's cache removes compiled test settings.
+
+## Account cloud history
+
+The hosted study assistant uses authenticated cloud history APIs for questions,
+answers, sources, question recordings and answer audio. Edited answers invalidate
+old answer audio until it is regenerated. History refreshes on focus and every
+30 seconds; deletion is confirmed and synced across devices. Audio is downloaded
+only when a history card is expanded. Local demo mode preserves IndexedDB behavior.
+
+Old browser history has no authenticated owner. A signed-in user can explicitly
+import that device's entries into their account. The import retains timestamps
+and recordings, is idempotent per account/source ID, and removes each local entry
+only after its cloud save succeeds. Localhost and Vercel are separate browser
+origins; import history from the origin where the old entries were stored.

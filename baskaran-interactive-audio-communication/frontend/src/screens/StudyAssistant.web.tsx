@@ -17,14 +17,15 @@ import {
 import type { AskResponse, DocumentItem, Language, TranscribeResponse } from '@/types'
 import { getStudyLocale } from '@/lib/studyLocale'
 import {
-  addLocalHistoryEntry,
-  clearLocalHistory,
-  deleteLocalHistoryEntry,
-  listLocalHistory,
-  updateLocalHistoryAnswer,
-  updateLocalHistoryAudio,
-  type LocalHistoryEntry,
-} from '@/lib/historyDb'
+  addHistoryEntry,
+  CLOUD_HISTORY, deviceHistoryCount, importDeviceHistory,
+  clearStudyHistory,
+  deleteHistoryEntry,
+  listStudyHistory,
+  updateHistoryAnswer,
+  updateHistoryAudio,
+  type HistoryEntry,
+} from '@/lib/studyHistory'
 
 type Phase = 'idle' | 'transcript-ready' | 'asking' | 'answered' | 'rag-error' | 'asr-error'
 
@@ -85,17 +86,28 @@ export default function StudyAssistantPage() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioRequestRef = useRef(0)
 
-  // ─── Local history (IndexedDB — this page has no login/backend history) ───
-  const [historyEntries, setHistoryEntries] = useState<LocalHistoryEntry[]>([])
+  // Hosted history is account-scoped; local demo history remains available.
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [deviceEntries, setDeviceEntries] = useState(0)
+  const [importingHistory, setImportingHistory] = useState(false)
   const lastQuestionAudioRef = useRef<Blob | null>(null)
   const currentHistoryEntryIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    listLocalHistory()
-      .then(setHistoryEntries)
-      .catch(() => undefined)
-      .finally(() => setHistoryLoading(false))
+    let active = true
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return
+      listStudyHistory().then(items => { if (active) { setHistoryEntries(items); setHistoryError(null) } })
+        .catch(() => { if (active) setHistoryError('History could not be loaded. Please check your connection and refresh.') })
+        .finally(() => { if (active) setHistoryLoading(false) })
+    }
+    refresh()
+    if (CLOUD_HISTORY) void deviceHistoryCount().then(count => { if (active) setDeviceEntries(count) }).catch(() => undefined)
+    window.addEventListener('focus', refresh)
+    const timer = CLOUD_HISTORY ? window.setInterval(refresh, 30000) : undefined
+    return () => { active = false; window.removeEventListener('focus', refresh); window.clearInterval(timer) }
   }, [])
 
   // ─── Load documents on mount ───────────────────────────────────────────────
@@ -174,6 +186,7 @@ export default function StudyAssistantPage() {
   // ─── TTS ───────────────────────────────────────────────────────────────────
   const synthesizeAnswer = useCallback(async (answer: string, responseLanguage: Language) => {
     const requestId = ++audioRequestRef.current
+    const historyId = currentHistoryEntryIdRef.current
     setAudioLoading(true)
     setAudioError(null)
     setAudioApprovalPending(false)
@@ -185,14 +198,13 @@ export default function StudyAssistantPage() {
       const blob = await synthesizeSpeech(answer, responseLanguage)
       if (requestId === audioRequestRef.current) {
         setAudioUrl(URL.createObjectURL(blob))
-        const historyId = currentHistoryEntryIdRef.current
         if (historyId) {
-          void updateLocalHistoryAudio(historyId, blob)
+          void updateHistoryAudio(historyId, blob)
             .then(() => {
               setHistoryEntries((current) =>
                 current.map((item) => (item.id === historyId ? { ...item, answerAudio: blob } : item)))
             })
-            .catch(() => undefined)
+            .catch(() => setHistoryError('Answer audio could not be saved to your history. Please retry audio generation.'))
         }
       }
     } catch {
@@ -216,8 +228,9 @@ export default function StudyAssistantPage() {
     references: AskResponse['references'],
     documentGrounded: boolean,
   ) => {
+    currentHistoryEntryIdRef.current = null
     try {
-      const entry = await addLocalHistoryEntry({
+      const entry = await addHistoryEntry({
         language,
         transcript: questionText,
         answer: answerText,
@@ -227,20 +240,35 @@ export default function StudyAssistantPage() {
       })
       currentHistoryEntryIdRef.current = entry.id
       setHistoryEntries((current) => [entry, ...current])
+      setHistoryError(null)
     } catch {
-      // Local history is a convenience layer — it must never block the Q&A flow.
+      setHistoryError('This answer could not be saved to history. Keep this page open and retry when connected.')
     }
   }, [language])
 
   const handleDeleteHistoryEntry = useCallback((id: string) => {
-    setHistoryEntries((current) => current.filter((item) => item.id !== id))
-    void deleteLocalHistoryEntry(id).catch(() => undefined)
+    if (CLOUD_HISTORY && !window.confirm('Delete this history entry and its audio from your account on every device?')) return
+    void deleteHistoryEntry(id).then(() => setHistoryEntries(current => current.filter(item => item.id !== id)))
+      .catch(() => setHistoryError('History could not be deleted. Please retry.'))
   }, [])
 
   const handleClearHistory = useCallback(() => {
-    setHistoryEntries([])
-    void clearLocalHistory().catch(() => undefined)
+    if (CLOUD_HISTORY && !window.confirm('Delete all history and history audio from your account on every device? Saved revisions and documents will remain.')) return
+    void clearStudyHistory().then(() => setHistoryEntries([]))
+      .catch(() => setHistoryError('History could not be cleared. Please retry.'))
   }, [])
+
+  const handleImportHistory = async () => {
+    if (!window.confirm('Import this device’s old browser history into the account you are signed in to? Only import entries that belong to you.')) return
+    setImportingHistory(true)
+    try {
+      await importDeviceHistory()
+      setHistoryEntries(await listStudyHistory())
+      setDeviceEntries(await deviceHistoryCount())
+      setHistoryError(null)
+    } catch { setHistoryError('Import could not finish. Your remaining local entries are safe; retry to continue without duplicates.') }
+    finally { setImportingHistory(false) }
+  }
 
   // ─── ASR / transcript handlers ─────────────────────────────────────────────
   const handleTranscript = useCallback((asrResult: TranscribeResponse) => {
@@ -338,7 +366,7 @@ export default function StudyAssistantPage() {
       setHistoryEntries((current) => current.map((item) => (
         item.id === historyId ? { ...item, answer: editedAnswer } : item
       )))
-      void updateLocalHistoryAnswer(historyId, editedAnswer).catch(() => undefined)
+      void updateHistoryAnswer(historyId, editedAnswer).catch(() => setHistoryError('Edited answer could not be synced. Please retry saving it.'))
     }
   }, [answerDraft, result])
 
@@ -774,6 +802,12 @@ export default function StudyAssistantPage() {
 
         {/* ── History ── */}
         <SectionWide title="History">
+          {CLOUD_HISTORY && <p className="text-xs mb-3" style={{ color: 'var(--text-dim)' }}>Saved to your account. Available when you sign in on another device.</p>}
+          {historyError && <p role="alert" className="text-sm mb-3" style={{ color: 'var(--danger)' }}>{historyError}</p>}
+          {CLOUD_HISTORY && deviceEntries > 0 && <div className="mb-4 text-sm">
+            <p>{deviceEntries} old history entries are stored on this device.</p>
+            <button type="button" className="nb-btn-secondary mt-2" disabled={importingHistory} onClick={() => void handleImportHistory()}>{importingHistory ? 'Importing history…' : 'Import this device’s history'}</button>
+          </div>}
           <HistoryPanel
             entries={historyEntries}
             loading={historyLoading}
