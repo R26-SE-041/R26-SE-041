@@ -14,3 +14,4 @@ frontend/.vercel/
 backend/modal-accounts.json
 backend/modal-active.json
 backend/modal-active.lock
+backend/modal-remote.json

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "origin": "https://koji-studio-api.duckdns.org",
+  "token_file": "../../output/ec2-release/deploy-receiver.env"
+}

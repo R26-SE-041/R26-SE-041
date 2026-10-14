@@ -96,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.authorized():
             return self.reply(401, {"error": "Unauthorized"})
+        if self.path in {PREFIX + "/modal/status", PREFIX + "/modal/list"}:
+            return self.modal_operation(self.path.rsplit("/", 1)[1])
         match = re.fullmatch(PREFIX + r"/([a-f0-9]{40}-[0-9]+-[0-9]+)", self.path)
         if not match:
             return self.reply(404, {"error": "Unknown release"})
@@ -107,6 +109,25 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.authorized():
             return self.reply(401, {"error": "Unauthorized"})
+        if self.path == PREFIX + "/modal":
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if not 0 < size <= 1024:
+                    return self.reply(413, {"error": "Invalid account operation size"})
+                self.connection.settimeout(10)
+                body = json.loads(self.rfile.read(size))
+                if not isinstance(body, dict) or set(body) - {"action", "account"}:
+                    raise ValueError("Invalid account operation")
+                action, account = body.get("action"), body.get("account")
+                if action not in {"check", "switch", "rollback"}:
+                    raise ValueError("Invalid action")
+                if action in {"check", "switch"} and (not isinstance(account, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", account)):
+                    raise ValueError("Invalid account")
+                if action == "rollback" and account is not None:
+                    raise ValueError("Rollback does not accept an account")
+            except (ValueError, OSError):
+                return self.reply(400, {"error": "Invalid account operation"})
+            return self.modal_operation(action, account)
         sha, run, attempt = (self.headers.get(name, "") for name in
                              ("X-Koji-Commit", "X-Koji-Run", "X-Koji-Attempt"))
         if (self.path != PREFIX or not re.fullmatch(r"[a-f0-9]{40}", sha)
@@ -147,6 +168,31 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             if not started:
                 LOCK.release()
+
+    def modal_operation(self, action, account=None):
+        if not LOCK.acquire(blocking=False):
+            return self.reply(409, {"error": "Another release or account operation is running"})
+        try:
+            command = [str(ROOT / "backend/.venv/bin/python"), "-m", "studio.modal_accounts", "--json", action]
+            if account is not None:
+                command.append(account)
+            # Use the same .env and defaults as the running backend. No arbitrary shell input.
+            environment = {key: value for key, value in os.environ.items()
+                           if key not in {"KOJI_DEPLOY_TOKEN", "KOJI_MODAL_ACCOUNTS_FILE", "KOJI_MODAL_STATE_FILE"}}
+            result = subprocess.run(command, cwd=ROOT / "backend", env=environment,
+                                    capture_output=True, text=True, timeout=880)
+            try:
+                payload = json.loads(result.stdout)
+            except ValueError:
+                return self.reply(503, {"error": "Account control is unavailable; inspect the receiver journal"})
+            if result.returncode:
+                return self.reply(409, {"error": "Account operation failed; current routing retained",
+                                        "details": payload.get("details", [])})
+            self.reply(200, payload)
+        except (OSError, subprocess.TimeoutExpired):
+            self.reply(503, {"error": "Account operation could not be confirmed; query status before retrying"})
+        finally:
+            LOCK.release()
 
 
 if __name__ == "__main__":

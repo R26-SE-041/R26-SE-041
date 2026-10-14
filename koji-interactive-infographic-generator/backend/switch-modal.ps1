@@ -2,7 +2,8 @@ param(
     [string]$Account,
     [ValidateSet('switch', 'check', 'list', 'status', 'rollback')]
     [string]$Action = 'switch',
-    [string]$Python
+    [string]$Python,
+    [switch]$Local
 )
 $ErrorActionPreference = 'Stop'
 if ($Action -in @('switch', 'check') -and -not $Account) {
@@ -15,7 +16,8 @@ if (-not $Python) {
 }
 Push-Location $PSScriptRoot
 try {
-    $arguments = @('-m', 'studio.modal_accounts', $Action)
+    $module = if ($Local) { 'studio.modal_accounts' } else { 'studio.modal_remote' }
+    $arguments = @('-m', $module, $Action)
     if ($Action -in @('switch', 'check')) { $arguments += $Account }
     & $Python @arguments
     if ($LASTEXITCODE -ne 0) { throw "Modal account operation failed (exit $LASTEXITCODE)." }

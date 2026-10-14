@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 from contextlib import contextmanager
+import io
 import json
 import os
 from pathlib import Path
@@ -208,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, help="Account registry path")
     parser.add_argument("--state", type=Path, help="Shared routing state path used by the API")
     parser.add_argument("--timeout", type=float, default=120, help="Read timeout per endpoint, seconds")
+    parser.add_argument("--json", action="store_true", help="Machine-readable result for remote control")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list")
     commands.add_parser("status")
@@ -222,6 +225,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.state:
         os.environ["KOJI_MODAL_STATE_FILE"] = str(args.state.resolve())
     try:
+        if args.json:
+            # Reuse the checked local operation; keep progress out of JSON responses.
+            arguments = ["--timeout", str(args.timeout), args.command]
+            if args.command in {"check", "switch"}:
+                arguments.append(args.account)
+            progress = io.StringIO()
+            with redirect_stdout(progress):
+                result = main(arguments)
+            if result:
+                print(json.dumps({"error": "Account operation failed", "details": progress.getvalue().splitlines()}))
+                return result
+            state = current_state()
+            payload = {"active_account": state["active"]["account"],
+                       "previous_account": (state.get("previous") or {}).get("account"),
+                       "endpoints": routing_endpoints(), "details": progress.getvalue().splitlines()}
+            if args.command == "list":
+                payload["accounts"] = [{"name": name, "profile": account["profile"],
+                                        "environment": account["environment"]} for name, account in accounts().items()]
+            print(json.dumps(payload))
+            return 0
         if args.command == "status":
             state = current_state()
             print("Active:", state["active"]["account"] or "environment")

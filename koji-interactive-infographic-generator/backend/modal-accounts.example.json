@@ -7,7 +7,7 @@
       "endpoints": {
         "prompt": "https://kojithan-y--prompt-agent-api.modal.run",
         "image": "https://kojithan-y--image-agent-api.modal.run",
-        "sketch": "https://kojithan-y--sketch-agent-api.modal.run",
+        "sketch": "https://kojithan-y--sketch-agent-api.us-east.modal.run",
         "interactive": "https://kojithan-y--interactive-agent-api.modal.run",
         "evaluation": "https://kojithan-y--eval-agent-api.modal.run",
         "threed": "https://kojithan-y--threed-agent-api.modal.run",
@@ -20,11 +20,11 @@
       "endpoints": {
         "prompt": "https://ikojikn--prompt-agent-api.modal.run",
         "image": "https://ikojikn--image-agent-api.modal.run",
-        "sketch": "https://ikojikn--sketch-agent-api.modal.run",
+        "sketch": "https://ikojikn--sketch-agent-api.us-east.modal.run",
         "interactive": "https://ikojikn--interactive-agent-api.modal.run",
         "evaluation": "https://ikojikn--eval-agent-api.modal.run",
         "threed": "https://ikojikn--threed-agent-api.modal.run",
-        "orchestrator": "https://ikojikn--image-gen-orchestrator-api.modal.run"
+        "orchestrator": "https://kojithan-y--image-gen-orchestrator-api.modal.run"
       }
     },
     "agal-koji": {
@@ -37,7 +37,7 @@
         "interactive": "https://agal-koji--interactive-agent-api.modal.run",
         "evaluation": "https://agal-koji--eval-agent-api.modal.run",
         "threed": "https://agal-koji--threed-agent-api.modal.run",
-        "orchestrator": "https://agal-koji--image-gen-orchestrator-api.modal.run"
+        "orchestrator": "https://kojithan-y--image-gen-orchestrator-api.modal.run"
       }
     }
   }

@@ -1,5 +1,7 @@
 """Routing switches must be atomic, checked and independent of queued jobs."""
 import importlib.util
+import io
+from contextlib import redirect_stdout
 import json
 import os
 from pathlib import Path
@@ -132,6 +134,19 @@ class ModalAccountTests(unittest.TestCase):
     def test_cli_invalid_account_returns_failure(self):
         self.assertEqual(routing.main(["check", "unknown"]), 1)
 
+    def test_json_wire_response_preserves_health_failure_and_active_account(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(routing.main(["--json", "switch", "first"]), 0)
+        self.assertEqual(json.loads(output.getvalue())["active_account"], "first")
+        self.get.side_effect = requests.ConnectionError()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(routing.main(["--json", "switch", "second"]), 1)
+        payload = json.loads(output.getvalue())
+        self.assertIn("Account operation failed", payload["error"])
+        self.assertEqual(routing.current_state()["active"]["account"], "first")
+
     def test_concurrent_switch_is_rejected_before_health_checks(self):
         with routing.switch_lock():
             with self.assertRaisesRegex(ValueError, "Another account switch"):
@@ -200,6 +215,17 @@ class ModalAccountTests(unittest.TestCase):
         self.assertEqual(run.call_count, 9)
         secret_command = run.call_args_list[-2].args[0]
         self.assertIn("PROMPT_AGENT_URL=" + endpoints("first")["prompt"], secret_command)
+
+    def test_selective_sketch_deployment_does_not_create_database_secrets(self):
+        path = Path(__file__).resolve().parents[2] / "deploy/modal/deploy_accounts.py"
+        spec = importlib.util.spec_from_file_location("selective_deploy", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.object(module.subprocess, "run") as run:
+            module.deploy("first", self.config["accounts"]["first"], services=["sketch"])
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args.args[0][-1], "agents/sketch-agent/modal_app.py")
+        self.assertNotIn("secret", run.call_args.args[0])
 
 
 if __name__ == "__main__":

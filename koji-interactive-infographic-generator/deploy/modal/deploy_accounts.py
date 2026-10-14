@@ -13,10 +13,13 @@ from studio.modal_accounts import SERVICES, accounts
 TARGETS = [f"agents/{name}/modal_app.py" for name in (
     "prompt-agent", "image-agent", "sketch-agent", "interactive-agent", "eval-agent", "threed-agent",
 )]
+TARGET_MAP = dict(zip(SERVICES, TARGETS))
 
 
-def deploy(name: str, account: dict, *, include_orchestrator: bool = False) -> None:
+def deploy(name: str, account: dict, *, include_orchestrator: bool = False, services: list[str] | None = None) -> None:
     environment = dict(os.environ)
+    environment["PYTHONUTF8"] = "1"
+    environment["PYTHONIOENCODING"] = "utf-8"
     # Tokens/OAuth from a shell or CI would override the requested profile.
     for key in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "MODAL_OAUTH_REFRESH_TOKEN",
                 "MODAL_OAUTH_CLIENT_ID", "MODAL_OAUTH_CLIENT_SECRET"):
@@ -30,9 +33,11 @@ def deploy(name: str, account: dict, *, include_orchestrator: bool = False) -> N
 
     print(f"Deploying {name} using profile {account['profile']}", flush=True)
     run("token", "info")
-    for target in TARGETS:
-        run("deploy", "--env", account["environment"], target)
-    if include_orchestrator:
+    selected = list(SERVICES) if services is None else services
+    for service in selected:
+        if service != "orchestrator":
+            run("deploy", "--env", account["environment"], TARGET_MAP[service])
+    if include_orchestrator or "orchestrator" in selected:
         # Bind the account's orchestrator to that account's explicitly configured URLs.
         values = [f"{key}={account['endpoints'][service]}" for service, key in SERVICES.items()]
         run("secret", "create", "--env", account["environment"], "--force", "agent-urls-secret", *values)
@@ -47,6 +52,8 @@ def main() -> int:
     selection.add_argument("--all", action="store_true")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--include-orchestrator", action="store_true")
+    parser.add_argument("--services", nargs="+", choices=[*SERVICES, "orchestrator"],
+                        help="Deploy only these services; default is all six agents")
     args = parser.parse_args()
     if args.config:
         os.environ["KOJI_MODAL_ACCOUNTS_FILE"] = str(args.config.resolve())
@@ -56,7 +63,7 @@ def main() -> int:
         if any(name not in registry for name in names):
             raise ValueError("Requested account is not registered")
         for name in names:
-            deploy(name, registry[name], include_orchestrator=args.include_orchestrator)
+            deploy(name, registry[name], include_orchestrator=args.include_orchestrator, services=args.services)
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"Deployment stopped: {exc}", file=sys.stderr)
