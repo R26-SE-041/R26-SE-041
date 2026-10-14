@@ -39,10 +39,15 @@ function createApiClient(): AxiosInstance {
 
 const api = createApiClient()
 
-export async function transcribeAudio(audioBlob: Blob, language: Language, filename = 'recording.webm'): Promise<TranscribeResponse> {
+export async function prepareVoice(language: Language): Promise<void> {
+  await api.post('/api/v1/voice/prepare', { language }, { timeout: 10_000 })
+}
+
+export async function transcribeAudio(audioBlob: Blob, language: Language, filename = 'recording.webm', prepareAnswer = false): Promise<TranscribeResponse> {
   const form = new FormData()
   form.append('audio_file', audioBlob, filename)
   form.append('language', language)
+  form.append('prepare_answer', String(prepareAnswer))
   const { data } = await api.post<TranscribeResponse>('/api/v1/voice/transcribe', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

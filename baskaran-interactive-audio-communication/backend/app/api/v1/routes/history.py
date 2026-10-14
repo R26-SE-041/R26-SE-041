@@ -1,6 +1,7 @@
 """Persistent, user-scoped Q&A history endpoints."""
 
 import json
+import asyncio
 from datetime import datetime
 from typing import Annotated
 
@@ -22,7 +23,7 @@ def _user_id(user: dict | None) -> str:
 
 @router.get("")
 async def history_list(current_user: Annotated[dict | None, Depends(get_current_user)]):
-    return list_history(_user_id(current_user))
+    return await asyncio.to_thread(list_history, _user_id(current_user))
 
 
 @router.post("", status_code=201)
@@ -47,7 +48,7 @@ async def history_create(
         raise HTTPException(422, 'Question, answer and a supported language are required')
     audio = await _read_audio(audio_file)
     question_content = await _read_audio(question_audio)
-    return create_history(user_id, question.strip(), answer.strip(), language,
+    return await asyncio.to_thread(create_history, user_id, question.strip(), answer.strip(), language,
                           parsed_references, audio, question_content, document_grounded,
                           source_id, created_at.isoformat() if created_at else None)
 
@@ -60,7 +61,7 @@ async def history_attach_audio(
     audio = await _read_audio(audio_file)
     if not audio:
         raise HTTPException(status_code=400, detail="Audio file is empty")
-    item = attach_audio(_user_id(current_user), history_id, audio)
+    item = await asyncio.to_thread(attach_audio, _user_id(current_user), history_id, audio)
     if not item:
         raise HTTPException(status_code=404, detail="History item not found")
     return item
@@ -69,7 +70,7 @@ async def history_attach_audio(
 @router.get("/{history_id}/audio")
 async def history_audio(history_id: str,
                         current_user: Annotated[dict | None, Depends(get_current_user)]):
-    path = get_audio_path(_user_id(current_user), history_id)
+    path = await asyncio.to_thread(get_audio_path, _user_id(current_user), history_id)
     if not path:
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(path, media_type="audio/wav", filename=f"answer-{history_id}.wav")

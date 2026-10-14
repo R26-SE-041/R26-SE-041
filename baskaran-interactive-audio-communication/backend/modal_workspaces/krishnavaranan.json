@@ -15,5 +15,17 @@
     "MODAL_BGE_EMBED_URL": "https://krishnavaranan--voicelearn-bge-retrieval-bgeembedder-embed.modal.run",
     "MODAL_BGE_RERANK_URL": "https://krishnavaranan--voicelearn-bge-retrieval-bgereranker-rerank.modal.run"
   },
+  "warmups": {
+    "MODAL_WHISPER_URL": "https://krishnavaranan--voicelearn-whisper-stt-whisperstt-gpu-info.modal.run",
+    "MODAL_INDIC_STT_URL": "https://krishnavaranan--voicelearn-tamil-asr-qwen3-tamilasrqwen3-83fcc0.modal.run",
+    "MODAL_SINHALA_ASR_URL": "https://krishnavaranan--voicelearn-sinhala-whisper-asr-stage2-si-c8fda1.us-east.modal.run",
+    "MODAL_BASE_GEMMA_URL": "https://krishnavaranan--voicelearn-document-gemma-basegemmaanswe-500868.us-east.modal.run",
+    "MODAL_LOCALIZER_URL": "https://krishnavaranan--voicelearn-localizer-localizer-gpu-info.modal.run",
+    "MODAL_ENGLISH_KOKORO_TTS_URL": "https://krishnavaranan--voicelearn-english-kokoro-tts-englishkok-a3cb5c.modal.run",
+    "MODAL_INDIC_PARLER_MIXED_TTS_URL": "https://krishnavaranan--voicelearn-indic-parler-mixed-tts-indicp-180004.modal.run",
+    "MODAL_SINHALA_VITS_TTS_URL": "https://krishnavaranan--voicelearn-sinhala-vits-tts-sinhalavitst-1bed76.modal.run",
+    "MODAL_BGE_EMBED_URL": "https://krishnavaranan--voicelearn-bge-retrieval-bgeembedder-gpu-info.modal.run",
+    "MODAL_BGE_RERANK_URL": "https://krishnavaranan--voicelearn-bge-retrieval-bgereranker-gpu-info.modal.run"
+  },
   "discovery_errors": {}
 }

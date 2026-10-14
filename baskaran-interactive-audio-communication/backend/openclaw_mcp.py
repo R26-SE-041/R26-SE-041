@@ -30,6 +30,12 @@ async def call_tool(name: str, action_id: str):
 
 
 @mcp.tool()
+async def run_document_workflow(action_id: str) -> dict:
+    """Execute all missing ticket steps in order and verify saved results in one call. Await completion."""
+    return await call_tool("run_document_workflow", action_id)
+
+
+@mcp.tool()
 async def summarize_document(action_id: str) -> dict:
     """Prepare transcript once. Result is metadata only; follow next_tool, never request text."""
     return await call_tool("summarize_document", action_id)

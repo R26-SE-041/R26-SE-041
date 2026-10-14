@@ -835,3 +835,24 @@ async def test_tool_result_names_next_step_without_exposing_content(env, monkeyp
         assert result["next_tool"] == next_tool
         assert result["workflow_complete"] == (next_tool is None)
         assert "script" not in result and "source_text" not in result
+
+
+@pytest.mark.asyncio
+async def test_workflow_tool_resumes_only_missing_steps_and_keeps_order(env, monkeypatch):
+    doc, session, _, generator, tts = section_fixture(env, monkeypatch)
+    ticket = store.create('alice', session, doc, 'audio_revision', revision_mode='sectioned')
+    await service.execute_tool('summarize_document', ticket)
+    result = await service.execute_workflow(ticket)
+    action = store.get(ticket, 'alice')
+    assert result['workflow_complete'] and result['next_tool'] is None
+    assert action['trace'] == service.required_tools('audio_revision')
+    assert generator.await_count == 1 and tts.await_count == 3
+    assert action['saved'] and action['audio_saved']
+    service.verify_section_manifest(action)
+
+
+def test_workflow_bridge_still_requires_secret(env):
+    _, doc, session, app = env
+    ticket = store.create('alice', session, doc, 'summarize_and_save')
+    with TestClient(app) as client:
+        assert client.post('/api/v1/actions/tools/run_document_workflow', json={'action_id':ticket}).status_code == 401

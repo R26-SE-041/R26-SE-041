@@ -40,6 +40,18 @@ class TTSRequest(BaseModel):
     language: Language
 
 
+class PrepareRequest(BaseModel):
+    language: Language = Language.ENGLISH
+
+
+@router.post('/prepare', status_code=202)
+async def prepare_voice(request: PrepareRequest,
+                        current_user: Annotated[dict, Depends(get_current_user)] = None):
+    from app.services.model_warmup import start
+    start(request.language.value)
+    return {'preparing': True}
+
+
 def _validate_audio(file: UploadFile) -> None:
     if not file.content_type:
         return
@@ -106,12 +118,21 @@ async def text_to_speech(
 
     started = time.perf_counter()
     try:
-        if request.language is Language.ENGLISH:
-            audio_bytes = await call_english_tts(text)
-        elif request.language is Language.TAMIL:
-            audio_bytes = await call_tamil_tts(text)
-        else:
-            audio_bytes = await call_sinhala_vits_tts_direct(text)
+        from app.core.config import get_settings
+        from app.services.latency_cache import speech
+        settings = get_settings()
+        language = request.language.value
+        endpoint = {'english': settings.modal_english_kokoro_tts_url,
+                    'tamil': settings.modal_indic_parler_mixed_tts_url,
+                    'sinhala': settings.modal_sinhala_vits_tts_url}[language]
+        async def generate():
+            if request.language is Language.ENGLISH:
+                return await call_english_tts(text)
+            if request.language is Language.TAMIL:
+                return await call_tamil_tts(text)
+            return await call_sinhala_vits_tts_direct(text)
+        owner = current_user.get('sub') if current_user else 'guest'
+        audio_bytes = await speech.get((owner, language, endpoint, text), generate)
     except Exception as exc:
         logger.warning("TTS failed for %s: %s", request.language.value, exc)
         raise HTTPException(
@@ -139,6 +160,7 @@ async def text_to_speech(
 async def transcribe_audio(
     audio_file: Annotated[UploadFile, File(description="Audio recording (webm/wav/mp3/m4a/ogg)")],
     language: Annotated[Language, Form(description="Language mode selected by user")] = Language.ENGLISH,
+    prepare_answer: Annotated[bool, Form()] = False,
     current_user: Annotated[dict, Depends(get_current_user)] = None,
 ):
     """
@@ -175,6 +197,9 @@ async def transcribe_audio(
     start = time.perf_counter()
 
     graph = build_stt_only_graph()
+    from app.services.model_warmup import start as prepare_models
+    if prepare_answer:
+        prepare_models(language.value)
     result = await graph.ainvoke({
         "audio_bytes": audio_bytes,
         "audio_filename": audio_file.filename or "recording.webm",

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
 import type { Language, TranscribeResponse } from '@/types'
-import { transcribeAudio } from '@/lib/api'
+import { transcribeAudio, prepareVoice } from '@/lib/api'
 
 interface VoiceRecorderProps {
   language: Language
@@ -13,6 +13,7 @@ interface VoiceRecorderProps {
   /** Fired with the raw recording right before a successful transcription, so callers can archive it. */
   onAudioCaptured?: (blob: Blob) => void
   disabled?: boolean
+  prepareAnswer?: boolean
 }
 
 /* ── Waveform bars ── */
@@ -213,7 +214,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
 }
 
 /* ── Main ── */
-export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false }: VoiceRecorderProps) {
+export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false, prepareAnswer = false }: VoiceRecorderProps) {
   const { recordingState, audioBlob, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -225,9 +226,10 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
   /* Live timer */
   useEffect(() => {
     if (recordingState !== 'recording') { setElapsed(0); return }
+    if (prepareAnswer) void prepareVoice(language).catch(() => undefined)
     const t = setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => clearInterval(t)
-  }, [recordingState])
+  }, [recordingState, language, prepareAnswer])
 
   /* When recording finishes → show preview */
   useEffect(() => {
@@ -242,7 +244,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
     if (!previewBlob) return
     setIsTranscribing(true)
     try {
-      const result = await transcribeAudio(previewBlob, language, uploadedFileName ?? 'recording.webm')
+      const result = await transcribeAudio(previewBlob, language, uploadedFileName ?? 'recording.webm', prepareAnswer)
       onAudioCaptured?.(previewBlob)
       onTranscript(result)
     } catch (e) {

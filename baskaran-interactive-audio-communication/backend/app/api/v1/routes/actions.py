@@ -286,6 +286,8 @@ async def bridge(tool_name: str, body: ToolRequest,
     if not secret or not secrets.compare_digest(x_action_bridge_secret or "", secret):
         raise HTTPException(401, "Invalid tool bridge credentials.")
     try:
+        if tool_name == 'run_document_workflow':
+            return await service.execute_workflow(body.action_id)
         return await service.execute_tool(tool_name, body.action_id)
     except service.ToolOrderError as exc:
         action = store.get(body.action_id)

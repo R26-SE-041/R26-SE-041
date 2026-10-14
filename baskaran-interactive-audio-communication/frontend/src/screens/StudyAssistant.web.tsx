@@ -184,7 +184,7 @@ export default function StudyAssistantPage() {
   }, [])
 
   // ─── TTS ───────────────────────────────────────────────────────────────────
-  const synthesizeAnswer = useCallback(async (answer: string, responseLanguage: Language) => {
+  const synthesizeAnswer = useCallback(async (answer: string, responseLanguage: Language, savingHistory?: Promise<string | null>) => {
     const requestId = ++audioRequestRef.current
     const historyId = currentHistoryEntryIdRef.current
     setAudioLoading(true)
@@ -198,11 +198,13 @@ export default function StudyAssistantPage() {
       const blob = await synthesizeSpeech(answer, responseLanguage)
       if (requestId === audioRequestRef.current) {
         setAudioUrl(URL.createObjectURL(blob))
-        if (historyId) {
-          void updateHistoryAudio(historyId, blob)
+        setAudioLoading(false)
+        const savedHistoryId = savingHistory ? await savingHistory : historyId
+        if (savedHistoryId) {
+          void updateHistoryAudio(savedHistoryId, blob)
             .then(() => {
               setHistoryEntries((current) =>
-                current.map((item) => (item.id === historyId ? { ...item, answerAudio: blob } : item)))
+                current.map((item) => (item.id === savedHistoryId ? { ...item, answerAudio: blob } : item)))
             })
             .catch(() => setHistoryError('Answer audio could not be saved to your history. Please retry audio generation.'))
         }
@@ -241,8 +243,10 @@ export default function StudyAssistantPage() {
       currentHistoryEntryIdRef.current = entry.id
       setHistoryEntries((current) => [entry, ...current])
       setHistoryError(null)
+      return entry.id
     } catch {
       setHistoryError('This answer could not be saved to history. Keep this page open and retry when connected.')
+      return null
     }
   }, [language])
 
@@ -334,14 +338,15 @@ export default function StudyAssistantPage() {
         answer.answer.startsWith('RAG generation is not available') ||
         answer.answer.startsWith("I couldn't generate") ||
         answer.answer.startsWith("I couldn't find relevant content")
-      await persistHistoryEntry(question, answer.answer, answer.references, isDocumentGrounded)
+      const savingHistory = persistHistoryEntry(question, answer.answer, answer.references, isDocumentGrounded)
       if (!isErrorAnswer) {
         if (language === 'sinhala') {
           setAudioApprovalPending(true)
         } else {
-          void synthesizeAnswer(answer.answer, language)
+          void synthesizeAnswer(answer.answer, language, savingHistory)
         }
       }
+      await savingHistory
     } catch (error) {
       setPhase('rag-error')
       setRagError(
@@ -587,6 +592,7 @@ export default function StudyAssistantPage() {
         <SectionWide title={loc.ui.askAQuestion}>
           <VoiceRecorder
             language={language}
+            prepareAnswer
             onTranscript={handleTranscript}
             onAudioCaptured={handleAudioCaptured}
             onError={handleVoiceError}

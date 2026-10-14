@@ -36,6 +36,17 @@ def _auth_headers() -> dict[str, str]:
 # ── BGE-M3 Embedding (Modal GPU) ─────────────────────────────────────────────────
 
 async def call_bge_embed(texts: list[str]) -> list[list[float]]:
+    # Pure query embeddings are independent of document permissions. Retrieval
+    # still queries the current owner's live collection and reranks every time.
+    if len(texts) == 1:
+        from app.services.latency_cache import embeddings
+        value = await embeddings.get((get_settings().modal_bge_embed_url, texts[0]),
+            lambda: _call_bge_embed(texts), size=lambda x: sum(len(v) * 8 for v in x))
+        return [list(v) for v in value]
+    return await _call_bge_embed(texts)
+
+
+async def _call_bge_embed(texts: list[str]) -> list[list[float]]:
     """
     Embed texts using the Modal BGE-M3 GPU endpoint (BGEEmbedder /embed).
 
@@ -1128,11 +1139,11 @@ async def call_sinhala_asr_direct(
         )
 
         # Send multipart/form-data — matches the Modal endpoint's UploadFile expectation
-        async with _httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
+        response = await _http.post(
                 url,
                 headers=_auth_headers(),
                 files={"audio_file": (filename, audio_bytes, content_type)},
+                timeout=180.0,
             )
         response.raise_for_status()
         elapsed = _time.perf_counter() - _t0

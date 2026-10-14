@@ -5,6 +5,7 @@ import secrets
 import sqlite3
 import time
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
@@ -195,10 +196,13 @@ def artifact(summary_id, extension="txt"):
 
 def publish_artifacts(action):
     """A saved flag is committed only after every referenced object is uploaded."""
-    for identifier, extension in _artifacts(action):
+    def upload(item):
+        identifier, extension = item
         path = artifact(identifier, extension)
         mime = {'txt': 'text/plain', 'json': 'application/json', 'wav': 'audio/wav'}[extension]
         cloud.upload('revisions', cloud.owner_path(action['user_id'], path.name), path.read_bytes(), mime)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(upload, _artifacts(action)))
 
 
 def restore_artifacts(action):

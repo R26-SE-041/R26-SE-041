@@ -7,6 +7,7 @@ import io
 import wave
 import unicodedata
 import json
+import logging
 
 from app.services import revision_sections
 from uuid import uuid4
@@ -16,6 +17,7 @@ import httpx
 from app.core.config import get_settings
 from app.services import action_store as store, local_document_store
 from app.services.summary_text import clean_summary, plain_summary
+logger = logging.getLogger(__name__)
 
 
 def classify(command: str):
@@ -70,7 +72,11 @@ async def document_bytes(document_id, user_id):
             "id", document_id).eq("user_id", user_id).execute()
         if result.data:
             row = result.data[0]
-            return row["filename"], await download_document(row["storage_path"])
+            from app.services.latency_cache import documents
+            # Ownership/existence is checked above on every call, even on hits.
+            content = await documents.get((get_settings().supabase_url, user_id, document_id, row['storage_path']),
+                lambda: download_document(row['storage_path']))
+            return row['filename'], content
     raise ValueError("Selected document is unavailable or does not belong to you.")
 
 
@@ -235,9 +241,9 @@ def section_transcript(sections):
 
 
 async def prepare_sectioned_revision(action_id):
-    action = open_ticket(action_id)
+    action = (await asyncio.to_thread(open_ticket, action_id))
     if not action.get("sections"):
-        store.update(action_id, status="generating")
+        (await asyncio.to_thread(store.update, action_id, status="generating"))
         filename, content = await document_bytes(action["document_id"], action["user_id"])
         text = await asyncio.to_thread(extract, filename, content)
         selected = action.get("selected_source")
@@ -253,65 +259,65 @@ async def prepare_sectioned_revision(action_id):
             sections = await revision_sections.generate_sections(text, words=160)
         else:
             sections = await revision_sections.generate_sections(text)
-        open_ticket(action_id)
-        store.update(action_id, sections=sections, source_hash=revision_sections.source_hash(text),
+        (await asyncio.to_thread(open_ticket, action_id))
+        (await asyncio.to_thread(store.update, action_id, sections=sections, source_hash=revision_sections.source_hash(text),
                      filename=filename, summary=section_transcript(sections), summary_id=uuid4().hex,
-                     summary_language="english")
-    action = open_ticket(action_id)
+                     summary_language="english"))
+    action = (await asyncio.to_thread(open_ticket, action_id))
     sections, language = action["sections"], action.get("language", "english")
     for section in sections:
         if section.get("script_language", "english") != language:
-            store.update(action_id, status="localizing", progress=f"Translating section {section['id'] + 1} of {len(sections)}")
+            (await asyncio.to_thread(store.update, action_id, status="localizing", progress=f"Translating section {section['id'] + 1} of {len(sections)}"))
             # The transcript retains all English sections until every translation succeeds.
             localized = await localize_action_text(section["script"], language)
-            open_ticket(action_id)
+            (await asyncio.to_thread(open_ticket, action_id))
             section.update(script=localized, script_language=language)
-            store.update(action_id, sections=sections)
-    open_ticket(action_id)
-    store.update(action_id, summary=section_transcript(sections), summary_language=language,
-                 progress="Revision sections prepared")
+            (await asyncio.to_thread(store.update, action_id, sections=sections))
+    (await asyncio.to_thread(open_ticket, action_id))
+    (await asyncio.to_thread(store.update, action_id, summary=section_transcript(sections), summary_language=language,
+                 progress="Revision sections prepared"))
 
 
 async def synthesize_sections(action_id):
-    action = open_ticket(action_id)
+    action = (await asyncio.to_thread(open_ticket, action_id))
     sections, language = action["sections"], action.get("language", "english")
     contents = []
     for section in sections:
         if section.get("script_language") != language:
             raise ValueError("A revision section is not ready in the requested language.")
         if not section.get("audio_id"):
-            store.update(action_id, status="synthesizing", progress=f"Generating section {section['id'] + 1} of {len(sections)}")
+            (await asyncio.to_thread(store.update, action_id, status="synthesizing", progress=f"Generating section {section['id'] + 1} of {len(sections)}"))
             content, duration = await synthesize_revision(section["script"], language)
-            open_ticket(action_id)
+            (await asyncio.to_thread(open_ticket, action_id))
             section.update(audio_id=uuid4().hex, duration=duration)
             await asyncio.to_thread(store.artifact(section["audio_id"], "wav").write_bytes, content)
-            store.update(action_id, sections=sections)
+            (await asyncio.to_thread(store.update, action_id, sections=sections))
         contents.append(await asyncio.to_thread(store.artifact(section["audio_id"], "wav").read_bytes))
     combined, durations = revision_sections.concatenate_wavs(contents)
     offset = 0.0
     for section, duration in zip(sections, durations):
         section.update(start_seconds=offset, end_seconds=offset + duration, duration=duration)
         offset += duration
-    open_ticket(action_id)
-    store.update(action_id, sections=sections, progress="Section audio generated")
+    (await asyncio.to_thread(open_ticket, action_id))
+    (await asyncio.to_thread(store.update, action_id, sections=sections, progress="Section audio generated"))
     return combined, offset
 
 
 async def save_section_manifest(action_id):
-    action = open_ticket(action_id)
+    action = (await asyncio.to_thread(open_ticket, action_id))
     filename, content = await document_bytes(action["document_id"], action["user_id"])
     source = await asyncio.to_thread(extract, filename, content)
     if revision_sections.source_hash(source) != action.get("source_hash"):
         raise ValueError("The source document changed. Generate a new revision.")
-    open_ticket(action_id)
+    (await asyncio.to_thread(open_ticket, action_id))
     manifest_id = action.get("manifest_id") or uuid4().hex
     payload = {"version": 1, "source_hash": action["source_hash"], "language": action["language"],
                "audio_id": action["audio_id"], "audio_duration": action["audio_duration"],
                "sections": action["sections"]}
     await asyncio.to_thread(store.artifact(manifest_id, "json").write_text,
                             json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    store.update(action_id, manifest_id=manifest_id)
-    verify_section_manifest(store.get(action_id))
+    (await asyncio.to_thread(store.update, action_id, manifest_id=manifest_id))
+    verify_section_manifest((await asyncio.to_thread(store.get, action_id)))
 
 
 def verify_section_manifest(action):
@@ -349,9 +355,10 @@ class ToolOrderError(ValueError):
 
 
 async def execute_tool(name, action_id):
+    started = time.perf_counter()
     lock = _locks.setdefault(action_id, asyncio.Lock())
     async with lock:
-        action = store.get(action_id)
+        action = (await asyncio.to_thread(store.get, action_id))
         if action["expires"] <= time.time() or action["status"] in {"complete", "failed", "partial"}:
             raise ValueError("Action ticket is expired or closed.")
         if name == "summarize_document":
@@ -362,7 +369,7 @@ async def execute_tool(name, action_id):
             if action["intent"] == "audio_revision" and action.get("revision_mode") == "sectioned":
                 await prepare_sectioned_revision(action_id)
             elif not action["summary"]:
-                store.update(action_id, status="generating")
+                (await asyncio.to_thread(store.update, action_id, status="generating"))
                 filename, content = await document_bytes(action["document_id"], action["user_id"])
                 text = await asyncio.to_thread(extract, filename, content)
                 if action["intent"] == "audio_revision":
@@ -370,37 +377,37 @@ async def execute_tool(name, action_id):
                     summary = await generate_audio_script(text) if style == "short" else await generate_audio_script(text, style)
                 else:
                     summary = clean_summary(await generate_summary(text))
-                current = store.get(action_id)
+                current = (await asyncio.to_thread(store.get, action_id))
                 if current["expires"] <= time.time() or current["status"] in {"complete", "failed", "partial"}:
                     raise ValueError("Action ticket expired while generating the summary.")
-                store.update(action_id, summary=summary, summary_id=uuid4().hex, filename=filename,
-                             summary_language="english")
+                (await asyncio.to_thread(store.update, action_id, summary=summary, summary_id=uuid4().hex, filename=filename,
+                             summary_language="english"))
                 language = action.get("language", "english")
                 if language != "english":
-                    store.update(action_id, status="localizing")
+                    (await asyncio.to_thread(store.update, action_id, status="localizing"))
                     localized = await localize_action_text(summary, language)
-                    current = store.get(action_id)
+                    current = (await asyncio.to_thread(store.get, action_id))
                     if current["expires"] <= time.time() or current["status"] in {"complete", "partial", "failed"}:
                         raise ValueError("Action ticket expired while preparing the localized transcript.")
-                    store.update(action_id, summary=localized, summary_language=language)
-            if store.get(action_id).get("summary_language", "english") != action.get("language", "english"):
+                    (await asyncio.to_thread(store.update, action_id, summary=localized, summary_language=language))
+            if (await asyncio.to_thread(store.get, action_id)).get("summary_language", "english") != action.get("language", "english"):
                 raise ValueError("The requested language transcript is not ready.")
         elif name in {"create_flashcards", "save_flashcards"}:
             if action["intent"] != "flashcards":
                 raise ValueError("This ticket does not permit flashcard tools.")
             filename, content = await document_bytes(action["document_id"], action["user_id"])
             if name == "create_flashcards" and not action.get("flashcards"):
-                store.update(action_id, status="generating")
+                (await asyncio.to_thread(store.update, action_id, status="generating"))
                 text = await asyncio.to_thread(extract, filename, content)
                 cards = await generate_flashcards(text, action["language"])
-                open_ticket(action_id)
+                (await asyncio.to_thread(open_ticket, action_id))
                 summary = "\n\n".join(f"{i + 1}. {card['question']}\n{card['answer']}" for i, card in enumerate(cards))
-                store.update(action_id, flashcards=cards, summary=summary, summary_id=uuid4().hex,
-                             flashcards_id=uuid4().hex, summary_language=action["language"], filename=filename)
+                (await asyncio.to_thread(store.update, action_id, flashcards=cards, summary=summary, summary_id=uuid4().hex,
+                             flashcards_id=uuid4().hex, summary_language=action["language"], filename=filename))
             elif name == "save_flashcards":
                 if not action.get("flashcards") or "create_flashcards" not in action["trace"]:
                     raise ToolOrderError("Create flashcards before saving them.")
-                open_ticket(action_id)
+                (await asyncio.to_thread(open_ticket, action_id))
                 payload = json.dumps({"language": action["language"], "filename": filename,
                                       "cards": action["flashcards"]}, ensure_ascii=False, indent=2)
                 path = store.artifact(action["flashcards_id"], "json")
@@ -408,7 +415,7 @@ async def execute_tool(name, action_id):
                 await asyncio.to_thread(store.artifact(action["summary_id"]).write_text, action["summary"], encoding="utf-8")
                 if path.read_text(encoding="utf-8") != payload:
                     raise ValueError("Saved flashcards verification failed.")
-                store.update(action_id, saved=True)
+                (await asyncio.to_thread(store.update, action_id, saved=True))
         elif name == "save_summary":
             if action["intent"] not in {"save", "summarize_and_save"}:
                 raise ValueError("This ticket does not permit saving.")
@@ -416,28 +423,28 @@ async def execute_tool(name, action_id):
                 raise ToolOrderError("Generate a summary before saving it.")
             # Recheck source ownership, including when saving an earlier summary.
             await document_bytes(action["document_id"], action["user_id"])
-            current = store.get(action_id)
+            current = (await asyncio.to_thread(store.get, action_id))
             if current["expires"] <= time.time() or current["status"] in {"complete", "failed", "partial"}:
                 raise ValueError("Action ticket expired before saving.")
-            store.update(action_id, status="saving")
+            (await asyncio.to_thread(store.update, action_id, status="saving"))
             path = store.artifact(action["summary_id"])
             exported = plain_summary(action["summary"])
             await asyncio.to_thread(path.write_text, exported, encoding="utf-8")
             if path.read_text(encoding="utf-8") != exported:
                 raise ValueError("Saved artifact verification failed.")
-            store.update(action_id, saved=True)
+            (await asyncio.to_thread(store.update, action_id, saved=True))
         elif name in {"create_revision_audio", "save_audio_revision"}:
             if action["intent"] != "audio_revision":
                 raise ValueError("This ticket does not permit audio revision tools.")
             await document_bytes(action["document_id"], action["user_id"])
-            current = store.get(action_id)
+            current = (await asyncio.to_thread(store.get, action_id))
             if current["expires"] <= time.time() or current["status"] in {"complete", "partial", "failed"}:
                 raise ValueError("Action ticket expired before audio processing.")
             if not action["summary"] or "summarize_document" not in action["trace"]:
                 raise ToolOrderError("Create the revision transcript before generating audio.")
             if name == "create_revision_audio":
                 if not action.get("audio_id"):
-                    store.update(action_id, status="synthesizing")
+                    (await asyncio.to_thread(store.update, action_id, status="synthesizing"))
                     language = action.get("language", "english")
                     if action.get("summary_language", "english") != language:
                         raise ValueError("The transcript is not ready in the requested language.")
@@ -446,16 +453,16 @@ async def execute_tool(name, action_id):
                     else:
                         content, duration = (await synthesize_revision(action["summary"]) if language == "english"
                                          else await synthesize_revision(action["summary"], language))
-                    current = store.get(action_id)
+                    current = (await asyncio.to_thread(store.get, action_id))
                     if current["expires"] <= time.time() or current["status"] in {"complete", "partial", "failed"}:
                         raise ValueError("Action ticket expired while generating audio.")
                     audio_id = uuid4().hex
                     await asyncio.to_thread(store.artifact(audio_id, "wav").write_bytes, content)
-                    store.update(action_id, audio_id=audio_id, audio_duration=duration)
+                    (await asyncio.to_thread(store.update, action_id, audio_id=audio_id, audio_duration=duration))
             else:
                 if not action.get("audio_id") or "create_revision_audio" not in action["trace"]:
                     raise ToolOrderError("Generate audio before saving the revision.")
-                store.update(action_id, status="saving")
+                (await asyncio.to_thread(store.update, action_id, status="saving"))
                 path = store.artifact(action["summary_id"])
                 exported = plain_summary(action["summary"])
                 await asyncio.to_thread(path.write_text, exported, encoding="utf-8")
@@ -463,13 +470,14 @@ async def execute_tool(name, action_id):
                     raise ValueError("Saved audio revision verification failed.")
                 if action.get("revision_mode") == "sectioned":
                     await save_section_manifest(action_id)
-                store.update(action_id, saved=True, audio_saved=True)
+                (await asyncio.to_thread(store.update, action_id, saved=True, audio_saved=True))
         else:
             raise ValueError("Unsupported tool.")
-        action = store.get(action_id)
-        store.update(action_id, trace=list(dict.fromkeys([*action["trace"], name])))
-        action = store.get(action_id)
+        action = (await asyncio.to_thread(store.get, action_id))
+        (await asyncio.to_thread(store.update, action_id, trace=list(dict.fromkeys([*action["trace"], name]))))
+        action = (await asyncio.to_thread(store.get, action_id))
         remaining = [tool for tool in required_tools(action["intent"]) if tool not in action["trace"]]
+        logger.info('[LATENCY] ACTION TOOL name=%s duration=%.3fs', name, time.perf_counter() - started)
         return {"completed_tools": list(dict.fromkeys(action["trace"])),
                 "next_tool": remaining[0] if remaining else None, "workflow_complete": not remaining,
                 "summary_id": action["summary_id"], "saved": action["saved"], "tool": name,
@@ -481,8 +489,8 @@ async def run_openclaw(action_id):
     settings = get_settings()
     if not settings.openclaw_gateway_token or not settings.actions_bridge_secret:
         raise ValueError("OpenClaw Gateway token and action bridge secret must be configured.")
-    action = store.get(action_id)
-    async with httpx.AsyncClient(timeout=action_timeout(store.get(action_id))) as client:
+    action = (await asyncio.to_thread(store.get, action_id))
+    async with httpx.AsyncClient(timeout=action_timeout((await asyncio.to_thread(store.get, action_id)))) as client:
         response = await client.post(settings.openclaw_gateway_url.rstrip("/") + "/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.openclaw_gateway_token}"},
             json={"model": f"openclaw/{settings.openclaw_agent_id}", "stream": False,
@@ -490,37 +498,50 @@ async def run_openclaw(action_id):
                   "user": f"voicelearn-action-{action_id}" + (f"-resume-{action['gateway_attempt']}" if action.get('gateway_attempt') else ''),
                   "messages": [{"role": "user", "content":
                       f"Execute {action['intent']} using the connected VoiceLearn MCP tools. "
+                      "Call run_document_workflow once with this action_id and await its completion. "
+                      "It executes the missing required steps in order and verifies saved artifacts. "
+                      "Use individual tools only if run_document_workflow is unavailable. "
                       f"Already completed tools: {list(dict.fromkeys(action['trace']))}. Call only missing required tools in order. "
                       f"This ticket requires exactly these tools in order: {required_tools(action['intent'])}. "
                       f"Requested output language is {action.get('language', 'english')}; the backend handles translation and TTS. "
-                      f"The action_id is {action_id}. For summarize_and_save call summarize_document "
-                      "then save_summary. For save call only save_summary. "
-                      "For summarize call only summarize_document. For audio_revision call "
-                      "summarize_document, then create_revision_audio, then save_audio_revision. "
-                      "For flashcards call create_flashcards, then save_flashcards. "
+                      f"The action_id is {action_id}. "
                       "Tool results intentionally contain metadata only, never transcript text. "
                       "Follow the returned next_tool; do not repeat a completed tool to obtain text. "
-                      "Keep awaiting exec/wait calls until the backend reports each required tool completed. "
-                      "Do not finish with a statement that work is running in the background. "
-                      "Completed tools listed above are authoritative; ignore stale or expired code-mode run IDs. "
-                      "Use the same action_id for every call. Call each required tool once; "
-                      "sectioned generation can take several minutes, so await its result or wait for "
-                      "the running call instead of starting it again. Never invent a result."}]})
+                      "Await the tool result until workflow_complete is true; generation can take several minutes. "
+                      "Do not repeat calls or report completion while work is running. Never invent a result."}]})
         response.raise_for_status()
 
 
+async def execute_workflow(action_id):
+    """One agent round trip; the same bounded, ordered tools remain authoritative."""
+    action = await asyncio.to_thread(store.get, action_id)
+    if action['expires'] <= time.time() or action['status'] in {'complete', 'failed', 'partial'}:
+        raise ValueError('Action ticket is expired or closed.')
+    result = None
+    for name in required_tools(action['intent']):
+        current = await asyncio.to_thread(store.get, action_id)
+        if name not in current['trace']:
+            result = await execute_tool(name, action_id)
+    if result is None:
+        return {'workflow_complete': True, 'completed_tools': action['trace'], 'next_tool': None}
+    return result
+
+
 async def run_action(action_id):
+    started = time.perf_counter()
     settings = get_settings()
     try:
         async def work():
-            action = store.get(action_id)
+            action = (await asyncio.to_thread(store.get, action_id))
             provider = action.get("requested_provider") or settings.actions_provider
-            store.update(action_id, status="processing", provider=provider)
+            from app.services.model_warmup import start as prepare_models
+            prepare_models(action.get('language', 'english'), voice=False, audio=action['intent'] != 'flashcards')
+            (await asyncio.to_thread(store.update, action_id, status="processing", provider=provider))
             if provider == "openclaw_mcp":
                 for attempt in range(2):
                     # Resume missing tools in a fresh gateway conversation so
                     # expired code-mode wait handles cannot poison recovery.
-                    store.update(action_id, gateway_attempt=attempt)
+                    (await asyncio.to_thread(store.update, action_id, gateway_attempt=attempt))
                     gateway_error = None
                     try:
                         await run_openclaw(action_id)
@@ -532,7 +553,7 @@ async def run_action(action_id):
                     if lock and lock.locked():
                         async with lock:
                             pass
-                    current = store.get(action_id)
+                    current = (await asyncio.to_thread(store.get, action_id))
                     missing = [tool for tool in required_tools(current["intent"]) if tool not in current["trace"]]
                     if not missing or current.get("error"):
                         break
@@ -545,7 +566,7 @@ async def run_action(action_id):
                     await execute_tool(tool, action_id)
             else:
                 raise ValueError("Invalid action provider configuration.")
-            action = store.get(action_id)
+            action = (await asyncio.to_thread(store.get, action_id))
             required = required_tools(action["intent"])
             if not action["summary"] or any(tool not in action["trace"] for tool in required):
                 raise ValueError(action.get("error") or "The action agent did not execute the required tools.")
@@ -567,13 +588,14 @@ async def run_action(action_id):
                 path = store.artifact(action["flashcards_id"], "json")
                 if json.loads(path.read_text(encoding="utf-8"))["cards"] != action["flashcards"]:
                     raise ValueError("Saved flashcard deck could not be verified.")
-            store.update(action_id, status="complete", error=None)
-        await asyncio.wait_for(work(), timeout=action_timeout(store.get(action_id)))
+            (await asyncio.to_thread(store.update, action_id, status="complete", error=None))
+        await asyncio.wait_for(work(), timeout=action_timeout((await asyncio.to_thread(store.get, action_id))))
     except Exception as exc:
-        action = store.get(action_id)
+        action = (await asyncio.to_thread(store.get, action_id))
         # Never expose Gateway URLs, credentials or raw HTTP response bodies.
         message = str(exc) if isinstance(exc, ValueError) else (
             "Action timed out." if isinstance(exc, TimeoutError) else "Action service failed. Please retry.")
-        store.update(action_id, status="partial" if action["summary"] else "failed", error=message)
+        (await asyncio.to_thread(store.update, action_id, status="partial" if action["summary"] else "failed", error=message))
     finally:
+        logger.info('[LATENCY] ACTION TOTAL duration=%.3fs', time.perf_counter() - started)
         _locks.pop(action_id, None)

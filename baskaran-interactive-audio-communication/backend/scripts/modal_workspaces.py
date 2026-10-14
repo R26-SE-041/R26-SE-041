@@ -82,7 +82,16 @@ def discover(profile):
             endpoints[key] = getattr(obj, method).get_web_url()
         except Exception as exc:
             errors[key] = type(exc).__name__ + ": " + str(exc)[:200]
-    value = {"workspace": profile, "environment": "main", "endpoints": endpoints,
+    warmups = {}
+    for key, (app, cls, _) in SPECS.items():
+        if key in {'MODAL_RAG_GENERATOR_URL', 'MODAL_TRANSCRIPT_CORRECTOR_URL'}:
+            continue
+        try:
+            obj = modal.Cls.from_name(app, cls, environment_name="main")()
+            warmups[key] = obj.gpu_info.get_web_url()
+        except Exception:
+            pass  # Warm-up is optional; inference discovery remains authoritative.
+    value = {"workspace": profile, "environment": "main", "endpoints": endpoints, "warmups": warmups,
              "discovery_errors": errors}
     write_json(MANIFEST_DIR / (profile + ".json"), value)
     print(json.dumps({"workspace": profile, "resolved": len(endpoints), "errors": errors}))
