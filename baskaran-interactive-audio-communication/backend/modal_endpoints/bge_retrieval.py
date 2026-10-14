@@ -118,6 +118,7 @@ class RerankResponse(BaseModel):
     gpu="T4",
     volumes={MODELS_DIR: bge_volume},
     scaledown_window=1200,
+    max_containers=1,
     memory=8192,
 )
 class BGEEmbedder:

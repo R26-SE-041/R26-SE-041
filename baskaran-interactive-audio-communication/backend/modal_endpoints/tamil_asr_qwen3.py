@@ -84,6 +84,7 @@ _SUPPORTED = {"tamil"}
     gpu="A10G",   # Qwen3 decoder needs more VRAM than IndicConformer; A10G (24 GB) is safe
     volumes={"/models": model_volume},
     scaledown_window=300,
+    max_containers=1,
     memory=16384,  # 16 GB host RAM -- model weights + torchaudio
 )
 class TamilASRQwen3:

@@ -179,6 +179,7 @@ class SinhalaTTSRequest(BaseModel):
     gpu="T4",
     volumes={MODELS_DIR: model_volume},
     scaledown_window=300,
+    max_containers=1,
     memory=8192,
 )
 class SinhalaVITSTTS:

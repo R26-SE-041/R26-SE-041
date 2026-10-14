@@ -10,6 +10,7 @@ POST /api/v1/voice/query  (Phase 2 — skeleton)
 """
 
 import time
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -132,7 +133,10 @@ async def text_to_speech(
                 return await call_tamil_tts(text)
             return await call_sinhala_vits_tts_direct(text)
         owner = current_user.get('sub') if current_user else 'guest'
-        audio_bytes = await speech.get((owner, language, endpoint, text), generate)
+        async def bounded_generate():
+            # Redirects/retries must not reset the complete synthesis deadline.
+            return await asyncio.wait_for(generate(), timeout=180)
+        audio_bytes = await speech.get((owner, language, endpoint, text), bounded_generate)
     except Exception as exc:
         logger.warning("TTS failed for %s: %s", request.language.value, exc)
         raise HTTPException(

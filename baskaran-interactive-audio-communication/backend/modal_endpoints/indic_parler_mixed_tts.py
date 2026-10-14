@@ -236,6 +236,7 @@ def _description_for_language(language: str) -> str:
     # Keep warm for 5 minutes after last request to avoid cold-start latency
     # on rapid consecutive test calls.
     scaledown_window=300,
+    max_containers=1,
     memory=8192,
     secrets=[modal.Secret.from_name("huggingface-secret")],
 )

@@ -1,6 +1,8 @@
 **
 !app/
 !app/**
+!modal_workspaces/
+!modal_workspaces/*.json
 !requirements-cloud.txt
 !Dockerfile.ec2
 app/**/__pycache__/

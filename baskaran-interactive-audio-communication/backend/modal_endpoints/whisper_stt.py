@@ -85,6 +85,7 @@ _NATIVE_SCRIPT_LANGS = {"ta", "si"}
     gpu="T4",
     volumes={"/models": model_volume},
     scaledown_window=300,
+    max_containers=1,
     memory=4096,
 )
 class WhisperSTT:

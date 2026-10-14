@@ -25,7 +25,7 @@ def start(language, *, voice=True, audio=True):
         keys += ['MODAL_BGE_EMBED_URL', 'MODAL_BGE_RERANK_URL',
                  {'english':'MODAL_WHISPER_URL','tamil':'MODAL_INDIC_STT_URL','sinhala':'MODAL_SINHALA_ASR_URL'}[language]]
     else:
-        if language != 'english':
+        if language != 'english' and audio:
             keys.append('MODAL_LOCALIZER_URL')
     # Sinhala question audio requires later approval. Flashcards have no audio.
     if audio and not (voice and language == 'sinhala'):
@@ -42,7 +42,7 @@ def start(language, *, voice=True, audio=True):
                 async def prepare(target=url):
                     from app.services.modal_client import _http
                     try:
-                        response = await _http.get(target, timeout=180)
+                        response = await asyncio.wait_for(_http.get(target, timeout=180), timeout=180)
                         response.raise_for_status()
                     except Exception:
                         logger.info('Optional model preparation failed; normal inference remains available.')

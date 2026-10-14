@@ -73,6 +73,7 @@ def _validate_english_voice(voice: str) -> str:
     memory=4096,
     volumes={CACHE_DIR: model_volume},
     scaledown_window=300,
+    max_containers=1,
     secrets=[modal.Secret.from_name("huggingface-secret")],
 )
 class EnglishKokoroTTS:
