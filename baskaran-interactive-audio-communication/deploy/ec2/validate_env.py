@@ -39,8 +39,11 @@ def validate(backend, gateway, proxy):
     if backend.get("ACTIONS_PROVIDER") != "openclaw_mcp" or backend.get("ACTIONS_ENABLED", "").lower() != "true":
         raise ValueError("Enable the configured OpenClaw action provider")
     origins = json.loads(backend.get("ALLOWED_ORIGINS", "[]"))
-    if not origins or any(urlparse(x).scheme != "https" or '*' in x for x in origins):
-        raise ValueError("Configure explicit HTTPS frontend CORS origins")
+    # The original laptop's browser history belongs to the localhost origin.
+    # Permit only this exact import UI; all public frontend origins require HTTPS.
+    if not origins or any((urlparse(x).scheme != "https" and x != "http://localhost:3000")
+                          or '*' in x for x in origins):
+        raise ValueError("Configure explicit HTTPS frontend CORS origins (localhost:3000 import UI is allowed)")
     for key in ["MODAL_WHISPER_URL", "MODAL_INDIC_STT_URL", "MODAL_SINHALA_ASR_URL",
                 "MODAL_BASE_GEMMA_URL", "MODAL_RAG_GENERATOR_URL", "MODAL_TRANSCRIPT_CORRECTOR_URL",
                 "MODAL_LOCALIZER_URL", "MODAL_ENGLISH_KOKORO_TTS_URL", "MODAL_INDIC_PARLER_MIXED_TTS_URL",
