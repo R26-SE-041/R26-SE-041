@@ -1,6 +1,28 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mockBackend, silentWav } from './backendMock'
 
+test('editorial workspace navigation and theme remain usable on desktop and mobile', async ({page}) => {
+  await mockBackend(page)
+  await page.goto('/study-assistant')
+  const navigation=page.getByRole('navigation',{name:'Workspace navigation'})
+  await expect(navigation).toBeVisible()
+  await navigation.getByRole('link',{name:'History',exact:true}).click()
+  await expect(page.locator('#study-history')).toBeInViewport()
+  await navigation.getByRole('link',{name:'Documents',exact:true}).click()
+  await expect(page.locator('#study-documents')).toBeInViewport()
+  await page.evaluate(()=>window.scrollTo(0,0))
+  await page.screenshot({path:'.workspace-runtime/editorial-workspace.png'})
+  await page.setViewportSize({width:390,height:844})
+  await page.evaluate(()=>window.scrollTo(0,0))
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+  await page.screenshot({path:'.workspace-runtime/editorial-mobile.png'})
+  await page.emulateMedia({reducedMotion:'reduce'})
+  await page.getByRole('button',{name:/switch to dark/i}).click()
+  await page.screenshot({path:'.workspace-runtime/editorial-dark.png'})
+  await page.goto('/')
+  await page.screenshot({path:'.workspace-runtime/editorial-home.png'})
+})
+
 test('large saved library stays compact with search, filters and five-item pages', async ({page}) => {
   const state = await mockBackend(page)
   const items = Array.from({length:29}, (_, i) => ({action_id:`saved-${i}`,document_id:'doc-1',filename:`Study notes ${String(i).padStart(2,'0')}.pdf`,

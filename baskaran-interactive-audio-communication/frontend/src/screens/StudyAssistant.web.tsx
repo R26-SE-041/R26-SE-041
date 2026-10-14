@@ -490,12 +490,21 @@ export default function StudyAssistantPage() {
         </div>
       </header>
 
+      <div className="vl-workspace">
+        <nav aria-label="Workspace navigation" className="vl-workspace-nav">
+          <p>Your workspace</p>
+          <a href="#study-documents">Documents</a>
+          <a href="#study-question">Ask a question</a>
+          <a href="#study-actions">Study actions</a>
+          <a href="#saved-library-title">Saved library</a>
+          <a href="#study-history">History</a>
+        </nav>
       <main className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 pb-28 sm:px-8 lg:px-10 lg:py-10">
 
         {/* ── Hero ── */}
-        <div className="flex flex-col items-center gap-3 pb-1 pt-4 text-center lg:pt-5">
+        <div className="vl-study-hero flex flex-col gap-3">
           <p className="vl-eyebrow">AI Study Assistant</p>
-          <h1 className="vl-serif text-5xl font-bold tracking-tight" style={{ color: 'var(--text)', fontSize: 42, lineHeight: 1.1 }}>Learn with your voice</h1>
+          <h1 className="vl-serif" style={{ color: 'var(--text)' }}>Learn with your voice</h1>
           <p className="max-w-2xl text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
             Study your documents in English, Tamil, and Sinhala.
           </p>
@@ -523,7 +532,7 @@ export default function StudyAssistantPage() {
         </section>
 
         {/* ── Document Study panel ── */}
-          <SectionWide title="Document Study">
+          <SectionWide id="study-documents" title="Document Study">
             <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               Upload your notes, PDFs, slides, or study files and receive answers grounded in your documents.
             </p>
@@ -608,7 +617,7 @@ export default function StudyAssistantPage() {
           </SectionWide>
 
         {/* ── Ask a Question ── */}
-        <SectionWide title={loc.ui.askAQuestion}>
+        <SectionWide id="study-question" title={loc.ui.askAQuestion}>
           <VoiceRecorder
             language={language}
             prepareAnswer
@@ -630,7 +639,7 @@ export default function StudyAssistantPage() {
         </SectionWide>
 
         {/* ── Transcript / Fix / Ask ── */}
-        <DocumentActions documents={documents} />
+        <div id="study-actions"><DocumentActions documents={documents} /></div>
 
         {transcript && (
           <SectionWide title={loc.ui.yourQuestion}>
@@ -826,7 +835,7 @@ export default function StudyAssistantPage() {
         )}
 
         {/* ── History ── */}
-        <SectionWide title="History">
+        <SectionWide id="study-history" title="History">
           {CLOUD_HISTORY && <p className="text-xs mb-3" style={{ color: 'var(--text-dim)' }}>Saved to your account. Available when you sign in on another device.</p>}
           {historyError && <p role="alert" className="text-sm mb-3" style={{ color: 'var(--danger)' }}>{historyError}</p>}
           {CLOUD_HISTORY && deviceEntries > 0 && <div className="mb-4 text-sm">
@@ -841,6 +850,7 @@ export default function StudyAssistantPage() {
           />
         </SectionWide>
       </main>
+      </div>
     </div>
   )
 }
@@ -848,10 +858,10 @@ export default function StudyAssistantPage() {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 /** Full-width section card — uses the new design token glass surface */
-function SectionWide({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionWide({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
-    <section className="nb-card p-6 sm:p-8 lg:p-9">
-      <h2 className="vl-label" style={{ marginBottom: 20 }}>{title}</h2>
+    <section id={id} className="nb-card p-6 sm:p-8 lg:p-9">
+      <h2 className="vl-section-title" style={{ marginBottom: 20 }}>{title}</h2>
       {children}
     </section>
   )

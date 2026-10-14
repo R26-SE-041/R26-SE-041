@@ -50,7 +50,7 @@ const features = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen relative" style={{ background: 'var(--background)' }}>
+    <main className="vl-home min-h-screen relative" style={{ background: 'var(--background)' }}>
 
       {/* ── Ambient background blobs ─────────────────────────────────────── */}
       <div className="vl-ambient" aria-hidden="true">
@@ -92,17 +92,16 @@ export default function HomePage() {
       </nav>
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <section className="vl-page pt-20 pb-16 text-center relative z-10" style={{ maxWidth: 900, margin: '0 auto' }}>
+      <section className="vl-home-hero vl-page relative z-10" style={{ margin: '0 auto' }}>
         {/* Eyebrow badge */}
         <div className="inline-flex items-center gap-2 rounded-[50px] px-4 py-1.5 mb-8"
           style={{
-            background: 'var(--primary-soft)',
-            border: '1px solid var(--primary-border)',
-            fontSize: 11, fontWeight: 800, letterSpacing: 2.2,
+            background: 'transparent',
+            border: 'none',
+            fontSize: 13, fontWeight: 500, letterSpacing: 1,
             textTransform: 'uppercase', color: 'var(--primary)',
           }}>
-          <span className="vl-dot animate-pulse-slow" />
-          Whisper · Llama 3.1 · Kokoro-82M
+          Document-grounded learning
         </div>
 
         <h1 className="vl-hero-title mb-5" style={{ fontSize: 'clamp(38px, 6vw, 58px)', lineHeight: '1.08', letterSpacing: '-1.5px' }}>

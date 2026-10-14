@@ -31,7 +31,7 @@ function LiveWaveform({ bins, active }: { bins: number[]; active: boolean }) {
             style={{
               width: 3,
               height: `${pct}%`,
-              background: active ? '#EA4335' : '#D1D1D6',
+              background: active ? 'var(--danger)' : 'var(--border)',
               transitionDuration: active ? '60ms' : '800ms',
             }}
           />
@@ -176,7 +176,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
           type="button"
           onClick={togglePlay}
           className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
-          style={{ background: '#1A73E8', color: '#fff' }}
+          style={{ background: 'var(--primary)', color: '#fff' }}
           aria-label={playing ? 'Pause' : 'Play'}
         >
           {playing ? <PauseIcon /> : <PlayIcon />}
@@ -185,7 +185,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
         <div className="flex-1 flex flex-col gap-1.5">
           <div
             className="w-full h-1.5 rounded-full cursor-pointer overflow-hidden"
-            style={{ background: '#DBD8CC' }}
+            style={{ background: 'var(--border)' }}
             onClick={handleSeek}
             role="slider"
             aria-label="Audio progress"
@@ -195,7 +195,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
           >
             <div
               className="h-full rounded-full transition-all duration-100"
-              style={{ width: `${progress}%`, background: '#1A73E8' }}
+              style={{ width: `${progress}%`, background: 'var(--primary)' }}
             />
           </div>
           <div className="flex justify-between text-[10px] font-mono text-ink-faint">
@@ -205,8 +205,8 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: '#34A853' }}>
-        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#34A853' }} />
+      <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--success)' }}>
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--success)' }} />
         Recording ready — review before submitting
       </div>
     </div>
@@ -330,10 +330,10 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
                   : 'hover:scale-105 active:scale-95',
               )}
               style={{
-                background: isRecording ? '#EA4335' : '#FFFFFF',
-                color: isRecording ? '#FFFFFF' : '#1C1C1E',
+                background: isRecording ? 'var(--danger)' : 'var(--surface)',
+                color: isRecording ? 'var(--surface)' : 'var(--text)',
                 boxShadow: isRecording
-                  ? '0 0 0 0 rgba(234,67,53,0.3), 0 6px 24px rgba(234,67,53,0.2), 0 2px 8px rgba(0,0,0,0.08)'
+                  ? '0 0 0 0 rgba(234,67,53,0.3), 0 6px 24px var(--danger-border), 0 2px 8px rgba(0,0,0,0.08)'
                   : '0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)',
               }}
             >
@@ -351,7 +351,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
             {isRecording ? (
               <div className="flex items-center gap-2">
                 <span className="nb-dot nb-dot-red" />
-                <span className="text-xs font-semibold tracking-wide" style={{ color: '#EA4335' }}>
+                <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--danger)' }}>
                   Recording — speak now
                 </span>
               </div>
@@ -365,7 +365,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
 
             {isRecording && (
               <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-mono font-semibold"
-                style={{ background: 'rgba(234,67,53,0.08)', color: '#EA4335', border: '1px solid rgba(234,67,53,0.2)' }}>
+                style={{ background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}>
                 {fmt(elapsed)}
               </span>
             )}
@@ -396,19 +396,19 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
                 fontWeight: 500,
                 cursor: disabled ? 'not-allowed' : 'pointer',
                 opacity: disabled ? 0.5 : 1,
-                border: '1.5px dashed #1A73E8',
-                background: 'rgba(26,115,232,0.06)',
-                color: '#1A73E8',
+                border: '1.5px dashed var(--primary)',
+                background: 'var(--surface-soft)',
+                color: 'var(--primary)',
                 transition: 'all 0.15s ease',
                 width: '100%',
                 justifyContent: 'center',
               }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(26,115,232,0.12)'
+                (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-soft)'
                 ;(e.currentTarget as HTMLButtonElement).style.borderStyle = 'solid'
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(26,115,232,0.06)'
+                (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-soft)'
                 ;(e.currentTarget as HTMLButtonElement).style.borderStyle = 'dashed'
               }}
             >
@@ -424,7 +424,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
         <div className="w-full flex flex-col gap-4 animate-fade-up">
           <div className="flex items-center justify-center gap-2">
             <span className="nb-dot" />
-            <span className="text-xs font-semibold nb-label" style={{ color: '#34A853' }}>
+            <span className="text-xs font-semibold nb-label" style={{ color: 'var(--success)' }}>
               {uploadedFileName ? 'Audio File Ready' : 'Recording Complete'}
             </span>
           </div>
