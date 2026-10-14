@@ -768,7 +768,8 @@ async def call_tamil_tts(text: str) -> bytes | None:
         response = await _http.post(
             url,
             headers=_auth_headers(),
-            json={"text": speech_text},
+            # Keep separate sentence prompts; batch two in parallel on one GPU.
+            json={"text": speech_text, "batch_size": 2},
             timeout=180.0,   # A10G cold-start for Parler-TTS can take ~90-120s
         )
         response.raise_for_status()

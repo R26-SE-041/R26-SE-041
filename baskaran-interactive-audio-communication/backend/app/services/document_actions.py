@@ -348,6 +348,8 @@ def verify_section_manifest(action):
 
 
 _locks: dict[str, asyncio.Lock] = {}
+_workflow_events: dict[str, asyncio.Event] = {}
+_gateway_tasks: dict[str, asyncio.Task] = {}
 
 
 class ToolOrderError(ValueError):
@@ -477,6 +479,8 @@ async def execute_tool(name, action_id):
         (await asyncio.to_thread(store.update, action_id, trace=list(dict.fromkeys([*action["trace"], name]))))
         action = (await asyncio.to_thread(store.get, action_id))
         remaining = [tool for tool in required_tools(action["intent"]) if tool not in action["trace"]]
+        if not remaining and action_id in _workflow_events:
+            _workflow_events[action_id].set()
         logger.info('[LATENCY] ACTION TOOL name=%s duration=%.3fs', name, time.perf_counter() - started)
         return {"completed_tools": list(dict.fromkeys(action["trace"])),
                 "next_tool": remaining[0] if remaining else None, "workflow_complete": not remaining,
@@ -527,6 +531,29 @@ async def execute_workflow(action_id):
     return result
 
 
+async def await_gateway_execution(action_id):
+    """Stop waiting for final agent prose once real required tools have finished."""
+    event = _workflow_events.setdefault(action_id, asyncio.Event())
+    gateway = asyncio.create_task(run_openclaw(action_id))
+    _gateway_tasks[action_id] = gateway
+    completed = asyncio.create_task(event.wait())
+    try:
+        done, _ = await asyncio.wait({gateway, completed}, return_when=asyncio.FIRST_COMPLETED)
+        if completed in done:
+            # The gateway may still send its final acknowledgement. Observe any
+            # transport error; the main workflow separately verifies all artifacts.
+            gateway.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+            return
+        await gateway
+    except asyncio.CancelledError:
+        gateway.cancel()
+        await asyncio.gather(gateway, return_exceptions=True)
+        raise
+    finally:
+        completed.cancel()
+        await asyncio.gather(completed, return_exceptions=True)
+
+
 async def run_action(action_id):
     started = time.perf_counter()
     settings = get_settings()
@@ -544,7 +571,7 @@ async def run_action(action_id):
                     (await asyncio.to_thread(store.update, action_id, gateway_attempt=attempt))
                     gateway_error = None
                     try:
-                        await run_openclaw(action_id)
+                        await await_gateway_execution(action_id)
                     except httpx.HTTPError as exc:
                         gateway_error = exc
                     # A Gateway response/error can precede its running bridge call.
@@ -598,4 +625,9 @@ async def run_action(action_id):
         (await asyncio.to_thread(store.update, action_id, status="partial" if action["summary"] else "failed", error=message))
     finally:
         logger.info('[LATENCY] ACTION TOTAL duration=%.3fs', time.perf_counter() - started)
+        gateway = _gateway_tasks.pop(action_id, None)
+        if gateway and not gateway.done():
+            gateway.cancel()
+            await asyncio.gather(gateway, return_exceptions=True)
         _locks.pop(action_id, None)
+        _workflow_events.pop(action_id, None)

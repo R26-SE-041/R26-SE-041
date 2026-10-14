@@ -856,3 +856,32 @@ def test_workflow_bridge_still_requires_secret(env):
     ticket = store.create('alice', session, doc, 'summarize_and_save')
     with TestClient(app) as client:
         assert client.post('/api/v1/actions/tools/run_document_workflow', json={'action_id':ticket}).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verified_work_does_not_wait_for_agent_final_prose(env, monkeypatch):
+    import asyncio
+    settings, doc, session, _ = env
+    settings.actions_provider = 'openclaw_mcp'
+    acknowledgement = asyncio.Event()
+    acknowledged = asyncio.Event()
+    cancelled = asyncio.Event()
+    async def gateway(action_id):
+        await service.execute_workflow(action_id)
+        try:
+            await acknowledgement.wait()
+            acknowledged.set()
+        except asyncio.CancelledError:
+            cancelled.set()
+            return
+    monkeypatch.setattr(service, 'run_openclaw', gateway)
+    ticket = store.create('alice', session, doc, 'summarize_and_save')
+    try:
+        await asyncio.wait_for(service.run_action(ticket), timeout=2)
+        action = store.get(ticket, 'alice')
+        assert action['status'] == 'complete' and action['saved']
+        assert not acknowledged.is_set()
+        assert cancelled.is_set()
+    finally:
+        acknowledgement.set()
+        assert ticket not in service._gateway_tasks

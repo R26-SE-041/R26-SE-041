@@ -68,7 +68,7 @@ image = (
 APP_NAME = os.environ.get(
     "VOICELEARN_TTS_APP_NAME", "voicelearn-indic-parler-mixed-tts"
 )
-GPU_TYPE = os.environ.get("VOICELEARN_TTS_GPU", "A10G")
+GPU_TYPE = os.environ.get("VOICELEARN_TTS_GPU") or ["L4", "A10G"]
 app = modal.App(APP_NAME, image=image)
 
 # Reuse the shared model volume — indic-parler-tts cached under its own subdirectory
@@ -138,6 +138,7 @@ def _clean_prompt_text(text: str) -> str:
 # ── Pydantic request schema ───────────────────────────────────────────────────
 
 class IndicParlerMixedTTSRequest(BaseModel):
+    batch_size: int = Field(default=1, ge=1, le=2)
     """Request body for final Tamil TTS.
 
     The caller only needs to supply 'text'. Language auto-detection and speaker
@@ -228,7 +229,7 @@ def _description_for_language(language: str) -> str:
 # ── Modal class ───────────────────────────────────────────────────────────────
 
 @app.cls(
-    # A10G (24 GB VRAM) — same as the Tamil IndicF5 service.
+    # Prefer the cheaper 24 GB L4; A10G remains an allocation fallback.
     # indic-parler-tts has ~938M params; at float16 it needs ~2 GB VRAM,
     # so A10G is more than sufficient and gives fast inference.
     gpu=GPU_TYPE,
@@ -332,7 +333,7 @@ class IndicParlerMixedTTS:
             return {
                 "endpoint": "indic_parler_mixed_tts",
                 "model_id": "ai4bharat/indic-parler-tts",
-                "requested_gpu": "A10G",
+                "requested_gpu": GPU_TYPE,
                 "gpu_name": "CPU",
                 "device": "cpu",
                 "vram_total_gb": None,
@@ -344,7 +345,7 @@ class IndicParlerMixedTTS:
         return {
             "endpoint": "indic_parler_mixed_tts",
             "model_id": "ai4bharat/indic-parler-tts",
-            "requested_gpu": "A10G",
+            "requested_gpu": GPU_TYPE,
             "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
             "device": "cuda" if cuda else "cpu",
             "vram_total_gb": (
@@ -397,9 +398,8 @@ class IndicParlerMixedTTS:
                     detail="'text' contains no speakable Tamil or English content.",
                 )
 
-            planned_generate_calls = (
-                len(segments) + GENERATION_BATCH_SIZE - 1
-            ) // GENERATION_BATCH_SIZE
+            batch_size = req.batch_size
+            planned_generate_calls = (len(segments) + batch_size - 1) // batch_size
             print(f"[TTS-LATENCY] language_segments = {len(segments)}")
             tamil_segments = sum(segment.language == "tamil" for segment in segments)
             english_segments = sum(segment.language == "english" for segment in segments)
@@ -418,8 +418,8 @@ class IndicParlerMixedTTS:
 
             waveforms: List[np.ndarray] = []
             generation_count = 0
-            for batch_start in range(0, len(segments), GENERATION_BATCH_SIZE):
-                batch = segments[batch_start : batch_start + GENERATION_BATCH_SIZE]
+            for batch_start in range(0, len(segments), batch_size):
+                batch = segments[batch_start : batch_start + batch_size]
                 descriptions = [
                     description_override or _description_for_language(segment.language)
                     for segment in batch

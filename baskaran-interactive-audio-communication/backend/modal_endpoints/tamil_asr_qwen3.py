@@ -81,7 +81,7 @@ _SUPPORTED = {"tamil"}
 
 
 @app.cls(
-    gpu="A10G",   # Qwen3 decoder needs more VRAM than IndicConformer; A10G (24 GB) is safe
+    gpu=["L4", "A10G"],  # Both provide 24 GB; prefer cheaper L4 and avoid a single GPU pool.
     volumes={"/models": model_volume},
     scaledown_window=300,
     max_containers=1,
@@ -171,7 +171,7 @@ class TamilASRQwen3:
             return {
                 "endpoint": "tamil_asr_qwen3",
                 "model_id": "osmapi/tamil-asr-qwen3",
-                "requested_gpu": "A10G",
+                "requested_gpu": ["L4", "A10G"],
                 "gpu_name": "CPU",
                 "device": "cpu",
                 "vram_total_gb": None,
@@ -183,7 +183,7 @@ class TamilASRQwen3:
         return {
             "endpoint": "tamil_asr_qwen3",
             "model_id": "osmapi/tamil-asr-qwen3",
-            "requested_gpu": "A10G",
+            "requested_gpu": ["L4", "A10G"],
             "gpu_name": torch.cuda.get_device_name(0) if cuda else "CPU",
             "device": "cuda" if cuda else "cpu",
             "vram_total_gb": (

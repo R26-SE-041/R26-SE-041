@@ -71,13 +71,7 @@
         "requestTimeoutMs": 1800000,
         "toolFilter": {
           "include": [
-            "run_document_workflow",
-            "summarize_document",
-            "save_summary",
-            "create_revision_audio",
-            "save_audio_revision",
-            "create_flashcards",
-            "save_flashcards"
+            "run_document_workflow"
           ]
         },
         "env": {
