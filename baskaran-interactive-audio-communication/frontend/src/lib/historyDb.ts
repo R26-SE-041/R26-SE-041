@@ -88,7 +88,7 @@ export async function updateLocalHistoryAnswer(id: string, answer: string): Prom
     const getRequest = store.get(id)
     getRequest.onsuccess = () => {
       const existing = getRequest.result as LocalHistoryEntry | undefined
-      if (existing) store.put({ ...existing, answer })
+      if (existing) store.put({ ...existing, answer, answerAudio: undefined })
     }
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error ?? new Error('Could not update the history answer.'))

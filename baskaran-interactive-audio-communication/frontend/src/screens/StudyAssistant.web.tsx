@@ -364,7 +364,7 @@ export default function StudyAssistantPage() {
     const historyId = currentHistoryEntryIdRef.current
     if (historyId) {
       setHistoryEntries((current) => current.map((item) => (
-        item.id === historyId ? { ...item, answer: editedAnswer } : item
+        item.id === historyId ? { ...item, answer: editedAnswer, answerAudio: undefined, hasAnswerAudio: false } : item
       )))
       void updateHistoryAnswer(historyId, editedAnswer).catch(() => setHistoryError('Edited answer could not be synced. Please retry saving it.'))
     }
