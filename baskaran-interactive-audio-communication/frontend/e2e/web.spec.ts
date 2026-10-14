@@ -10,10 +10,14 @@ test('editorial workspace navigation and theme remain usable on desktop and mobi
   await expect(page.locator('#study-history')).toBeInViewport()
   await navigation.getByRole('link',{name:'Documents',exact:true}).click()
   await expect(page.locator('#study-documents')).toBeInViewport()
+  await expect(navigation.getByRole('link',{name:'Documents',exact:true})).toHaveAttribute('aria-current','location')
   await page.evaluate(()=>window.scrollTo(0,0))
   await page.screenshot({path:'.workspace-runtime/editorial-workspace.png'})
   await page.setViewportSize({width:390,height:844})
   await page.evaluate(()=>window.scrollTo(0,0))
+  for (const name of ['Documents','Ask a question','Study actions','Saved library','History']) {
+    await expect(navigation.getByRole('link',{name,exact:true})).toBeInViewport()
+  }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
   await page.screenshot({path:'.workspace-runtime/editorial-mobile.png'})
   await page.emulateMedia({reducedMotion:'reduce'})

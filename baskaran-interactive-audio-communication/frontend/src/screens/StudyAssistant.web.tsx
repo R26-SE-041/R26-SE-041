@@ -5,6 +5,7 @@ import { LanguageSelector } from '@/components/voice/LanguageSelector'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { DocumentActions } from '@/components/documents/DocumentActions'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { WorkspaceNavigation } from '@/components/ui/WorkspaceNavigation'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { HistoryPanel } from '@/components/history/HistoryPanel'
 import {
@@ -491,14 +492,7 @@ export default function StudyAssistantPage() {
       </header>
 
       <div className="vl-workspace">
-        <nav aria-label="Workspace navigation" className="vl-workspace-nav">
-          <p>Your workspace</p>
-          <a href="#study-documents">Documents</a>
-          <a href="#study-question">Ask a question</a>
-          <a href="#study-actions">Study actions</a>
-          <a href="#saved-library-title">Saved library</a>
-          <a href="#study-history">History</a>
-        </nav>
+        <WorkspaceNavigation />
       <main className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 pb-28 sm:px-8 lg:px-10 lg:py-10">
 
         {/* ── Hero ── */}
@@ -509,6 +503,12 @@ export default function StudyAssistantPage() {
             Study your documents in English, Tamil, and Sinhala.
           </p>
         </div>
+
+        <nav className="vl-study-steps" aria-label="Getting started">
+          <a href="#study-documents"><span className="vl-step-number">{documents.length ? '✓' : '1'}</span><span><strong>Add a document</strong><small>{documents.length ? `${documents.length} ready to study` : 'Upload your notes or PDF'}</small></span></a>
+          <a href="#study-question"><span className="vl-step-number">2</span><span><strong>Ask a question</strong><small>Choose a language, then speak</small></span></a>
+          <a href="#study-actions"><span className="vl-step-number">3</span><span><strong>Create a revision</strong><small>Save audio, summaries or flashcards</small></span></a>
+        </nav>
 
         {/* ── Study controls ── */}
         <section className="nb-card flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -561,7 +561,7 @@ export default function StudyAssistantPage() {
                 const file = event.dataTransfer.files[0]
                 if (file) void handleFileUpload(file)
               }}
-              className="flex min-h-[210px] w-full flex-col items-center justify-center gap-3 rounded-[20px] px-8 py-12 transition-all disabled:cursor-wait disabled:opacity-60 lg:min-h-[225px]"
+              className="vl-document-upload flex w-full items-center justify-center gap-4 rounded-xl px-5 py-6 transition-all disabled:cursor-wait disabled:opacity-60"
               style={{
                 border: `2px dashed ${dragOver ? 'var(--primary)' : 'var(--border)'}`,
                 background: dragOver ? 'var(--primary-soft)' : 'var(--surface-soft)',
@@ -574,7 +574,7 @@ export default function StudyAssistantPage() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </span>
-              <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-col gap-1">
                 <span className="text-base font-semibold" style={{ color: 'var(--text)' }}>{uploading ? 'Indexing document…' : 'Upload or drop a document'}</span>
                 <span className="text-sm" style={{ color: 'var(--text-dim)' }}>PDF, PowerPoint, Word, Excel, text, or Markdown</span>
               </div>
