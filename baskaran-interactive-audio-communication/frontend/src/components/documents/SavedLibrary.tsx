@@ -50,10 +50,10 @@ export function SavedLibrary({ items, busy, selectedId, onOpen, onDelete, onRefr
     </div> : <>
       <ul aria-label="Saved study materials" className="mt-4 space-y-2">{visible.map(item => <li key={item.action_id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: selectedId === item.action_id ? 'var(--primary)' : 'var(--border)' }}>
         <div className="min-w-0 flex-1" style={{ minWidth: 'min(220px, 100%)' }}>
-          <p className="break-words text-sm font-semibold">{item.filename}</p>
-          <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>{languageNames[item.language]} · {kind(item) === 'flashcards' ? 'Flashcards' : kind(item) === 'audio' ? `${item.revision_mode} audio revision` : 'Summary'}{item.audio_duration ? ` · ${Math.round(item.audio_duration)} seconds` : ''}
+          <p className="break-words font-semibold" style={{ fontSize: 18, lineHeight: 1.5 }}>{item.filename}</p>
+          <p className="mt-2 font-medium" style={{ fontSize: 16, lineHeight: 1.6 }}>{languageNames[item.language]} · {kind(item) === 'flashcards' ? 'Flashcards' : kind(item) === 'audio' ? `${item.revision_mode} audio revision` : 'Summary'}{item.audio_duration ? ` · ${Math.round(item.audio_duration)} seconds` : ''}
             {item.scope === 'section' ? ' · Selected section only' : item.style === 'one_minute' ? ' · One-minute target' : item.style === 'detailed' ? ' · Detailed revision' : ''}</p>
-          {item.created_at && <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>{new Date(item.created_at).toLocaleString()}{selectedId === item.action_id ? ' · Currently open' : ''}</p>}
+          {item.created_at && <p className="mt-2" style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--text-dim)' }}>{new Date(item.created_at).toLocaleString()}{selectedId === item.action_id ? ' · Currently open' : ''}</p>}
         </div>
         <div className="flex items-center gap-2"><button className="vl-btn-secondary" disabled={busy} onClick={() => onOpen(item)}>Open</button>
           <button className="vl-btn-secondary" disabled={busy} onClick={() => onDelete(item.action_id)}>Delete</button></div>
