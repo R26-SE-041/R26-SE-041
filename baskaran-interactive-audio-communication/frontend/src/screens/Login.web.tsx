@@ -5,6 +5,7 @@ import { useRouter } from '@/web/navigation'
 import Link from '@/web/navigation'
 import { createClient } from '@/lib/supabase'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { AUTH_REQUIRED } from '@/lib/config'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,10 +18,19 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setError(error.message); setLoading(false) }
-    else { router.push('/study-assistant') }
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) { setError(error.message); return }
+      if (AUTH_REQUIRED && !data.session) { setError('Sign in could not be confirmed. Please try again.'); return }
+      const requested = new URLSearchParams(window.location.search).get('next')
+      const destination = requested === '/documents' ? '/documents' : '/study-assistant'
+      router.push(destination)
+    } catch {
+      setError('Could not sign in. Check your connection and try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -65,7 +75,7 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="rounded-xl px-4 py-3 text-sm"
+            <div role="alert" className="rounded-xl px-4 py-3 text-sm"
               style={{ background: 'var(--c-red-soft)', border: '1px solid var(--c-red-border)', color: 'var(--c-red)' }}>
               {error}
             </div>

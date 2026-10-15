@@ -137,11 +137,11 @@ export default function HomePage() {
 
         {/* Demo links */}
         <div className="flex items-center justify-center gap-4 mt-6">
-          <Link href="/study-assistant" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
+          <Link href="/login?next=%2Fstudy-assistant" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
             → Voice Studio
           </Link>
           <span style={{ color: 'var(--text-dim)' }}>·</span>
-          <Link href="/documents" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
+          <Link href="/login?next=%2Fdocuments" className="text-xs transition-colors" style={{ color: 'var(--text-dim)' }}>
             → Document Library
           </Link>
         </div>
