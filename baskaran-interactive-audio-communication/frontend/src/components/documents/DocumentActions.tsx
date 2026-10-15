@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { isAndroidBrowser } from '@/hooks/useHandsFreeRecognition'
-import { HandsFreeControls } from './HandsFreeControls'
 import { RevisionNavigator } from './RevisionNavigator'
 import { SavedLibrary } from './SavedLibrary'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
-import { extraCommands, normalizeCommand, isPlaybackCommand, controlPlayback } from './audioCommands'
+import { extraCommands, normalizeCommand, isPlaybackCommand } from './audioCommands'
 import { synthesizeSpeech } from '@/lib/api'
 import { documentActionCapabilities, startDocumentAction, getDocumentAction,
   downloadDocumentAction, downloadRevisionAudio, retryRevisionAudio, listSavedActions, deleteSavedAction,
@@ -48,9 +46,6 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
   const [deletePending, setDeletePending] = useState<string | null>(null)
   const [flipped, setFlipped] = useState<number[]>([])
   const replayEnd = useRef<number | null>(null)
-  const [handsFree, setHandsFree] = useState(false)
-  const [playbackInterruptions, setPlaybackInterruptions] = useState(0)
-  const expectedPause = useRef(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const [result, setResult] = useState<DocumentActionResult | null>(null)
@@ -115,40 +110,32 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     finally { active.current = false; if (mounted.current) setBusy(false) }
   }
 
-  async function confirmDelete(target = deletePending) {
-    if (!target || active.current) return
+  async function confirmDelete() {
+    if (!deletePending || active.current) return
     active.current = true; setBusy(true); setError(null)
     try {
-      await deleteSavedAction(target)
-      if (result?.action_id === target) { audioPlayer.current?.pause(); setResult(null); setAudioUrl(null); setCurrentTime(0) }
+      await deleteSavedAction(deletePending)
+      if (result?.action_id === deletePending) { audioPlayer.current?.pause(); setResult(null); setAudioUrl(null); setCurrentTime(0) }
       setDeletePending(null); setStatus('Saved result deleted'); await refreshSaved()
     } catch (err) { setError(err instanceof Error ? err.message : 'Delete failed.') }
     finally { active.current = false; setBusy(false) }
   }
 
-  async function execute(retryActionId?: string, spokenCommand = command) {
+  async function execute(retryActionId?: string) {
     if (!retryActionId && !active.current) {
-      const text = normalizeCommand(spokenCommand)
+      const text = normalizeCommand(command)
       if (text === 'delete this saved revision') {
         if (!result?.saved) { setError('Open a saved revision from the library first.'); return }
         setDeletePending(result.action_id); setError(null); return
       }
-      if (isPlaybackCommand(spokenCommand)) {
-        if (!audioPlayer.current || !audioUrl || result?.intent !== 'audio_revision') { setError('Generate or open a saved audio revision first.'); return }
-        try {
-          if (/^(pause|stop) the audio$/.test(text) && !audioPlayer.current.paused) expectedPause.current = true
-          const controlled = await controlPlayback(spokenCommand, audioPlayer.current, result.sections ?? [])
-          replayEnd.current = controlled.replayEnd ?? null
-          setCurrentTime(audioPlayer.current.currentTime); setPlaybackRate(String(audioPlayer.current.playbackRate))
-          setStatus(controlled.message); setError(null)
-        } catch (err) { setError(err instanceof Error ? err.message : 'Playback command failed.') }
-        return
+      if (isPlaybackCommand(command)) {
+        setError('Use the audio player controls for playback, speed and seeking, or the section buttons below.'); return
       }
       if (text === 'create an audio revision of this section only and save it' && !result?.sections?.length) {
         setError('Generate or open a sectioned revision and choose its source section first.'); return
       }
     }
-    if (active.current || (!retryActionId && (!spokenCommand.trim() || !documentId))) return
+    if (active.current || (!retryActionId && (!command.trim() || !documentId))) return
     const sectioned = retryActionId ? result?.revision_mode === 'sectioned' : capabilities?.sectioned_enabled && revisionMode === 'sectioned'
     active.current = true
     setBusy(true); setError(null); setResult(null); setAudioUrl(null); setAudioError(null)
@@ -157,7 +144,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     const abort = new AbortController()
     controller.current = abort
     try {
-      const id = retryActionId ? await retryRevisionAudio(retryActionId) : await startDocumentAction(spokenCommand.trim(), documentId, session.current, language, capabilities?.sectioned_enabled ? revisionMode : 'single', result?.action_id, selectedSection, executionProvider)
+      const id = retryActionId ? await retryRevisionAudio(retryActionId) : await startDocumentAction(command.trim(), documentId, session.current, language, capabilities?.sectioned_enabled ? revisionMode : 'single', result?.action_id, selectedSection, executionProvider)
       const deadline = Date.now() + (sectioned ? 1_920_000 : 720_000)
       while (!abort.signal.aborted && Date.now() < deadline) {
         const value = await getDocumentAction(id, abort.signal)
@@ -241,20 +228,6 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     <section className="rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
       <h2 className="text-lg font-semibold">Document actions and audio revision</h2>
       <p className="mt-2 text-sm">Summarize your document or create a short spoken revision with a transcript and audio download. Limit: {capabilities.max_document_chars.toLocaleString()} extracted characters.</p>
-      <HandsFreeControls active={visible} busy={busy} onEnabled={setHandsFree} playbackInterruptions={playbackInterruptions}
-        context={JSON.stringify([documentId, result?.action_id, selectedSection, language, revisionMode, executionProvider])}
-        validate={(spoken, deleting) => {
-          if (active.current) return 'Wait for the current task to finish.'
-          if (deleting) return result?.saved ? null : 'Open a saved revision from the library first.'
-          if (isPlaybackCommand(spoken)) return audioUrl && result?.intent === 'audio_revision' ? null : 'Generate or open a saved audio revision first.'
-          if (!documentId) return 'Select a document first.'
-          if (spoken.includes('this section only') && !result?.sections?.length) return 'Open a sectioned revision and choose its source section first.'
-          return null
-        }}
-        execute={async (spoken, deleting) => {
-          if (deleting) await confirmDelete(result?.action_id)
-          else { setCommand(spoken); await execute(undefined, spoken) }
-        }} />
       <details className="mt-4 text-sm"><summary className="cursor-pointer font-semibold">Advanced options</summary>
       <label htmlFor="action-provider" className="mt-4 block text-sm">Processing mode</label>
       <select id="action-provider" className="nb-input mt-2 w-full" disabled={busy} value={executionProvider} onChange={event => setExecutionProvider(event.target.value as 'direct' | 'openclaw_mcp')}>
@@ -293,17 +266,16 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
         setVoiceLanguage(selected); setCommand(examples[selected].audio)
       }}>{(['english', 'tamil', 'sinhala'] as const).map(value => <option key={value} value={value}>{languageLabels[value]}</option>)}</select>
       <p className="mt-2 text-sm">The new listed commands use English. You can speak an English command and generate Tamil or Sinhala audio by selecting a different output language.</p>
-      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy || handsFree} active={visible && !handsFree}
+      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy} active={visible}
         onTranscript={value => { setCommand(value.transcript); setError(null) }} onError={setError} /></div>
-      {handsFree && <p className="mt-2 text-sm">Manual recording is off while hands-free is enabled. Speak a prefixed command to run it automatically.</p>}
       <label htmlFor="action-command" className="mt-4 block text-sm">{languageLabels[voiceLanguage]} command</label>
       <textarea id="action-command" className="nb-input mt-2 w-full" rows={2} value={command}
         disabled={busy} onChange={event => setCommand(event.target.value)} placeholder={examples[voiceLanguage].audio} />
       <p className="mt-2 text-sm">Supported commands: {examples[voiceLanguage].summary}; {examples[voiceLanguage].save}; {examples[voiceLanguage].combined}; {examples[voiceLanguage].audio}.</p>
-      <p className="mt-2 text-sm">Use the displayed phrases. After speaking, check or edit the recognized command before running it.</p>
+      <p className="mt-2 text-sm">Choose a study command below, type it, or record it with the microphone. Review the command, then select Run action. Recording starts only when you press the microphone.</p>
       <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">All supported commands</summary>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">{extraCommands.map(value => <button key={value} className="vl-btn-secondary text-left" disabled={busy} onClick={() => setCommand(value)}>{value}</button>)}</div>
-        <p className="mt-2">Playback commands control the loaded audio. Commands naming Tamil, Sinhala or English override the output language selection. Section-only generation uses the source section selected below.</p>
+        <p className="mt-2">Control playback using the audio player and section buttons. Commands naming Tamil, Sinhala or English override the output language selection. Section-only generation uses the source section selected below.</p>
       </details>
       {!!result?.sections?.length && <label className="mt-3 block text-sm" htmlFor="source-section">Source section for section-only revision
         <select id="source-section" className="nb-input mt-2 w-full" value={selectedSection} disabled={busy} onChange={event => setSelectedSection(Number(event.target.value))}>
@@ -323,18 +295,12 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
         && !!result.sections?.length && result.sections.every(section => section.script_language === result.language) &&
         <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>Retry audio using prepared transcript</button>}
       {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls
-        onPlay={() => { expectedPause.current = false }}
-        onPause={() => {
-          const expected = expectedPause.current
-          expectedPause.current = false
-          if (!expected && handsFree && visible && !busy && !audioPlayer.current?.ended && isAndroidBrowser()) setPlaybackInterruptions(value => value + 1)
-        }}
         onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
         onTimeUpdate={() => {
           const player = audioPlayer.current
           if (!player) return
           setCurrentTime(player.currentTime)
-          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { expectedPause.current = true; player.pause(); replayEnd.current = null }
+          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { player.pause(); replayEnd.current = null }
         }}
         autoPlay={visible && result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
       {audioUrl && result?.intent === 'audio_revision' && <label className="mt-3 block text-sm">Playback speed

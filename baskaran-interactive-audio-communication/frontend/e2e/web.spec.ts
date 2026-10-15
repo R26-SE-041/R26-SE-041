@@ -271,17 +271,47 @@ test('source inspection, selected-section-only request and transcript download',
   expect((await download).suggestedFilename()).toBe('lecture-revision-english.txt')
 })
 
-test('all twelve playback commands control existing audio without generation requests', async ({page}) => {
-  const state = await start(page);await openAudio(page)
+test('manual audio playback stays stable without starting a speech listener', async ({page}) => {
+  await page.addInitScript(() => {
+    ;(window as any).listenerStarts = 0
+    class UnexpectedRecognition { constructor() { (window as any).listenerStarts++ } }
+    ;(window as any).SpeechRecognition = UnexpectedRecognition
+    ;(window as any).webkitSpeechRecognition = UnexpectedRecognition
+  })
+  await page.setViewportSize({width:384,height:832})
+  const state = await startMobile(page)
+  await openAudio(page)
   const player = page.locator('audio').last()
-  for (const command of ['Play the audio','Pause the audio','Resume the audio','Stop the audio','Play the next section','Play the previous section','Replay this section','Play section two','Skip forward ten seconds','Go back ten seconds','Set playback speed to 0.75','Set playback speed to 1.25']) {
-    await run(page,command)
-    await expect(page.getByRole('button',{name:'Run action',exact:true})).toBeEnabled()
-    await expect(page.getByRole('alert')).toHaveCount(0)
-  }
-  await expect.poll(()=>player.evaluate(el=>(el as HTMLAudioElement).playbackRate)).toBe(1.25)
+  await expect(page.getByRole('button',{name:/hands-free/i})).toHaveCount(0)
+  await player.evaluate((el:HTMLAudioElement)=>el.play())
+  await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>el.currentTime)).toBeGreaterThan(2)
+  expect(await player.evaluate((el:HTMLAudioElement)=>el.paused)).toBe(false)
+  await player.evaluate((el:HTMLAudioElement)=>el.pause())
+  expect(await player.evaluate((el:HTMLAudioElement)=>el.paused)).toBe(true)
+  await player.evaluate((el:HTMLAudioElement)=>{el.currentTime=5;return el.play()})
+  await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>el.currentTime)).toBeGreaterThan(6)
+  await page.getByRole('combobox',{name:'Playback speed',exact:true}).selectOption('1.25')
+  expect(await player.evaluate((el:HTMLAudioElement)=>el.playbackRate)).toBe(1.25)
+  await page.getByRole('button',{name:'Replay section',exact:true}).nth(1).click()
+  await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>Math.floor(el.currentTime))).toBe(10)
+  await player.evaluate((el:HTMLAudioElement)=>{el.currentTime=19.9;el.dispatchEvent(new Event('timeupdate'))})
+  await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>el.paused)).toBe(true)
+  await page.getByText('All supported commands',{exact:true}).click()
+  await expect(page.getByRole('button',{name:'Pause the audio',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'Create a detailed audio revision and save it',exact:true})).toBeVisible()
+  await run(page,'Pause the audio')
+  await expect(page.getByRole('alert')).toContainText('Use the audio player controls')
+  expect(await page.evaluate(()=>(window as any).listenerStarts)).toBe(0)
   expect(state.actions).toHaveLength(0)
+  await page.screenshot({path:'.workspace-runtime/manual-playback-mobile.png',fullPage:false})
 })
+
+async function startMobile(page:Page) {
+  const state=await mockBackend(page)
+  await page.goto('/study-assistant')
+  await expect(page.locator('#study-documents')).toBeVisible()
+  return state
+}
 
 test('saved library refresh/reopen and confirmed deletion leave document available', async ({page}) => {
   const state = await start(page);await openAudio(page)
