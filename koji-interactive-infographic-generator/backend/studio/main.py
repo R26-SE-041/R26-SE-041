@@ -96,6 +96,11 @@ def ready():
             where attrelid='public.koji_documents'::regclass and attname='chat_id'""")
         if cur.fetchone()[0]:
             raise HTTPException(503,"Apply the workspace PDF library migration before deploying")
+        cur.execute("""select exists(select 1 from pg_attribute
+            where attrelid='public.koji_chats'::regclass and attname='deleted_at'
+            and not attisdropped)""")
+        if not cur.fetchone()[0]:
+            raise HTTPException(503,"Apply migration 006_recycle_bin.sql before deploying")
     return {"status":"ok"}
 
 @app.post("/feedback",status_code=201)

@@ -12,6 +12,26 @@ from studio.worker import process_job
 USER_A = str(uuid4())
 USER_B = str(uuid4())
 
+class ReadinessTests(unittest.TestCase):
+    def test_missing_recycle_bin_migration_blocks_release_readiness(self):
+        self.check_schema(recycle_bin=False, expected_status=503)
+
+    def test_migrated_schema_is_ready(self):
+        self.check_schema(recycle_bin=True, expected_status=200)
+
+    def check_schema(self, *, recycle_bin, expected_status):
+        from unittest.mock import MagicMock
+        connection = MagicMock()
+        cursor = connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect = [(False,), (recycle_bin,)]
+        settings = {key: "configured" for key in (
+            "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY")}
+        with patch.dict(os.environ, settings, clear=True), patch("studio.repository.connection", connection):
+            response = TestClient(app).get("/ready")
+        self.assertEqual(response.status_code, expected_status)
+        if expected_status == 503:
+            self.assertIn("006_recycle_bin.sql", response.json()["detail"])
+
 class JobContractTests(unittest.TestCase):
     def test_blank_erased_sketch_is_not_queued(self):
         with self.assertRaisesRegex(ValueError,"blank"):
