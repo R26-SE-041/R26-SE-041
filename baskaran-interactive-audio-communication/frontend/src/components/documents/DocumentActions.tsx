@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RevisionNavigator } from './RevisionNavigator'
 import { SavedLibrary } from './SavedLibrary'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
@@ -27,8 +28,11 @@ const examples: Record<ActionLanguage, { summary: string; save: string; combined
   sinhala: { summary: 'මෙම ලේඛනය සාරාංශ කරන්න', save: 'සාරාංශය සුරකින්න', combined: 'මෙම ලේඛනය සාරාංශ කර සුරකින්න', audio: 'මෙම ලේඛනයේ ශ්‍රව්‍ය පුනරාවලෝකනයක් සාදා සුරකින්න' },
 }
 
-export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
+export function DocumentActions({ documents, libraryTarget, onOpenSaved, active: visible = true }: {
+  documents: DocumentItem[]; libraryTarget?: HTMLElement | null; onOpenSaved?: () => void; active?: boolean
+}) {
   const [capabilities, setCapabilities] = useState<ActionCapabilities | null>(null)
+  const [capabilitiesError, setCapabilitiesError] = useState(false)
   const [documentId, setDocumentId] = useState('')
   const [command, setCommand] = useState('')
   const [language, setLanguage] = useState<ActionLanguage>('english')
@@ -61,7 +65,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     mounted.current = true
     session.current = sessionStorage.getItem('voicelearn-action-session') || crypto.randomUUID()
     sessionStorage.setItem('voicelearn-action-session', session.current)
-    documentActionCapabilities().then(value => { if (mounted.current) { setCapabilities(value); setExecutionProvider(value.provider === 'direct' ? 'direct' : 'openclaw_mcp') } }).catch(() => undefined)
+    documentActionCapabilities().then(value => { if (mounted.current) { setCapabilities(value); setExecutionProvider(value.provider === 'direct' ? 'direct' : 'openclaw_mcp') } }).catch(() => { if (mounted.current) setCapabilitiesError(true) })
     void refreshSaved()
     return () => { mounted.current = false; controller.current?.abort() }
   }, [])
@@ -221,9 +225,14 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
     void player.play().catch(() => setAudioError('Press Play in the audio player to begin playback.'))
   }
 
-  if (!capabilities?.enabled) return null
+  const library = libraryTarget && createPortal(<SavedLibrary items={savedActions} busy={busy} selectedId={result?.action_id} onOpen={item => { onOpenSaved?.(); void openSaved(item) }} onDelete={setDeletePending} onRefresh={() => void refreshSaved()} />, libraryTarget)
+  if (!capabilities?.enabled) return <>
+    <section className="nb-card p-6"><h2 className="vl-section-title">OpenClaw studio</h2>
+      <p role="status" className="mt-3">{capabilitiesError ? 'Study actions could not be loaded. Check your connection and refresh.' : capabilities ? 'Study actions are currently unavailable.' : 'Loading study actions…'}</p>
+    </section>{library}
+  </>
   return (
-    <section className="mt-6 rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
+    <section className="rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
       <h2 className="text-lg font-semibold">Document actions and audio revision</h2>
       <p className="mt-2 text-sm">Summarize your document or create a short spoken revision with a transcript and audio download. Limit: {capabilities.max_document_chars.toLocaleString()} extracted characters.</p>
       <label htmlFor="action-provider" className="mt-4 block text-sm">Execution mode</label>
@@ -262,7 +271,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
         setVoiceLanguage(selected); setCommand(examples[selected].audio)
       }}>{(['english', 'tamil', 'sinhala'] as const).map(value => <option key={value} value={value}>{languageLabels[value]}</option>)}</select>
       <p className="mt-2 text-sm">The new listed commands use English. You can speak an English command and generate Tamil or Sinhala audio by selecting a different output language.</p>
-      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy}
+      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy} active={visible}
         onTranscript={value => { setCommand(value.transcript); setError(null) }} onError={setError} /></div>
       <label htmlFor="action-command" className="mt-4 block text-sm">{languageLabels[voiceLanguage]} command</label>
       <textarea id="action-command" className="nb-input mt-2 w-full" rows={2} value={command}
@@ -297,7 +306,7 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
           setCurrentTime(player.currentTime)
           if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { player.pause(); replayEnd.current = null }
         }}
-        autoPlay={result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
+        autoPlay={visible && result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
       {audioUrl && result?.intent === 'audio_revision' && <label className="mt-3 block text-sm">Playback speed
         <select className="nb-input ml-3" value={playbackRate} onChange={event => {
           setPlaybackRate(event.target.value)
@@ -333,15 +342,15 @@ export function DocumentActions({ documents }: { documents: DocumentItem[] }) {
       {audioError && <div className="mt-2"><p className="text-sm" role="alert">{audioError}</p>
         {result?.audio_ready && !audioUrl && <button className="vl-btn-secondary mt-2" disabled={busy} onClick={() => void retrySavedAudio()}>Retry loading audio</button>}
       </div>}
-      <SavedLibrary items={savedActions} busy={busy} selectedId={result?.action_id} onOpen={item => void openSaved(item)} onDelete={setDeletePending} onRefresh={() => void refreshSaved()} />
-      {deletePending && <div role="dialog" aria-modal="true" aria-labelledby="delete-revision-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      {library}
+      {deletePending && createPortal(<div role="dialog" aria-modal="true" aria-labelledby="delete-revision-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <div className="w-full max-w-md rounded-xl p-6" style={{ background: 'var(--surface, #fff)' }}>
           <h3 id="delete-revision-title" className="font-semibold">Delete this saved result?</h3>
           <p className="mt-3 text-sm">{savedActions.find(item => item.action_id === deletePending)?.filename}. This removes this saved result and its unshared files. The original document stays available.</p>
           <button autoFocus className="vl-btn-secondary mt-4" disabled={busy} onClick={() => setDeletePending(null)}>Cancel</button>
           <button className="vl-btn-primary ml-3 mt-4" disabled={busy} onClick={() => void confirmDelete()}>{busy ? 'Deleting…' : 'Confirm delete'}</button>
         </div>
-      </div>}
+      </div>, document.body)}
     </section>
   )
 }

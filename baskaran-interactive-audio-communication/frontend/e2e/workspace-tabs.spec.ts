@@ -1,0 +1,90 @@
+import { expect, test } from '@playwright/test'
+import { mockBackend, silentWav } from './backendMock'
+
+test('mobile tabs show only the chosen workspace and preserve drafts', async ({page}) => {
+  await page.setViewportSize({width:390,height:844})
+  const state = await mockBackend(page)
+  await page.goto('/study-assistant')
+  await expect(page.getByRole('tabpanel')).toHaveCount(1)
+  await expect(page.locator('#study-documents')).toBeVisible()
+  await expect(page.locator('#action-command')).toBeHidden()
+  for (const name of ['Documents','Ask a question','OpenClaw studio','Saved library','History']) {
+    await expect(page.getByRole('tab',{name,exact:true})).toBeInViewport()
+  }
+  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await page.locator('#action-command').fill('Create a detailed audio revision and save it')
+  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await expect(page.locator('#action-command')).toBeHidden()
+  await expect(page.locator('#study-history')).toBeHidden()
+  await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'q.wav',mimeType:'audio/wav',buffer:silentWav(1)})
+  await page.locator('#voice-submit-btn').click()
+  const question=page.getByRole('textbox',{name:'Your Question',exact:true})
+  await question.fill('My draft question')
+  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await expect(page.locator('#action-command')).toHaveValue('Create a detailed audio revision and save it')
+  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await expect(question).toHaveValue('My draft question')
+  await page.getByRole('button',{name:'Ask →',exact:true}).click()
+  await expect(page.getByText('Dogs are domesticated mammals.',{exact:true}).first()).toBeVisible()
+  await expect(page.getByRole('tabpanel')).toHaveCount(1)
+  await expect(page.locator('#action-command')).toBeHidden()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({path:'.workspace-runtime/tabs-mobile-question.png',fullPage:true})
+  expect(state.actions).toHaveLength(0)
+})
+
+test('saved library opens results in OpenClaw and keeps browser and keyboard navigation', async ({page}) => {
+  await page.setViewportSize({width:390,height:844})
+  const state=await mockBackend(page)
+  await page.goto('/study-assistant#saved-library-title')
+  const library=page.getByRole('region',{name:'Saved revisions and flashcards'})
+  await expect(library).toBeVisible()
+  await page.screenshot({path:'.workspace-runtime/tabs-mobile-library.png',fullPage:true})
+  await library.getByRole('button',{name:'Open',exact:true}).first().click()
+  await expect(page.getByRole('tab',{name:'OpenClaw studio',exact:true})).toHaveAttribute('aria-selected','true')
+  await expect(page.getByRole('heading',{name:'Audio revision transcript',exact:true})).toBeVisible()
+  await expect(library).toBeHidden()
+  await page.getByRole('link',{name:'Back to saved library',exact:true}).click()
+  await expect(library).toBeVisible()
+  await library.getByRole('button',{name:'Delete',exact:true}).first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button',{name:'Cancel',exact:true}).click()
+  await page.goBack()
+  await expect(page.getByRole('tab',{name:'OpenClaw studio',exact:true})).toHaveAttribute('aria-selected','true')
+  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab',{name:'Saved library',exact:true})).toBeFocused()
+  await page.reload()
+  await expect(library).toBeVisible()
+  expect(state.deletions).toHaveLength(0)
+})
+
+test('switching tabs preserves a running OpenClaw action without starting it twice', async ({page}) => {
+  const state=await mockBackend(page)
+  let release=false, checks=0
+  await page.route('**/api/v1/actions/new-1',route=>{
+    checks++
+    return release ? route.fallback() : route.fulfill({json:{action_id:'new-1',status:'processing',trace:[]}})
+  })
+  await page.goto('/study-assistant#study-actions')
+  await page.locator('#action-document').selectOption('doc-1')
+  await page.locator('#action-command').fill('Summarize this document and save it')
+  await page.getByRole('button',{name:'Run action',exact:true}).click()
+  await expect.poll(()=>checks).toBeGreaterThan(0)
+  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  release=true
+  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await expect(page.getByText('A concise document summary.',{exact:true})).toBeVisible()
+  expect(state.actions).toHaveLength(1)
+})
+
+test('all five tabs fit a narrow phone without horizontal overflow', async ({page}) => {
+  await page.setViewportSize({width:320,height:740})
+  await mockBackend(page)
+  await page.goto('/study-assistant')
+  for (const name of ['Documents','Ask a question','OpenClaw studio','Saved library','History']) {
+    await page.getByRole('tab',{name,exact:true}).click()
+    await expect(page.getByRole('tabpanel')).toHaveCount(1)
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+})

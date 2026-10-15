@@ -13,6 +13,7 @@ interface VoiceRecorderProps {
   /** Fired with the raw recording right before a successful transcription, so callers can archive it. */
   onAudioCaptured?: (blob: Blob) => void
   disabled?: boolean
+  active?: boolean
   prepareAnswer?: boolean
 }
 
@@ -214,7 +215,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
 }
 
 /* ── Main ── */
-export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false, prepareAnswer = false }: VoiceRecorderProps) {
+export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false, active = true, prepareAnswer = false }: VoiceRecorderProps) {
   const { recordingState, audioBlob, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -222,6 +223,9 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
   const [previewDuration, setPreviewDuration] = useState(0)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  useEffect(() => {
+    if (!active && recordingState === 'recording') stopRecording()
+  }, [active, recordingState, stopRecording])
 
   /* Live timer */
   useEffect(() => {

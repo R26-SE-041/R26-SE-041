@@ -23,9 +23,9 @@ export function SavedLibrary({ items, busy, selectedId, onOpen, onDelete, onRefr
   const currentPage = Math.min(page, pages)
   const start = (currentPage - 1) * PAGE_SIZE
   const visible = filtered.slice(start, start + PAGE_SIZE)
-  return <section aria-labelledby="saved-library-title" className="mt-6 border-t pt-5">
+  return <section aria-labelledby="saved-library-title" className="nb-card p-6 sm:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h3 id="saved-library-title" className="font-semibold" style={{ scrollMarginTop: 110 }}>Saved revisions and flashcards</h3>
+      <div><h2 id="saved-library-title" className="vl-section-title" style={{ scrollMarginTop: 110 }}>Saved revisions and flashcards</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-dim)' }}>{items.length} saved items · Find and reopen your study materials</p></div>
       <button className="vl-btn-secondary" disabled={busy} onClick={onRefresh}>Refresh saved library</button>
     </div>

@@ -5,7 +5,7 @@ import { LanguageSelector } from '@/components/voice/LanguageSelector'
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { DocumentActions } from '@/components/documents/DocumentActions'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { WorkspaceNavigation } from '@/components/ui/WorkspaceNavigation'
+import { WorkspaceNavigation, workspaceSectionFromHash, type WorkspaceSection } from '@/components/ui/WorkspaceNavigation'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { HistoryPanel } from '@/components/history/HistoryPanel'
 import {
@@ -29,6 +29,13 @@ import {
 } from '@/lib/studyHistory'
 
 type Phase = 'idle' | 'transcript-ready' | 'asking' | 'answered' | 'rag-error' | 'asr-error'
+const workspaceCopy: Record<WorkspaceSection, { title: string; description: string }> = {
+  'study-documents': { title: 'Learn with your voice', description: 'Study your documents in English, Tamil, and Sinhala.' },
+  'study-question': { title: 'Ask a question', description: 'Ask about your documents, then listen to the answer.' },
+  'study-actions': { title: 'OpenClaw studio', description: 'Create summaries, audio revisions, and flashcards from your documents.' },
+  'saved-library-title': { title: 'Saved library', description: 'Find and reopen your saved study materials.' },
+  'study-history': { title: 'History', description: 'Revisit your questions, answers, and audio.' },
+}
 
 interface Result {
   transcript: string
@@ -57,6 +64,19 @@ async function correctTranscript(transcript: string, language: Language): Promis
 }
 
 export default function StudyAssistantPage() {
+  const [libraryTarget, setLibraryTarget] = useState<HTMLDivElement | null>(null)
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>(workspaceSectionFromHash)
+  const selectSection = useCallback((section: WorkspaceSection) => {
+    document.querySelectorAll('audio').forEach(player => player.pause())
+    setActiveSection(section)
+    if (window.location.hash !== `#${section}`) window.location.hash = section
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [])
+  useEffect(() => {
+    const sync = () => { document.querySelectorAll('audio').forEach(player => player.pause()); setActiveSection(workspaceSectionFromHash()); window.scrollTo({ top: 0, behavior: 'instant' }) }
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
   // ─── Language & document state ─────────────────────────────────────────────
   const [language, setLanguage] = useState<Language>('english')
   const [documents, setDocuments] = useState<DocumentItem[]>([])
@@ -485,53 +505,33 @@ export default function StudyAssistantPage() {
             <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Learning Assistant</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-dim)' }}>Voice Interaction</span>
+            <span className="hidden text-xs font-medium sm:inline" style={{ color: 'var(--text-dim)' }}>Voice Interaction</span>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
       <div className="vl-workspace">
-        <WorkspaceNavigation />
+        <WorkspaceNavigation active={activeSection} onSelect={selectSection} />
       <main className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 pb-28 sm:px-8 lg:px-10 lg:py-10">
 
         {/* ── Hero ── */}
         <div className="vl-study-hero flex flex-col gap-3">
           <p className="vl-eyebrow">AI Study Assistant</p>
-          <h1 className="vl-serif" style={{ color: 'var(--text)' }}>Learn with your voice</h1>
+          <h1 className="vl-serif" style={{ color: 'var(--text)' }}>{workspaceCopy[activeSection].title}</h1>
           <p className="max-w-2xl text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-            Study your documents in English, Tamil, and Sinhala.
+            {workspaceCopy[activeSection].description}
           </p>
         </div>
 
-        <nav className="vl-study-steps" aria-label="Getting started">
+        <nav hidden={activeSection !== 'study-documents'} className="vl-study-steps" aria-label="Getting started">
           <a href="#study-documents"><span className="vl-step-number">{documents.length ? '✓' : '1'}</span><span><strong>Add a document</strong><small>{documents.length ? `${documents.length} ready to study` : 'Upload your notes or PDF'}</small></span></a>
           <a href="#study-question"><span className="vl-step-number">2</span><span><strong>Ask a question</strong><small>Choose a language, then speak</small></span></a>
           <a href="#study-actions"><span className="vl-step-number">3</span><span><strong>Create a revision</strong><small>Save audio, summaries or flashcards</small></span></a>
         </nav>
 
-        {/* ── Study controls ── */}
-        <section className="nb-card flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-start lg:gap-5">
-            <div>
-              <p className="vl-label">Document Study</p>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Learn from your uploaded documents</p>
-            </div>
-
-          </div>
-
-          <div className="hidden h-10 w-px lg:block" style={{ background: 'var(--border)' }} aria-hidden />
-
-          <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between lg:flex-1 lg:justify-end lg:gap-5 lg:border-0 lg:pt-0" style={{ borderColor: 'var(--border)' }}>
-            <div className="lg:text-right">
-              <p className="vl-label">{loc.ui.responseLanguage}</p>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Answers and audio</p>
-            </div>
-            <LanguageSelector value={language} onChange={selectLanguage} disabled={phase === 'asking'} />
-          </div>
-        </section>
-
         {/* ── Document Study panel ── */}
+        <div role="tabpanel" id="panel-study-documents" aria-labelledby="tab-study-documents" hidden={activeSection !== 'study-documents'} className="vl-tab-panel">
           <SectionWide id="study-documents" title="Document Study">
             <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               Upload your notes, PDFs, slides, or study files and receive answers grounded in your documents.
@@ -617,10 +617,20 @@ export default function StudyAssistantPage() {
           </SectionWide>
 
         {/* ── Ask a Question ── */}
+        </div>
+        <div role="tabpanel" id="panel-study-question" aria-labelledby="tab-study-question" hidden={activeSection !== 'study-question'} className="vl-tab-panel">
+        <section className="nb-card flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <p className="vl-label">{loc.ui.responseLanguage}</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Answers and audio</p>
+          </div>
+          <LanguageSelector value={language} onChange={selectLanguage} disabled={phase === 'asking'} />
+        </section>
         <SectionWide id="study-question" title={loc.ui.askAQuestion}>
           <VoiceRecorder
             language={language}
             prepareAnswer
+            active={activeSection === 'study-question'}
             onTranscript={handleTranscript}
             onAudioCaptured={handleAudioCaptured}
             onError={handleVoiceError}
@@ -639,7 +649,7 @@ export default function StudyAssistantPage() {
         </SectionWide>
 
         {/* ── Transcript / Fix / Ask ── */}
-        <div id="study-actions"><DocumentActions documents={documents} /></div>
+
 
         {transcript && (
           <SectionWide title={loc.ui.yourQuestion}>
@@ -834,7 +844,14 @@ export default function StudyAssistantPage() {
           </button>
         )}
 
-        {/* ── History ── */}
+        </div>
+        <div role="tabpanel" id="panel-study-actions" aria-labelledby="tab-study-actions" hidden={activeSection !== 'study-actions'} className="vl-tab-panel">
+          <div id="study-actions"><DocumentActions documents={documents} active={activeSection === 'study-actions'} libraryTarget={libraryTarget} onOpenSaved={() => selectSection('study-actions')} /></div>
+        </div>
+        <div role="tabpanel" id="panel-saved-library-title" aria-labelledby="tab-saved-library-title" hidden={activeSection !== 'saved-library-title'} className="vl-tab-panel">
+          <div ref={setLibraryTarget} />
+        </div>
+        <div role="tabpanel" id="panel-study-history" aria-labelledby="tab-study-history" hidden={activeSection !== 'study-history'} className="vl-tab-panel">
         <SectionWide id="study-history" title="History">
           {CLOUD_HISTORY && <p className="text-xs mb-3" style={{ color: 'var(--text-dim)' }}>Saved to your account. Available when you sign in on another device.</p>}
           {historyError && <p role="alert" className="text-sm mb-3" style={{ color: 'var(--danger)' }}>{historyError}</p>}
@@ -849,6 +866,7 @@ export default function StudyAssistantPage() {
             onClearAll={handleClearHistory}
           />
         </SectionWide>
+        </div>
       </main>
       </div>
     </div>

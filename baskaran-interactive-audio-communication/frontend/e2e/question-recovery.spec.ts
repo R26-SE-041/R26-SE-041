@@ -21,7 +21,7 @@ for(const failure of ['start','poll']) test(`mobile question resumes the same an
     if(failure==='poll'&&polls===1)return route.abort('connectionreset')
     return route.fulfill({json:polls<3?{status:'pending'}:{status:'complete',result:answer}})
   })
-  await page.goto('/study-assistant')
+  await page.goto('/study-assistant#study-question')
   await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'question.wav',mimeType:'audio/wav',buffer:silentWav(1)})
   await page.locator('#voice-submit-btn').click()
   const question=page.getByRole('textbox',{name:'Your Question',exact:true})
