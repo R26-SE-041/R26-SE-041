@@ -1014,6 +1014,9 @@ async def test_verified_work_does_not_wait_for_agent_final_prose(env, monkeypatc
  ('create a audio review in tamil', {'intent':'audio_revision','language':'tamil'}),
  ('Make Tamil audio', {'intent':'audio_revision','language':'tamil'}),
  ('Generate a Sinhala audio summary', {'intent':'audio_revision','language':'sinhala'}),
+ ('make singhala audio review', {'intent':'audio_revision','language':'sinhala'}),
+ ('Make Singala audio', {'intent':'audio_revision','language':'sinhala'}),
+ ('Create an audio revision in Sinhalese and save it', {'intent':'audio_revision','language':'sinhala'}),
  ('Create a one-minute audio revision in Tamil', {'intent':'audio_revision','language':'tamil','style':'one_minute','target_duration':60}),
  ('Make detailed English audio', {'intent':'audio_revision','language':'english','style':'detailed'}),
  ('Make audio for this section only in Tamil', {'intent':'audio_revision','language':'tamil','scope':'section'}),
@@ -1023,6 +1026,9 @@ async def test_verified_work_does_not_wait_for_agent_final_prose(env, monkeypatc
  ('Do not create Tamil audio', None),
  ('What is audio review in Tamil?', None),
  ('Make audio in Tamil and English', None),
+ ('Make audio in Tamil and Singhala', None),
+ ('Do not create Singhala audio', None),
+ ('Create Singhala audio and email it', None),
  ('Create Tamil audio and email it', None),
  ('Create Tamil audio then delete it', None),
  ('Make a one-minute detailed audio revision', None),
@@ -1053,6 +1059,30 @@ def test_preview_is_side_effect_free_and_matches_execution(env, monkeypatch):
         refused=client.post('/api/v1/actions',json={'command':'Make audio in Tamil and English','document_id':doc,'session_id':session})
         assert refused.status_code == 422
         assert run.await_count == 1
+
+
+def test_singhala_preview_and_execution_override_selected_tamil(env, monkeypatch):
+    _, doc, session, app = env
+    run = AsyncMock()
+    monkeypatch.setattr(service, 'run_action', run)
+    with TestClient(app) as client:
+        command = 'make singhala audio review'
+        preview = client.post('/api/v1/actions/interpret', json={'command':command,'language':'tamil'}).json()
+        assert preview['status'] == 'ready' and preview['language'] == 'sinhala'
+        assert preview['message'] == 'Create and save an audio revision in Sinhala'
+        run.assert_not_called()
+        response = client.post('/api/v1/actions', json={'command':command,'language':'tamil',
+            'document_id':doc,'session_id':session})
+        assert response.status_code == 202
+        assert store.get(response.json()['action_id'])['language'] == 'sinhala'
+        assert run.await_count == 1
+        clarification = client.post('/api/v1/actions/interpret', json={
+            'command':'Make singhala audio and email it','language':'tamil'}).json()
+        assert clarification['status'] == 'clarify'
+        assert clarification['language'] == 'sinhala'
+        assert 'Sinhala' in clarification['message'] and 'Tamil' not in clarification['message']
+        conflict = client.post('/api/v1/actions/interpret', json={'command':'Make Tamil and Singhala audio'}).json()
+        assert conflict['status'] == 'clarify' and 'Choose one output language' in conflict['message']
 
 @pytest.mark.asyncio
 async def test_section_retry_repairs_malformed_json_and_normalizes_numbering(monkeypatch):

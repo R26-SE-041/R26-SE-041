@@ -1,6 +1,20 @@
 import { expect, test } from '@playwright/test'
 import { mockBackend, silentWav } from './backendMock'
 
+test('Singhala audio review preview names Sinhala and uses a matching example',async({page})=>{
+ await mockBackend(page)
+ await page.setViewportSize({width:384,height:832})
+ await page.route('**/api/v1/actions/interpret',route=>route.fulfill({json:{status:'ready',intent:'audio_revision',language:'sinhala',scope:'document',message:'Create and save an audio revision in Sinhala'}}))
+ await page.goto('/study-assistant#study-actions')
+ await page.locator('#action-document').selectOption('doc-1')
+ await page.locator('#action-command').fill('make singhala audio review')
+ const preview=page.getByRole('region',{name:'Command preview'})
+ await expect(preview).toContainText('Create and save an audio revision in Sinhala')
+ await expect(preview).not.toContainText('Tamil')
+ await expect(page.getByText('Use your own wording, like “Make Sinhala audio”. Review the preview, then select Run action.',{exact:true})).toBeVisible()
+ await expect(page.getByRole('button',{name:'Run action',exact:true})).toBeEnabled()
+})
+
 test('natural commands show an explicit language preview and do not run until clicked',async({page})=>{
  const state=await mockBackend(page)
  await page.setViewportSize({width:384,height:832})

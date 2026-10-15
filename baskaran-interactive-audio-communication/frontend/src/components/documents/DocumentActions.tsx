@@ -88,6 +88,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     return () => { clearTimeout(timer); abort.abort() }
   }, [command, language, capabilities?.enabled, previewRetry])
   const currentPreview = preview?.command === command.trim() && preview.language === language ? preview.value : null
+  const exampleLanguage = { english: 'English', tamil: 'Tamil', sinhala: 'Sinhala' }[currentPreview?.language || language]
 
   async function refreshSaved() {
     try { const values = await listSavedActions(); if (mounted.current) setSavedActions(values) }
@@ -295,7 +296,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
         {currentPreview?.status === 'ready' && <p className="mt-2 text-sm">{busy ? 'Your action is running. Progress appears below.' : result ? 'Review the result below. Select Run action only if you want to create it again.' : 'Review this action before running it. Nothing has started yet.'}</p>}
         {previewError && <button className="vl-btn-secondary mt-3" onClick={() => setPreviewRetry(value => value + 1)}>Retry command check</button>}
       </div>}
-      <p className="mt-2 text-sm">Use your own wording, like “Make Tamil audio”. Review the preview, then select Run action.</p>
+      <p className="mt-2 text-sm">Use your own wording, like “Make {exampleLanguage} audio”. Review the preview, then select Run action.</p>
       <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">Command examples</summary>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">{[...Object.values(examples[voiceLanguage]), ...extraCommands].map(value => <button key={value} className="vl-btn-secondary text-left" disabled={busy} onClick={() => setCommand(value)}>{value}</button>)}</div>
         <p className="mt-2">Control playback using the audio player and section buttons. Commands naming Tamil, Sinhala or English override the output language selection. Section-only generation uses the source section selected below.</p>

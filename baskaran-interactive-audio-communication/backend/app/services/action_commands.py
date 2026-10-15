@@ -2,8 +2,14 @@
 import re
 
 
-def parse_generation(command):
+def _normalize(command):
     text = re.sub(r"\s+", " ", command.strip().lower()).rstrip(".!?")
+    # Explicit spelling aliases only; never guess an arbitrary language name.
+    return re.sub(r"\b(?:singhala|singala|sinhalese)\b", "sinhala", text)
+
+
+def parse_generation(command):
+    text = _normalize(command)
     text = re.sub(r"^(?:please |(?:can|could|would) you )", "", text)
     text = text.replace("one minute", "one-minute").replace("flash cards", "flashcards")
     if text == "create flashcards from this document and save them":
@@ -65,19 +71,22 @@ def _natural_generation(text):
 def interpret(command, language="english"):
     """Preview and execution share the same classifier. No model calls or side effects."""
     from app.services.document_actions import classify
-    text = re.sub(r"\s+", " ", command.strip().lower()).rstrip(".!?")
+    text = _normalize(command)
     options = parse_generation(command) or {}
     intent = classify(command)
     if text == "delete this saved revision":
         intent = "delete"
     if not intent:
-        if len(set(re.findall(r"\b(english|tamil|sinhala)\b", text))) > 1:
+        languages = set(re.findall(r"\b(english|tamil|sinhala)\b", text))
+        example_language = (next(iter(languages)) if len(languages) == 1 else language).title()
+        if len(languages) > 1:
             message = "Choose one output language: English, Tamil or Sinhala."
         elif re.search(r"\baudio\b", text) and re.search(r"\b(review|revision|create|make|generate)\b", text):
-            message = "Please describe one task, for example: Make a Tamil audio revision."
+            message = f"Please describe one task, for example: Make an audio revision in {example_language}."
         else:
-            message = "What would you like to create? Try: Make Tamil audio, summarize this document, or create flashcards."
-        return {"status": "clarify", "message": message}
+            message = f"What would you like to create? Try: Make {example_language} audio, summarize this document, or create flashcards."
+        return {"status": "clarify", "message": message,
+                **({"language": next(iter(languages))} if len(languages) == 1 else {})}
     effective_language = options.get("language", language)
     label = effective_language.title()
     names = {"summarize": "Create a summary", "save": "Save the existing summary",
