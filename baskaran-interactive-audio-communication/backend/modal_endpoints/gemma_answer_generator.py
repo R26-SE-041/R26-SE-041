@@ -7,6 +7,7 @@ Set MODAL_BASE_GEMMA_URL to BaseGemmaAnswer.generate in this app.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import modal
@@ -23,6 +24,9 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "transformers>=5.0.0", "torch>=2.4.0", "accelerate>=0.28.0",
     "torchvision>=0.19.0", "pillow>=10.0.0", "peft==0.20.0",
     "fastapi[standard]>=0.115.0", "pydantic>=2.0.0",
+).add_local_file(
+    Path(__file__).resolve().parents[1] / "app/services/answer_quality.py",
+    "/root/answer_quality.py",
 )
 app = modal.App(_APP_NAME, image=image)
 model_volume = modal.Volume.from_name("voicelearn-models", create_if_missing=True)
@@ -63,12 +67,19 @@ def _messages(payload: AnswerRequest, *, document_only: bool) -> list[dict[str, 
         system += "\n\nTutor guidance:\n" + policy
     if memory_text:
         user = "Temporary follow-up context:\n" + memory_text + "\n\n" + user
+    system += (
+        "\nGive a concise, complete answer in a few short sentences or bullets. "
+        "Do not repeat words or sentences, invent details, or add a long preamble. "
+        "Stop when the question is answered."
+    )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 class _GemmaAnswerBase:
     def _generate(self, payload: AnswerRequest, *, document_only: bool) -> dict[str, str]:
         import torch
+        from transformers import StoppingCriteria, StoppingCriteriaList
+        from answer_quality import has_repetition_loop, require_usable_answer
 
         messages = _messages(payload, document_only=document_only)
         inputs = self.processor.apply_chat_template(
@@ -76,13 +87,39 @@ class _GemmaAnswerBase:
             return_dict=True, return_tensors="pt", enable_thinking=False,
         ).to(self.model.device)
         input_length = inputs["input_ids"].shape[-1]
-        with torch.inference_mode():
-            output = self.model.generate(
-                **inputs, max_new_tokens=900, do_sample=False,
-                pad_token_id=self.processor.tokenizer.eos_token_id,
-            )
+        processor = self.processor
+
+        class StopWordLoop(StoppingCriteria):
+            def __call__(self, input_ids, scores, **kwargs):
+                generated = input_ids.shape[-1] - input_length
+                if generated < 32 or generated % 16:
+                    return False
+                text = processor.decode(input_ids[0][input_length:], skip_special_tokens=True)
+                return has_repetition_loop(text)
+
+        # A bounded retry stays on this base model and the same retrieved context.
+        # Ordinary answers use one pass; loops stop early instead of burning the
+        # remaining token budget. Never silently return a trimmed partial answer.
+        for attempt in range(2):
+            with torch.inference_mode():
+                output = self.model.generate(
+                    **inputs, max_new_tokens=900 if attempt == 0 else 600,
+                    do_sample=False, repetition_penalty=1.1 if attempt == 0 else 1.18,
+                    no_repeat_ngram_size=12 if attempt == 0 else 8,
+                    stopping_criteria=StoppingCriteriaList([StopWordLoop()]),
+                    pad_token_id=self.processor.tokenizer.eos_token_id,
+                )
+            answer = self.processor.decode(output[0][input_length:], skip_special_tokens=True).strip()
+            try:
+                answer = require_usable_answer(answer)
+                break
+            except ValueError:
+                if attempt == 1:
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=502, detail="Answer generation produced repetitive text. Please retry your question.")
+                print("[BaseGemmaAnswer] repetitive output rejected; one bounded retry")
         return {
-            "answer": self.processor.decode(output[0][input_length:], skip_special_tokens=True).strip(),
+            "answer": answer,
             "route": payload.route,
             "model_id": _BASE_MODEL_CANONICAL_ID,
             "adapter_active": bool(getattr(self.model, "peft_config", None)),

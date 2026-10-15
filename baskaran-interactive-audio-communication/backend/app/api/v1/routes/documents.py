@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile,
 
 from app.core.security import get_current_user
 from app.services.modal_client import call_answer_generator, call_transcript_corrector, call_localizer
+from app.services.answer_quality import require_usable_answer
 from app.services.model_router import DOCUMENT_RAG_BASE, choose_answer_route
 from app.schemas.document import (
     DocumentUploadResponse,
@@ -541,7 +542,7 @@ async def ask_question(
         )
     except Exception as e:
         logger.error("RAG generator failed: %s", e)
-        answer = "RAG generation is not available right now. Please deploy the Modal RAG endpoint."
+        raise HTTPException(status_code=502, detail="Could not generate a reliable answer. Please retry your question.") from e
     finally:
         logger.info("[LATENCY] GEMMA = %.3fs", time.perf_counter() - gemma_started)
 
@@ -570,6 +571,12 @@ async def ask_question(
             )
     else:
         localized_answer = answer
+
+    # Reject corrupt output before it reaches memory, history or speech.
+    try:
+        localized_answer = require_usable_answer(localized_answer)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     update_memento(
         body.session_id,

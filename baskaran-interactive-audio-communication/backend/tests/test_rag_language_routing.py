@@ -24,8 +24,8 @@ CHUNKS = [
 ]
 
 
-def _ask(language: str, direct: bool):
-    generated = f"grounded-{language}"
+def _ask(language: str, direct: bool, generated=None):
+    generated = generated if generated is not None else f"grounded-{language}"
     with (
         patch(
             "app.api.v1.routes.documents.bge_m3_cache_status",
@@ -97,3 +97,12 @@ def test_english_is_unchanged_when_flag_is_disabled():
     assert gemma.await_args.kwargs["context_chunks"] == [CHUNKS[0]["text"]]
     localizer.assert_not_awaited()
     assert response.answer == "grounded-english"
+
+
+def test_repetitive_sinhala_is_rejected_before_session_memory():
+    from fastapi import HTTPException
+    with patch("app.api.v1.routes.documents.update_memento") as memory:
+        with pytest.raises(HTTPException) as exc:
+            _ask("sinhala", direct=True, generated="සුනඛ " * 70)
+    assert exc.value.status_code == 502
+    memory.assert_not_called()
