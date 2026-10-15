@@ -1,4 +1,5 @@
 from unittest import TestCase
+import os
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -39,7 +40,9 @@ class ConversationTests(TestCase):
     def test_recycle_bin_listing_is_explicit_and_keeps_existing_pagination(self):
         app.dependency_overrides[require_user] = lambda: self.owner
         try:
-            with patch("studio.main.repo") as repo:
+            # Keep this unit test independent of local .env/Supabase credentials.
+            with patch.dict(os.environ,{},clear=True), patch("studio.main.repo") as repo, \
+                    patch("studio.main.Storage") as storage:
                 repo.list_chats.return_value = []
                 client = TestClient(app)
                 self.assertEqual(client.get("/studio/chats").status_code,200)
@@ -47,6 +50,7 @@ class ConversationTests(TestCase):
                 self.assertEqual(client.get("/studio/chats?trashed=true&query=heart&before_id=older").status_code,200)
                 self.assertEqual(repo.list_chats.call_args.kwargs,{"trashed":True})
                 self.assertEqual(repo.list_chats.call_args.args[:4],(self.owner,None,"older","heart"))
+                storage.return_value.signed_url.assert_not_called()
         finally:
             app.dependency_overrides.clear()
 
