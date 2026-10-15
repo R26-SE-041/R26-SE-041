@@ -292,7 +292,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       {command.trim() && !isPlaybackCommand(command) && <div className="mt-3 rounded-xl border p-4" role="region" aria-label="Command preview" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
         <h3 className="font-semibold">{currentPreview?.status === 'clarify' ? 'A little more detail needed' : 'What I understood'}</h3>
         <p role="status" className="mt-2 text-sm">{previewError || currentPreview?.message || 'Checking your command...'}</p>
-        {currentPreview?.status === 'ready' && <p className="mt-2 text-sm">Review this action before running it. Nothing has started yet.</p>}
+        {currentPreview?.status === 'ready' && <p className="mt-2 text-sm">{busy ? 'Your action is running. Progress appears below.' : result ? 'Review the result below. Select Run action only if you want to create it again.' : 'Review this action before running it. Nothing has started yet.'}</p>}
         {previewError && <button className="vl-btn-secondary mt-3" onClick={() => setPreviewRetry(value => value + 1)}>Retry command check</button>}
       </div>}
       <p className="mt-2 text-sm">Use your own wording, like “Make Tamil audio”. Review the preview, then select Run action.</p>
@@ -311,7 +311,11 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[voiceLanguage].audio)}>Use audio revision command</button>
       <p className="mt-2 text-sm" role="status">{!busy && status}</p>
       {error && <p role="alert" className="mt-3 text-sm" style={{ color: 'var(--warning)' }}>{error}</p>}
-      {result && <div ref={resultAnchor} className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ scrollMarginTop: 110 }}>
+      {result?.status === 'failed' && result.intent === 'audio_revision' && result.revision_mode === 'sectioned' && currentPreview?.scope !== 'section' && <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => {
+        setRevisionMode('single'); setError(null); setResult(null)
+        setStatus('Single audio selected. Select Run action to create one continuous revision.')
+      }}>Use single audio instead</button>}
+      {result && (result.status !== 'failed' || result.summary || result.flashcards?.length) && <div ref={resultAnchor} className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ scrollMarginTop: 110 }}>
         <h3 className="font-semibold">Opened study result</h3><a className="vl-btn-secondary" href="#saved-library-title">Back to saved library</a>
       </div>}
       {result?.status === 'partial' && result.revision_mode === 'sectioned' && result.summary_language === result.language
