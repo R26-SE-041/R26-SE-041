@@ -959,3 +959,37 @@ def test_preview_is_side_effect_free_and_matches_execution(env, monkeypatch):
         refused=client.post('/api/v1/actions',json={'command':'Make audio in Tamil and English','document_id':doc,'session_id':session})
         assert refused.status_code == 422
         assert run.await_count == 1
+
+@pytest.mark.asyncio
+async def test_section_retry_repairs_malformed_json_and_normalizes_numbering(monkeypatch):
+    from app.services import modal_client
+    import json
+    malformed='{"sections":[{"id", "title":"Cats","script":"Cats are mammals."}]}'
+    valid={'sections':[{'id':i+1,'title':f'Topic {i+1}','script':f'Fact {i+1}.'} for i in range(3)]}
+    generator=AsyncMock(side_effect=[{'answer':malformed},{'answer':json.dumps(valid)}])
+    monkeypatch.setattr(modal_client,'call_answer_generator',generator)
+    text='First source.\n\nSecond source.\n\nThird source.'
+    result=await revision_sections.generate_sections(text)
+    assert generator.await_count==2
+    assert [s['id'] for s in result]==[0,1,2]
+    assert [s['source_text'] for s in result]==['First source.','Second source.','Third source.']
+    assert generator.call_args_list[0].kwargs['context_chunks']==generator.call_args_list[1].kwargs['context_chunks']
+    assert all(c.kwargs['response_format']=='json_object' for c in generator.call_args_list)
+    for s in result:assert text[s['source_start']:s['source_end']]==s['source_text']
+
+
+@pytest.mark.asyncio
+async def test_section_generation_does_not_retry_network_errors(monkeypatch):
+    from app.services import modal_client
+    generator=AsyncMock(side_effect=RuntimeError('service offline'))
+    monkeypatch.setattr(modal_client,'call_answer_generator',generator)
+    with pytest.raises(RuntimeError,match='service offline'):await revision_sections.generate_sections('Cats are mammals.')
+    assert generator.await_count==1
+
+
+def test_section_response_rejects_ambiguous_or_invalid_ids():
+    import json
+    spans=revision_sections.split_source('A.\n\nB.\n\nC.')
+    for ids in [[0,0,2],[2,1,0],[1,3,4],[True,1,2],['0',1,2]]:
+        raw=json.dumps({'sections':[{'id':i,'title':'Topic','script':'A fact.'} for i in ids]})
+        with pytest.raises(ValueError):revision_sections.parse_section_response(raw,spans)

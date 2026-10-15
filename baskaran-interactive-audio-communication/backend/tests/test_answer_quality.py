@@ -101,3 +101,15 @@ def test_generator_never_returns_corrupt_text_after_bounded_retry(monkeypatch):
         instance._generate(payload, document_only=True)
     assert exc.value.status_code == 502
     assert len(calls) == 2
+
+def test_structured_generator_allows_repeated_schema_keys(monkeypatch):
+    instance, payload, calls, _ = _generator(monkeypatch, ['{"sections":[{"id":0,"title":"Cats","script":"Cats are mammals."}]}'])
+    payload.response_format='json_object'
+    instance._generate(payload,document_only=True)
+    assert len(calls)==1
+    assert calls[0]['no_repeat_ngram_size']==0
+    assert calls[0]['repetition_penalty']==1.0
+    assert calls[0]['max_new_tokens']==1600
+    prompt=instance.processor.messages[0]['content']
+    assert 'complete, valid JSON object' in prompt
+    assert 'few short sentences or bullets' not in prompt

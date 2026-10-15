@@ -431,6 +431,7 @@ async def call_answer_generator(
     context_chunks: list[str] | None = None,
     tutor_instructions: str = "",
     memento: dict | None = None,
+    response_format: str = "text",
 ) -> dict:
     """Call the configured base answer service.
 
@@ -453,6 +454,7 @@ async def call_answer_generator(
                 "tutor_instructions": tutor_instructions,
                 "memento": memento,
                 "route": route,
+                "response_format": response_format,
             },
             timeout=480.0,  # Allow the base model's A100 cold start.
         )
