@@ -17,11 +17,11 @@ const aliases: Record<string, string> = {
 }
 
 /** Exact phrases only: narration, negation and compound instructions are ignored. */
-export function parseVoiceIntent(transcript: string, requireWake = true): VoiceIntent | null {
+export function parseVoiceIntent(transcript: string): VoiceIntent | null {
   let text = normalizeCommand(transcript.replace(/[,;:]/g, ' '))
     .replace(/\b(one|1) minute\b/g, 'one-minute')
   const wake = /^voice\s*learn\s+/.test(text)
-  if (requireWake && !wake) return null
+  if (!wake) return null
   if (wake) text = text.replace(/^voice\s*learn\s+/, '')
   text = text.replace(/^please /, '')
   if (text === 'confirm delete') return wake ? { kind: 'confirm-delete' } : null
@@ -30,8 +30,6 @@ export function parseVoiceIntent(transcript: string, requireWake = true): VoiceI
   if (text === 'disable hands free' || text === 'disable hands-free' || text === 'stop listening') return { kind: 'disable' }
   text = aliases[text] || text
   if (isPlaybackCommand(text)) return { kind: 'playback', command: text }
-  // Always require the prefix for new work and deletion, even in short-command mode.
-  if (!wake) return null
   if (text === 'delete this saved revision') return { kind: 'delete', command: text }
   if (creation.has(text)) return { kind: 'create', command: text }
   return null

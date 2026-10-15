@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { isAndroidBrowser } from '@/hooks/useHandsFreeRecognition'
 import { HandsFreeControls } from './HandsFreeControls'
 import { RevisionNavigator } from './RevisionNavigator'
 import { SavedLibrary } from './SavedLibrary'
@@ -48,6 +49,8 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
   const [flipped, setFlipped] = useState<number[]>([])
   const replayEnd = useRef<number | null>(null)
   const [handsFree, setHandsFree] = useState(false)
+  const [playbackInterruptions, setPlaybackInterruptions] = useState(0)
+  const expectedPause = useRef(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const [result, setResult] = useState<DocumentActionResult | null>(null)
@@ -133,6 +136,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       if (isPlaybackCommand(spokenCommand)) {
         if (!audioPlayer.current || !audioUrl || result?.intent !== 'audio_revision') { setError('Generate or open a saved audio revision first.'); return }
         try {
+          if (/^(pause|stop) the audio$/.test(text) && !audioPlayer.current.paused) expectedPause.current = true
           const controlled = await controlPlayback(spokenCommand, audioPlayer.current, result.sections ?? [])
           replayEnd.current = controlled.replayEnd ?? null
           setCurrentTime(audioPlayer.current.currentTime); setPlaybackRate(String(audioPlayer.current.playbackRate))
@@ -237,7 +241,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     <section className="rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
       <h2 className="text-lg font-semibold">Document actions and audio revision</h2>
       <p className="mt-2 text-sm">Summarize your document or create a short spoken revision with a transcript and audio download. Limit: {capabilities.max_document_chars.toLocaleString()} extracted characters.</p>
-      <HandsFreeControls active={visible} busy={busy} onEnabled={setHandsFree}
+      <HandsFreeControls active={visible} busy={busy} onEnabled={setHandsFree} playbackInterruptions={playbackInterruptions}
         context={JSON.stringify([documentId, result?.action_id, selectedSection, language, revisionMode, executionProvider])}
         validate={(spoken, deleting) => {
           if (active.current) return 'Wait for the current task to finish.'
@@ -318,12 +322,19 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       {result?.status === 'partial' && result.revision_mode === 'sectioned' && result.summary_language === result.language
         && !!result.sections?.length && result.sections.every(section => section.script_language === result.language) &&
         <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>Retry audio using prepared transcript</button>}
-      {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
+      {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls
+        onPlay={() => { expectedPause.current = false }}
+        onPause={() => {
+          const expected = expectedPause.current
+          expectedPause.current = false
+          if (!expected && handsFree && visible && !busy && !audioPlayer.current?.ended && isAndroidBrowser()) setPlaybackInterruptions(value => value + 1)
+        }}
+        onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
         onTimeUpdate={() => {
           const player = audioPlayer.current
           if (!player) return
           setCurrentTime(player.currentTime)
-          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { player.pause(); replayEnd.current = null }
+          if (replayEnd.current !== null && player.currentTime >= replayEnd.current) { expectedPause.current = true; player.pause(); replayEnd.current = null }
         }}
         autoPlay={visible && result?.intent !== 'audio_revision'} onLoadedMetadata={() => { if (audioPlayer.current) audioPlayer.current.playbackRate = Number(playbackRate) }} />}
       {audioUrl && result?.intent === 'audio_revision' && <label className="mt-3 block text-sm">Playback speed

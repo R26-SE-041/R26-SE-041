@@ -20,10 +20,11 @@ async function installRecognition(page:Page) {
 async function say(page:Page,text:string, final=true, duplicate=false) {
   await page.evaluate(({text,final,duplicate})=>(window as any).voiceInstances.at(-1).emit(text,final,duplicate),{text,final,duplicate})
 }
-async function openAudio(page:Page) {
+async function openAudio(page:Page, enable = true) {
   await page.goto('/study-assistant#saved-library-title')
   await page.getByRole('region',{name:'Saved revisions and flashcards'}).getByRole('button',{name:'Open',exact:true}).first().click()
   await expect(page.locator('audio').last()).toHaveAttribute('src',/^blob:/)
+  if (!enable) return
   await page.getByRole('button',{name:'Enable hands-free',exact:true}).click()
   await expect(page.getByText(/^Listening/)).toBeVisible()
 }
@@ -144,9 +145,9 @@ test('permission errors, silence restart, cancellation and expired confirmations
   await say(page,'VoiceLearn confirm')
   expect(state.actions).toHaveLength(0)
   await page.getByText('How to use voice controls',{exact:true}).click()
-  await page.getByRole('checkbox',{name:/Allow short playback/}).check()
+  await expect(page.getByRole('checkbox',{name:/Allow short playback/})).toHaveCount(0)
   await say(page,'pause')
-  await expect(page.getByText('Audio paused',{exact:true})).toBeVisible()
+  await expect(page.getByText('Audio paused',{exact:true})).toHaveCount(0)
   await say(page,'VoiceLearn stop listening')
   await expect(page.getByRole('button',{name:'Enable hands-free',exact:true})).toBeVisible()
 })
@@ -176,4 +177,50 @@ test('S24-sized view keeps hands-free controls readable above the glass dock',as
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   await expect(panel.getByRole('button',{name:'Turn off hands-free',exact:true})).toBeInViewport()
   await page.screenshot({path:'.workspace-runtime/hands-free-mobile.png',fullPage:false})
+})
+
+test('Android recognition ending cannot restart the microphone or oscillate playback',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (Linux; Android 15; SM-S928B) Chrome/140 Mobile Safari/537.36',configurable:true}))
+  await installRecognition(page);const state=await mockBackend(page);await openAudio(page)
+  const audio=page.locator('audio').last()
+  await audio.evaluate((a:HTMLAudioElement)=>a.play())
+  await say(page,'VoiceLearn pause audio')
+  await expect.poll(()=>audio.evaluate((a:HTMLAudioElement)=>a.paused)).toBe(true)
+  await expect(page.getByRole('button',{name:'Turn off hands-free',exact:true})).toBeVisible()
+  await say(page,'VoiceLearn resume audio')
+  await expect.poll(()=>audio.evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false)
+  await page.clock.install()
+  await page.evaluate(()=>(window as any).voiceInstances.at(-1).onend())
+  await expect(page.getByText(/Your Android browser ended voice listening/)).toBeVisible()
+  await page.clock.runFor(15_000)
+  expect(await page.evaluate(()=>(window as any).voiceInstances.length)).toBe(1)
+  expect(await audio.evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false)
+  expect(state.actions).toHaveLength(0)
+})
+
+test('Android microphone focus interruption turns listening off and permits stable manual playback',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (Linux; Android 15; SM-S928B) Chrome/140 Mobile Safari/537.36',configurable:true}))
+  await installRecognition(page);const state=await mockBackend(page);await openAudio(page,false)
+  const audio=page.locator('audio').last()
+  await audio.evaluate((a:HTMLAudioElement)=>{
+    (window as any).playEvents=0
+    a.addEventListener('play',()=>{(window as any).playEvents++})
+    return a.play()
+  })
+  await page.getByRole('button',{name:'Enable hands-free',exact:true}).click()
+  await expect(page.getByText(/^Listening/)).toBeVisible()
+  // Model the OS/browser pausing media to grant microphone audio focus.
+  await audio.evaluate((a:HTMLAudioElement)=>a.pause())
+  await expect(page.getByText(/Playback was interrupted outside a voice command/)).toBeVisible()
+  await expect(page.getByRole('button',{name:'Enable hands-free',exact:true})).toBeVisible()
+  await expect.poll(()=>page.evaluate(()=>(window as any).voiceInstances.at(-1).aborted)).toBe(true)
+  await page.clock.install()
+  await page.clock.runFor(15_000)
+  expect(await page.evaluate(()=>(window as any).voiceInstances.length)).toBe(1)
+  expect(await page.evaluate(()=>(window as any).playEvents)).toBe(1)
+  await audio.evaluate((a:HTMLAudioElement)=>a.play())
+  await page.clock.runFor(3_000)
+  expect(await audio.evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false)
+  expect(await page.evaluate(()=>(window as any).voiceInstances.length)).toBe(1)
+  expect(state.actions).toHaveLength(0)
 })
