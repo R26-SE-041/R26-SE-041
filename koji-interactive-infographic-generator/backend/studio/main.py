@@ -273,10 +273,12 @@ def delete_history(generation_id: UUID,user_id: str=Depends(require_user)):
     if not row:
         raise HTTPException(404,"Generation not found")
     try:
-        repo.delete_history(user_id,str(generation_id),before_delete=lambda: Storage().remove(repo.asset_paths(user_id,str(generation_id))))
+        repo.set_chat_trashed(user_id,row["metadata"].get("chatId") or str(generation_id),True)
     except ValueError as exc:
         raise HTTPException(409,str(exc))
-    return {"status":"deleted"}
+    except LookupError:
+        raise HTTPException(404,"Conversation not found")
+    return {"status":"trashed"}
 
 
 @app.post("/studio/import",status_code=201)
@@ -317,8 +319,8 @@ def import_history(body: HistoryImport,user_id: str=Depends(require_user)):
 def list_chats(before: datetime | None=Query(default=None),before_id: str=Query(default="",max_length=128),
                query: str=Query(default="",max_length=100),
                mode: Literal["general","anatomy","sketch"] | None=Query(default=None),
-               since: datetime | None=Query(default=None),user_id: str=Depends(require_user)):
-    rows = repo.list_chats(user_id,before,before_id,query.strip(),mode or "",since)
+               since: datetime | None=Query(default=None),trashed: bool=Query(default=False),user_id: str=Depends(require_user)):
+    rows = repo.list_chats(user_id,before,before_id,query.strip(),mode or "",since,trashed=trashed)
     storage = Storage()
     result = []
     for row in rows:
@@ -370,7 +372,27 @@ def delete_chat(chat_id: str,user_id: str=Depends(require_user)):
     if not repo.get_chat(user_id,chat_id):
         raise HTTPException(404,"Conversation not found")
     try:
+        repo.set_chat_trashed(user_id,chat_id,True)
+    except ValueError as exc:
+        raise HTTPException(409,str(exc))
+    except LookupError:
+        raise HTTPException(404,"Conversation not found")
+    return {"status":"trashed"}
+
+@app.post("/studio/chats/{chat_id}/restore")
+def restore_chat(chat_id: str,user_id: str=Depends(require_user)):
+    try:
+        repo.set_chat_trashed(user_id,chat_id,False)
+    except LookupError:
+        raise HTTPException(404,"Conversation not found")
+    return {"status":"restored"}
+
+@app.delete("/studio/chats/{chat_id}/permanent")
+def purge_chat(chat_id: str,user_id: str=Depends(require_user)):
+    try:
         repo.delete_chat(user_id,chat_id,Storage().remove)
+    except LookupError:
+        raise HTTPException(404,"Conversation not found")
     except ValueError as exc:
         raise HTTPException(409,str(exc))
     return {"status":"deleted"}

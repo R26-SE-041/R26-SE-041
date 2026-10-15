@@ -195,6 +195,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
         remove.assert_not_called()
         with connection() as conn,conn.cursor() as cur:
             cur.execute("update koji_jobs set status='failed' where id=%s",(job["id"],))
+        self.repo.set_chat_trashed(self.owner,"chat",True)
         self.repo.delete_chat(self.owner,"chat",remove)
         self.assertEqual(set(remove.call_args.args[0]),{self.owner+"/image.png",self.owner+"/thumbnail.png",
             self.owner+"/old.glb",self.owner+"/new.glb"})
@@ -247,6 +248,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
         with connection() as conn,conn.cursor() as cur:
             cur.execute("update koji_documents set chat_id='original' where id=%s",(identifier,))
         remove=Mock()
+        self.repo.set_chat_trashed(self.owner,"original",True)
         self.repo.delete_chat(self.owner,"original",remove)
         remove.assert_called_once_with([])
         self.assertIsNotNone(documents.get(self.owner,identifier))
@@ -254,6 +256,37 @@ class RepositoryIntegrationTests(unittest.TestCase):
         job=self.repo.get_job(self.owner,str(row["job_id"]))
         self.assertEqual(job["status"],"queued")
         self.assertNotIn("chat_id",job["payload"])
+
+    def test_recycle_bin_preserves_versions_assets_and_conversation_until_restored(self):
+        generation = str(uuid4())
+        self.repo.save_history(self.owner,generation,{"chatId":"recycle","prompt":"Heart"},self.owner+"/image.png")
+        self.repo.append_chat_event(self.owner,"recycle","image","image",{"prompt":"Heart"},generation)
+        self.repo.append_chat_event(self.owner,"recycle","question","interaction",{"answer":"A saved answer"},generation)
+        original = self.repo.get_chat(self.owner,"recycle")
+        self.repo.set_chat_trashed(self.owner,"recycle",True)
+        self.assertEqual(self.repo.list_chats(self.owner),[])
+        self.assertEqual(self.repo.list_history(self.owner),[])
+        self.assertEqual(self.repo.list_chats(self.owner,trashed=True)[0]["id"],"recycle")
+        self.assertEqual(self.repo.list_chats(self.other,trashed=True),[])
+        self.assertEqual(self.repo.get_history(self.owner,generation)["image_path"],self.owner+"/image.png")
+        self.assertEqual(len(self.repo.list_chat_events(self.owner,"recycle")),2)
+        with self.assertRaises(LookupError):
+            self.repo.set_chat_trashed(self.other,"recycle",False)
+        with self.assertRaisesRegex(ValueError,"Restore"):
+            self.repo.create_job(self.owner,self.payload(kind="threed",generation_id=generation),{})
+        self.repo.set_chat_trashed(self.owner,"recycle",False)
+        self.assertEqual(self.repo.list_chats(self.owner,trashed=True),[])
+        self.assertEqual(len(self.repo.list_history(self.owner)),1)
+        self.assertEqual(self.repo.get_chat(self.owner,"recycle")["updated_at"],original["updated_at"])
+
+    def test_permanent_delete_requires_recycle_bin_and_preserves_active_history(self):
+        from unittest.mock import Mock
+        self.repo.append_chat_event(self.owner,"keep","prompt","prompt",{"prompt":"Keep me"})
+        remove = Mock()
+        with self.assertRaisesRegex(ValueError,"Recycle Bin"):
+            self.repo.delete_chat(self.owner,"keep",remove)
+        remove.assert_not_called()
+        self.assertIsNotNone(self.repo.get_chat(self.owner,"keep"))
         job=self.repo.claim()
         vector=[1.0]+[0.0]*383
         documents.finish(job,[{"page":1,"content":"Heart walls", "embedding":vector}],1,0)

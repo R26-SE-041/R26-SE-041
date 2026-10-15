@@ -74,6 +74,13 @@ class Repository:
             source = self.get_history(user_id,payload["generation_id"]) if payload.get("generation_id") else None
             if payload.get("generation_id") and not source:
                 raise LookupError("Source generation not found")
+            chat_id = payload.get("chat_id")
+            if not chat_id and source:
+                chat_id = source["metadata"].get("chatId") or str(source["id"])
+            if chat_id:
+                cur.execute("select 1 from koji_chats where user_id=%s and id=%s and deleted_at is not null",(user_id,chat_id))
+                if cur.fetchone():
+                    raise ValueError("Restore this creation from the Recycle Bin before continuing")
             if payload.get("generation_id") and payload["kind"] in {"labels", "threed"}:
                 cur.execute("select * from koji_jobs where user_id=%s and generation_id=%s and kind=%s and status in ('queued','running') order by created_at limit 1",(user_id,payload["generation_id"],payload["kind"]))
                 active = cur.fetchone()
@@ -152,7 +159,10 @@ class Repository:
 
     def list_history(self, user_id, before=None):
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""select * from koji_generations where user_id=%s and (%s::timestamptz is null or created_at<%s::timestamptz)
+            cur.execute("""select * from koji_generations g where user_id=%s
+                and not exists(select 1 from koji_chats c where c.user_id=g.user_id
+                    and c.id=coalesce(g.metadata->>'chatId',g.id::text) and c.deleted_at is not null)
+                and (%s::timestamptz is null or created_at<%s::timestamptz)
                 order by created_at desc limit 50""",(user_id,before,before))
             return [dict(row) for row in cur.fetchall()]
 
@@ -209,7 +219,10 @@ class Repository:
     def _chat_event(self, cur, user_id, chat_id, event_id, kind, data, generation_id=None, created_at=None):
         title = str(data.get("prompt") or data.get("question") or "New conversation").strip()[:80] or "New conversation"
         cur.execute("""insert into koji_chats(user_id,id,title) values(%s,%s,%s)
-            on conflict(user_id,id) do update set updated_at=now()""", (user_id,chat_id,title))
+            on conflict(user_id,id) do update set updated_at=now()
+            where koji_chats.deleted_at is null""", (user_id,chat_id,title))
+        if cur.rowcount != 1:
+            raise ValueError("Restore this creation from the Recycle Bin before continuing")
         cur.execute("""insert into koji_chat_events(user_id,id,chat_id,kind,generation_id,data,created_at)
             values(%s,%s,%s,%s,%s,%s,coalesce(%s::timestamptz,now()))
             on conflict(user_id,id) do update set data=koji_chat_events.data || excluded.data
@@ -223,7 +236,7 @@ class Repository:
         with connection() as conn,conn.cursor() as cur:
             self._chat_event(cur,user_id,chat_id,event_id,kind,data,generation_id,created_at)
 
-    def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None):
+    def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None,trashed=False):
         pattern="%"+query+"%"
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""select c.*, latest.id as latest_generation_id,
@@ -239,7 +252,7 @@ class Repository:
                     select g.* from koji_generations g where g.user_id=c.user_id
                     and coalesce(g.metadata->>'chatId',g.id::text)=c.id
                     order by g.created_at desc,g.id desc limit 1
-                ) latest on true where c.user_id=%s
+                ) latest on true where c.user_id=%s and (c.deleted_at is not null)=%s
                 and (%s::timestamptz is null or (c.updated_at,c.id)<(%s::timestamptz,%s))
                 and (%s::timestamptz is null or c.updated_at >= %s::timestamptz)
                 and (%s='' or coalesce(latest.metadata->>'mode',
@@ -248,7 +261,7 @@ class Repository:
                 and (%s='' or c.title ilike %s or exists(select 1 from koji_chat_events e
                     where e.user_id=c.user_id and e.chat_id=c.id and
                     (e.data->>'prompt' ilike %s or e.data->>'question' ilike %s or e.data->>'answer' ilike %s)))
-                order by c.updated_at desc,c.id desc limit 50""",(user_id,before,before,before_id,since,since,mode,mode,query,pattern,pattern,pattern,pattern))
+                order by c.updated_at desc,c.id desc limit 50""",(user_id,trashed,before,before,before_id,since,since,mode,mode,query,pattern,pattern,pattern,pattern))
             return [dict(row) for row in cur.fetchall()]
 
     def get_chat(self,user_id,chat_id):
@@ -279,15 +292,34 @@ class Repository:
                 order by created_at,id""",(user_id,generation_id))
             return [{**row["data"],"createdAt":row["created_at"].isoformat()} for row in cur.fetchall()]
 
+    def set_chat_trashed(self,user_id,chat_id,trashed):
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))",(user_id,))
+            if trashed:
+                self._check_chat_idle(cur,user_id,chat_id)
+            cur.execute("""update koji_chats set deleted_at=case when %s then coalesce(deleted_at,now()) else null end
+                where user_id=%s and id=%s""",(trashed,user_id,chat_id))
+            if cur.rowcount != 1:
+                raise LookupError("Conversation not found")
+
+    def _check_chat_idle(self,cur,user_id,chat_id):
+        cur.execute("""select id from koji_jobs where user_id=%s and status in ('queued','running') and
+            (coalesce(payload->>'chat_id',id::text)=%s or generation_id in
+                (select id from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s))
+            limit 1""",(user_id,chat_id,user_id,chat_id))
+        if cur.fetchone():
+            raise ValueError("Wait for this conversation's active jobs before deleting it")
+
     def delete_chat(self,user_id,chat_id,remove_assets):
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))",(user_id,))
-            cur.execute("""select id from koji_jobs where user_id=%s and status in ('queued','running') and
-                (coalesce(payload->>'chat_id',id::text)=%s or generation_id in
-                    (select id from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s))
-                limit 1""",(user_id,chat_id,user_id,chat_id))
-            if cur.fetchone():
-                raise ValueError("Wait for this conversation's active jobs before deleting it")
+            self._check_chat_idle(cur,user_id,chat_id)
+            cur.execute("select deleted_at from koji_chats where user_id=%s and id=%s for update",(user_id,chat_id))
+            chat = cur.fetchone()
+            if not chat:
+                raise LookupError("Conversation not found")
+            if chat["deleted_at"] is None:
+                raise ValueError("Move this creation to the Recycle Bin before deleting permanently")
             cur.execute("""select image_path,thumbnail_path,glb_path from koji_generations
                 where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s""",(user_id,chat_id))
             paths=[path for row in cur.fetchall() for path in (row["image_path"],row["thumbnail_path"],row["glb_path"]) if path]

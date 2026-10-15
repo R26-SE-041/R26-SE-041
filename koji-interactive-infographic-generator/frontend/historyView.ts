@@ -3,6 +3,7 @@ import type { GenerationHistoryItem, HistoryMode } from "./historyStorage";
 export type ArchiveFilter = "all" | HistoryMode;
 export type ArchivePeriod = "all" | "week" | "month";
 export interface CreationSummary {
+  deletedAt?: string | null;
   id: string;
   title: string;
   updatedAt: string;
@@ -28,7 +29,7 @@ export function localSummaries(items: GenerationHistoryItem[]): CreationSummary[
   return [...groups.entries()].map(([id, versions]) => {
     versions.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.version || 1) - (b.version || 1));
     const latest = versions[versions.length - 1];
-    return { id, title: latest.title || creationTitle(versions[0].prompt, latest.mode), updatedAt: latest.createdAt,
+    return { id, deletedAt: latest.deletedAt, title: latest.title || creationTitle(versions[0].prompt, latest.mode), updatedAt: latest.createdAt,
       mode: latest.mode, generationId: latest.id, imageUrl: latest.imageBase64 ? `data:image/png;base64,${latest.imageBase64}` : latest.imageUrl,
       versionCount: versions.length, hasThreeD: versions.some(v => Boolean(v.glbBase64 || v.hasThreeD)), source: "local" as const, versions };
   }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

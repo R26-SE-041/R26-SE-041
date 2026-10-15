@@ -18,6 +18,54 @@ class ConversationTests(TestCase):
         return {"id": "question.test", "mode": "ask", "question": "What does this part do?",
                 "interaction": {"type": "point", "coords": [.4, .6]}}
 
+    def test_recycle_bin_routes_preserve_assets_and_scope_operations_to_owner(self):
+        app.dependency_overrides[require_user] = lambda: self.owner
+        try:
+            with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+                client = TestClient(app)
+                repo.get_chat.return_value = {"id":"chat"}
+                response = client.delete("/studio/chats/chat")
+                self.assertEqual(response.json(),{"status":"trashed"})
+                repo.set_chat_trashed.assert_called_once_with(self.owner,"chat",True)
+                repo.delete_chat.assert_not_called()
+                storage.assert_not_called()
+                self.assertEqual(client.post("/studio/chats/chat/restore").status_code,200)
+                repo.set_chat_trashed.assert_called_with(self.owner,"chat",False)
+                self.assertEqual(client.delete("/studio/chats/chat/permanent").status_code,200)
+                repo.delete_chat.assert_called_once_with(self.owner,"chat",storage.return_value.remove)
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_recycle_bin_listing_is_explicit_and_keeps_existing_pagination(self):
+        app.dependency_overrides[require_user] = lambda: self.owner
+        try:
+            with patch("studio.main.repo") as repo:
+                repo.list_chats.return_value = []
+                client = TestClient(app)
+                self.assertEqual(client.get("/studio/chats").status_code,200)
+                self.assertEqual(repo.list_chats.call_args.kwargs,{"trashed":False})
+                self.assertEqual(client.get("/studio/chats?trashed=true&query=heart&before_id=older").status_code,200)
+                self.assertEqual(repo.list_chats.call_args.kwargs,{"trashed":True})
+                self.assertEqual(repo.list_chats.call_args.args[:4],(self.owner,None,"older","heart"))
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_recycle_bin_missing_owner_and_active_jobs_fail_safely(self):
+        app.dependency_overrides[require_user] = lambda: self.owner
+        try:
+            with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+                client = TestClient(app)
+                repo.set_chat_trashed.side_effect = LookupError("missing")
+                self.assertEqual(client.post("/studio/chats/foreign/restore").status_code,404)
+                repo.get_chat.return_value = {"id":"chat"}
+                repo.set_chat_trashed.side_effect = ValueError("Wait for active jobs")
+                self.assertEqual(client.delete("/studio/chats/chat").status_code,409)
+                storage.assert_not_called()
+                repo.delete_chat.side_effect = ValueError("Move to Recycle Bin first")
+                self.assertEqual(client.delete("/studio/chats/chat/permanent").status_code,409)
+        finally:
+            app.dependency_overrides.clear()
+
     def test_archive_signs_preview_and_validates_filters(self):
         app.dependency_overrides[require_user] = lambda: self.owner
         try:
