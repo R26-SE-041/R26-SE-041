@@ -296,7 +296,7 @@ test('manual audio playback stays stable without starting a speech listener', as
   await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>Math.floor(el.currentTime))).toBe(10)
   await player.evaluate((el:HTMLAudioElement)=>{el.currentTime=19.9;el.dispatchEvent(new Event('timeupdate'))})
   await expect.poll(()=>player.evaluate((el:HTMLAudioElement)=>el.paused)).toBe(true)
-  await page.getByText('All supported commands',{exact:true}).click()
+  await page.getByText('Command examples',{exact:true}).click()
   await expect(page.getByRole('button',{name:'Pause the audio',exact:true})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'Create a detailed audio revision and save it',exact:true})).toBeVisible()
   await run(page,'Pause the audio')

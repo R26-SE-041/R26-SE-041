@@ -8,9 +8,9 @@ import { VoiceRecorder } from '@/components/voice/VoiceRecorder'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import { extraCommands, normalizeCommand, isPlaybackCommand } from './audioCommands'
 import { synthesizeSpeech } from '@/lib/api'
-import { documentActionCapabilities, startDocumentAction, getDocumentAction,
+import { documentActionCapabilities, interpretDocumentCommand, startDocumentAction, getDocumentAction,
   downloadDocumentAction, downloadRevisionAudio, retryRevisionAudio, listSavedActions, deleteSavedAction,
-  type SavedAction, type ActionCapabilities, type RevisionMode, type RevisionSection, type ActionLanguage, type DocumentActionResult } from './actionsApi'
+  type CommandPreview, type SavedAction, type ActionCapabilities, type RevisionMode, type RevisionSection, type ActionLanguage, type DocumentActionResult } from './actionsApi'
 import type { DocumentItem } from '@/types'
 
 const labels: Record<string, string> = {
@@ -35,6 +35,9 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
   const [capabilitiesError, setCapabilitiesError] = useState(false)
   const [documentId, setDocumentId] = useState('')
   const [command, setCommand] = useState('')
+  const [preview, setPreview] = useState<{command: string; language: ActionLanguage; value: CommandPreview} | null>(null)
+  const [previewError, setPreviewError] = useState('')
+  const [previewRetry, setPreviewRetry] = useState(0)
   const [language, setLanguage] = useState<ActionLanguage>('english')
   const [voiceLanguage, setVoiceLanguage] = useState<ActionLanguage>('english')
   const [revisionMode, setRevisionMode] = useState<RevisionMode>('sectioned')
@@ -70,6 +73,21 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     return () => { mounted.current = false; controller.current?.abort() }
   }, [])
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl) }, [audioUrl])
+
+
+  useEffect(() => {
+    setPreview(null); setPreviewError('')
+    const text = command.trim()
+    if (!text || !capabilities?.enabled || isPlaybackCommand(text)) return
+    const abort = new AbortController()
+    const timer = setTimeout(() => {
+      void interpretDocumentCommand(text, language, abort.signal).then(value => {
+        if (!abort.signal.aborted) setPreview({ command: text, language, value })
+      }).catch(() => { if (!abort.signal.aborted) setPreviewError('Could not check the command. Check your connection and retry.') })
+    }, 250)
+    return () => { clearTimeout(timer); abort.abort() }
+  }, [command, language, capabilities?.enabled, previewRetry])
+  const currentPreview = preview?.command === command.trim() && preview.language === language ? preview.value : null
 
   async function refreshSaved() {
     try { const values = await listSavedActions(); if (mounted.current) setSavedActions(values) }
@@ -131,11 +149,11 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       if (isPlaybackCommand(command)) {
         setError('Use the audio player controls for playback, speed and seeking, or the section buttons below.'); return
       }
-      if (text === 'create an audio revision of this section only and save it' && !result?.sections?.length) {
+      if (currentPreview?.scope === 'section' && !result?.sections?.length) {
         setError('Generate or open a sectioned revision and choose its source section first.'); return
       }
     }
-    if (active.current || (!retryActionId && (!command.trim() || !documentId))) return
+    if (active.current || (!retryActionId && (!command.trim() || !documentId || currentPreview?.status !== 'ready'))) return
     const sectioned = retryActionId ? result?.revision_mode === 'sectioned' : capabilities?.sectioned_enabled && revisionMode === 'sectioned'
     active.current = true
     setBusy(true); setError(null); setResult(null); setAudioUrl(null); setAudioError(null)
@@ -265,16 +283,21 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
         const selected = event.target.value as ActionLanguage
         setVoiceLanguage(selected); setCommand(examples[selected].audio)
       }}>{(['english', 'tamil', 'sinhala'] as const).map(value => <option key={value} value={value}>{languageLabels[value]}</option>)}</select>
-      <p className="mt-2 text-sm">The new listed commands use English. You can speak an English command and generate Tamil or Sinhala audio by selecting a different output language.</p>
-      <div className="mt-4"><VoiceRecorder key={voiceLanguage} language={voiceLanguage} disabled={busy} active={visible}
+      <p className="mt-2 text-sm">Speak a command, then stop recording to transcribe it automatically. English commands can name Tamil or Sinhala as the output language. Otherwise, the output language selected above is used.</p>
+      <div className="mt-4"><VoiceRecorder commandMode key={voiceLanguage} language={voiceLanguage} disabled={busy} active={visible}
         onTranscript={value => { setCommand(value.transcript); setError(null) }} onError={setError} /></div>
       <label htmlFor="action-command" className="mt-4 block text-sm">{languageLabels[voiceLanguage]} command</label>
       <textarea id="action-command" className="nb-input mt-2 w-full" rows={2} value={command}
-        disabled={busy} onChange={event => setCommand(event.target.value)} placeholder={examples[voiceLanguage].audio} />
-      <p className="mt-2 text-sm">Supported commands: {examples[voiceLanguage].summary}; {examples[voiceLanguage].save}; {examples[voiceLanguage].combined}; {examples[voiceLanguage].audio}.</p>
-      <p className="mt-2 text-sm">Choose a study command below, type it, or record it with the microphone. Review the command, then select Run action. Recording starts only when you press the microphone.</p>
-      <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">All supported commands</summary>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">{extraCommands.map(value => <button key={value} className="vl-btn-secondary text-left" disabled={busy} onClick={() => setCommand(value)}>{value}</button>)}</div>
+        disabled={busy} maxLength={500} onChange={event => { setCommand(event.target.value); setError(null) }} placeholder={examples[voiceLanguage].audio} />
+      {command.trim() && !isPlaybackCommand(command) && <div className="mt-3 rounded-xl border p-4" role="region" aria-label="Command preview" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <h3 className="font-semibold">{currentPreview?.status === 'clarify' ? 'A little more detail needed' : 'What I understood'}</h3>
+        <p role="status" className="mt-2 text-sm">{previewError || currentPreview?.message || 'Checking your command...'}</p>
+        {currentPreview?.status === 'ready' && <p className="mt-2 text-sm">Review this action before running it. Nothing has started yet.</p>}
+        {previewError && <button className="vl-btn-secondary mt-3" onClick={() => setPreviewRetry(value => value + 1)}>Retry command check</button>}
+      </div>}
+      <p className="mt-2 text-sm">Use your own wording, like “Make Tamil audio”. Review the preview, then select Run action.</p>
+      <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">Command examples</summary>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">{[...Object.values(examples[voiceLanguage]), ...extraCommands].map(value => <button key={value} className="vl-btn-secondary text-left" disabled={busy} onClick={() => setCommand(value)}>{value}</button>)}</div>
         <p className="mt-2">Control playback using the audio player and section buttons. Commands naming Tamil, Sinhala or English override the output language selection. Section-only generation uses the source section selected below.</p>
       </details>
       {!!result?.sections?.length && <label className="mt-3 block text-sm" htmlFor="source-section">Source section for section-only revision
@@ -282,7 +305,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
           {result.sections.map(section => <option key={section.id} value={section.id}>{section.id + 1}. {section.title}</option>)}
         </select>
       </label>}
-      <button className="vl-btn-primary mt-4" disabled={busy || !command.trim() || (!documentId && !isPlaybackCommand(normalizeCommand(command)) && normalizeCommand(command) !== 'delete this saved revision')} onClick={() => void execute()}>
+      <button className="vl-btn-primary mt-4" disabled={busy || !command.trim() || (!isPlaybackCommand(command) && currentPreview?.status !== 'ready') || (!documentId && !isPlaybackCommand(command) && normalizeCommand(command) !== 'delete this saved revision')} onClick={() => void execute()}>
         {busy ? status : 'Run action'}
       </button>
       <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[voiceLanguage].audio)}>Use audio revision command</button>

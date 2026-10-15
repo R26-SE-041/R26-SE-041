@@ -8,6 +8,14 @@ export interface RevisionSection {
   duration: number | null; start_seconds: number | null; end_seconds: number | null
 }
 export interface ActionCapabilities { enabled: boolean; provider: string; max_document_chars: number; sectioned_enabled?: boolean }
+export interface CommandPreview {
+  status: 'ready' | 'clarify'; message: string; intent?: string
+  language?: ActionLanguage; scope?: 'document' | 'section'
+}
+
+export async function interpretDocumentCommand(command: string, language: ActionLanguage, signal?: AbortSignal): Promise<CommandPreview> {
+  return (await request('/api/v1/actions/interpret', { method: 'POST', signal, body: JSON.stringify({command, language}) })).json()
+}
 
 export interface DocumentActionResult {
   action_id: string

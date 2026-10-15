@@ -15,6 +15,7 @@ interface VoiceRecorderProps {
   disabled?: boolean
   active?: boolean
   prepareAnswer?: boolean
+  commandMode?: boolean
 }
 
 /* ── Waveform bars ── */
@@ -215,7 +216,7 @@ function AudioPreview({ blob, durationMs }: { blob: Blob; durationMs: number }) 
 }
 
 /* ── Main ── */
-export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false, active = true, prepareAnswer = false }: VoiceRecorderProps) {
+export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured, disabled = false, active = true, prepareAnswer = false, commandMode = false }: VoiceRecorderProps) {
   const { recordingState, audioBlob, frequencyBins, durationMs, startRecording, stopRecording, clearRecording } = useVoiceRecorder()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -223,6 +224,10 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
   const [previewDuration, setPreviewDuration] = useState(0)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const submitting = useRef(false)
+  const autoSubmitted = useRef<Blob | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
     if (!active && recordingState === 'recording') stopRecording()
   }, [active, recordingState, stopRecording])
@@ -230,10 +235,10 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
   /* Live timer */
   useEffect(() => {
     if (recordingState !== 'recording') { setElapsed(0); return }
-    if (prepareAnswer) void prepareVoice(language).catch(() => undefined)
+    if (commandMode || prepareAnswer) void prepareVoice(language, commandMode ? 'command' : 'answer').catch(() => undefined)
     const t = setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => clearInterval(t)
-  }, [recordingState, language, prepareAnswer])
+  }, [recordingState, language, prepareAnswer, commandMode])
 
   /* When recording finishes → show preview */
   useEffect(() => {
@@ -245,22 +250,32 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
   }, [recordingState, audioBlob, durationMs])
 
   const handleSubmit = useCallback(async () => {
-    if (!previewBlob) return
+    if (!previewBlob || submitting.current) return
+    submitting.current = true
     setIsTranscribing(true)
     try {
       const result = await transcribeAudio(previewBlob, language, uploadedFileName ?? 'recording.webm', prepareAnswer)
+      if (!mounted.current) return
       onAudioCaptured?.(previewBlob)
       onTranscript(result)
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Transcription failed')
-    } finally {
-      setIsTranscribing(false)
       setPreviewBlob(null)
       setPreviewDuration(0)
       setUploadedFileName(null)
       clearRecording()
+    } catch (e) {
+      if (mounted.current) onError(e instanceof Error ? e.message : 'Transcription failed')
+    } finally {
+      if (mounted.current) setIsTranscribing(false)
+      submitting.current = false
     }
-  }, [previewBlob, language, uploadedFileName, onTranscript, onError, onAudioCaptured, clearRecording])
+  }, [previewBlob, language, uploadedFileName, onTranscript, onError, onAudioCaptured, clearRecording, prepareAnswer])
+
+  useEffect(() => {
+    if (commandMode && active && !disabled && previewBlob && autoSubmitted.current !== previewBlob) {
+      autoSubmitted.current = previewBlob
+      void handleSubmit()
+    }
+  }, [commandMode, active, disabled, previewBlob, handleSubmit])
 
   const handleReRecord = useCallback(() => {
     setPreviewBlob(null)
@@ -443,7 +458,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
               className="flex-1 nb-btn-primary justify-center py-3 rounded-xl"
             >
               <SendIcon />
-              Ask This Question
+              {commandMode ? 'Transcribe command' : 'Ask This Question'}
             </button>
             <button
               id="voice-rerecord-btn"
@@ -463,7 +478,7 @@ export function VoiceRecorder({ language, onTranscript, onError, onAudioCaptured
       {isTranscribing && (
         <div className="w-full flex items-center justify-center gap-3 py-3 animate-fade-up">
           <div className="w-4 h-4 rounded-full border-2 border-sand-300 border-t-blue-500 animate-spin flex-shrink-0" />
-          <span className="text-sm font-medium text-ink-muted">Transcribing your question…</span>
+          <span className="text-sm font-medium text-ink-muted">{commandMode ? 'Understanding your command...' : 'Transcribing your question…'}</span>
         </div>
       )}
     </div>

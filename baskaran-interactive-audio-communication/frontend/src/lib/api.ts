@@ -77,8 +77,8 @@ async function pollAnswer(payload: Record<string, unknown>): Promise<AskResponse
   }
 }
 
-export async function prepareVoice(language: Language): Promise<void> {
-  await api.post('/api/v1/voice/prepare', { language }, { timeout: 10_000 })
+export async function prepareVoice(language: Language, purpose: 'answer' | 'command' = 'answer'): Promise<void> {
+  await api.post('/api/v1/voice/prepare', { language, purpose }, { timeout: 10_000 })
 }
 
 export async function transcribeAudio(audioBlob: Blob, language: Language, filename = 'recording.webm', prepareAnswer = false): Promise<TranscribeResponse> {

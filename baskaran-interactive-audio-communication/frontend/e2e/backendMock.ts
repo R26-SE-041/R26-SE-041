@@ -40,15 +40,25 @@ export async function mockBackend(page: Page) {
     if (path === '/api/v1/voice/tts') {state.tts++;return route.fulfill({contentType:'audio/wav',body:silentWav(1),headers})}
     if (path === '/api/v1/actions/capabilities') return json({enabled:true,provider:'openclaw_mcp',sectioned_enabled:true,max_document_chars:12000})
     if (path === '/api/v1/actions/saved') return json(savedIds.map(summary))
+    if (path === '/api/v1/actions/interpret') {
+      const body=request.postDataJSON(), command=body.command.toLowerCase()
+      const languages=[...command.matchAll(/\b(tamil|sinhala|english)\b/g)].map(m=>m[1])
+      if(new Set(languages).size>1) return json({status:'clarify',message:'Choose one output language: English, Tamil or Sinhala.'})
+      if(command.includes('email')||command.includes('do not')||!/(audio|revision|flashcards|summary|summarize|delete this saved revision)/.test(command)) return json({status:'clarify',message:'What would you like to create? Try: Make Tamil audio, summarize this document, or create flashcards.'})
+      const language=languages[0]||body.language
+      const intent=command==='delete this saved revision'?'delete':command.includes('flashcards')?'flashcards':command.includes('audio')?'audio_revision':command.startsWith('save')?'save':'summarize'
+      const message=intent==='audio_revision'?`Create and save an audio revision in ${language[0].toUpperCase()+language.slice(1)}`:intent==='delete'?'Delete the opened saved result (confirmation required)':`Create a summary in ${language}`
+      return json({status:'ready',intent,language,scope:command.includes('this section only')?'section':'document',message})
+    }
     if (path === '/api/v1/actions' && method === 'POST') {
       const body = request.postDataJSON()
       state.actions.push(body)
       const command = body.command.toLowerCase()
       const id = `new-${state.actions.length}`
-      const explicitLanguage = command.match(/in (tamil|sinhala|english) and save/)
+      const explicitLanguage = command.match(/\b(tamil|sinhala|english)\b/)
       const language = explicitLanguage?.[1] || body.language
       const isCards = command.includes('flashcards')
-      const isAudio = command.includes('audio revision')
+      const isAudio = command.includes('audio')
       const sectionOnly = command.includes('section only')
       results[id] = {...(isCards ? cards : audio), action_id:id, provider:body.provider, language, summary_language:language,
         intent:isCards ? 'flashcards' : isAudio ? 'audio_revision' : 'summarize_and_save',
