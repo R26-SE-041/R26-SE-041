@@ -598,6 +598,25 @@ async def test_localization_bounds_source_passages_and_keeps_all_words(env, monk
 
 
 @pytest.mark.asyncio
+async def test_native_rewrite_recovers_stubborn_passage_in_smaller_source_pieces(env, monkeypatch):
+    from app.services import modal_client
+    source = "Cats sleep between 12 and 16 hours each day. " * 6
+    native = "බළලුන් නිදා ගනී."
+    monkeypatch.setattr(modal_client, "call_localizer", AsyncMock(return_value={"localized_text": source}))
+    calls = []
+    async def answer(query, language, **kwargs):
+        passage = kwargs['context_chunks'][0]
+        calls.append(passage)
+        return {'answer': native if len(passage) <= 160 else 'Still English.'}
+    monkeypatch.setattr(modal_client, "call_answer_generator", answer)
+    translated = await service.localize_action_text(source, "sinhala")
+    assert calls[:2] == [source.strip(), source.strip()]
+    assert len(calls) > 2 and all(len(piece) <= 160 for piece in calls[2:])
+    assert " ".join(calls[2:]) == source.strip()
+    assert translated == " ".join([native] * len(calls[2:]))
+
+
+@pytest.mark.asyncio
 async def test_mcp_translation_failure_retains_specific_error(env, monkeypatch):
     settings, doc, session, app = env
     settings.actions_provider = "openclaw_mcp"
