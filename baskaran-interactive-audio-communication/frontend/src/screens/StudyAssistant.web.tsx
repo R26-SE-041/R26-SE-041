@@ -32,7 +32,7 @@ type Phase = 'idle' | 'transcript-ready' | 'asking' | 'answered' | 'rag-error' |
 const workspaceCopy: Record<WorkspaceSection, { title: string; description: string }> = {
   'study-documents': { title: 'Learn with your voice', description: 'Study your documents in English, Tamil, and Sinhala.' },
   'study-question': { title: 'Ask a question', description: 'Ask about your documents, then listen to the answer.' },
-  'study-actions': { title: 'OpenClaw studio', description: 'Create summaries, audio revisions, and flashcards from your documents.' },
+  'study-actions': { title: 'Study tools', description: 'Create summaries, audio revisions, and flashcards from your documents.' },
   'saved-library-title': { title: 'Saved library', description: 'Find and reopen your saved study materials.' },
   'study-history': { title: 'History', description: 'Revisit your questions, answers, and audio.' },
 }
@@ -567,7 +567,7 @@ export default function StudyAssistantPage() {
                 background: dragOver ? 'var(--primary-soft)' : 'var(--surface-soft)',
               }}
             >
-              <span className="flex h-14 w-14 items-center justify-center rounded-[13px]" style={{ background: 'var(--primary-soft)' }} aria-hidden>
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[13px]" style={{ background: 'var(--primary-soft)' }} aria-hidden>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
@@ -590,10 +590,10 @@ export default function StudyAssistantPage() {
               ) : (
                 <ul className="space-y-3">
                   {documents.map((document) => (
-                    <li key={document.document_id} className="flex items-center gap-4 rounded-[16px] px-5 py-4" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)' }}>
+                    <li key={document.document_id} className="vl-document-row flex items-center gap-4 rounded-[16px] px-5 py-4" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)' }}>
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold uppercase" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{document.file_type}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{document.filename}</p>
+                        <p className="vl-document-name truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{document.filename}</p>
                         <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Ready to search</p>
                       </div>
                       <button

@@ -1,3 +1,4 @@
+import { selectWorkspace } from './workspaceHelpers'
 import { expect, test, type Page } from '@playwright/test'
 import { mockBackend, silentWav } from './backendMock'
 
@@ -15,9 +16,11 @@ test('editorial workspace navigation and theme remain usable on desktop and mobi
   await page.screenshot({path:'.workspace-runtime/editorial-workspace.png'})
   await page.setViewportSize({width:390,height:844})
   await page.evaluate(()=>window.scrollTo(0,0))
-  for (const name of ['Documents','Ask a question','OpenClaw studio','Saved library','History']) {
+  await page.getByRole('button',{name:/^Change workspace section/}).click()
+  for (const name of ['Documents','Ask a question','Study tools','Saved library','History']) {
     await expect(navigation.getByRole('tab',{name,exact:true})).toBeInViewport()
   }
+  await page.keyboard.press('Escape')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
   await page.screenshot({path:'.workspace-runtime/editorial-mobile.png'})
   await page.emulateMedia({reducedMotion:'reduce'})
@@ -33,7 +36,7 @@ test('large saved library stays compact with search, filters and five-item pages
     language:i % 2 ? 'tamil' : 'english',intent:i % 3 ? 'audio_revision' : 'flashcards',revision_mode:'sectioned',audio_duration:60,created_at:new Date(Date.UTC(2026,9,14,0,i)).toISOString()}))
   await page.route('**/api/v1/actions/saved', route => route.fulfill({json:items}))
   await page.goto('/study-assistant')
-  await page.getByRole('tab',{name:'Saved library',exact:true}).click()
+  await selectWorkspace(page, 'Saved library')
   const library=page.getByRole('region',{name:'Saved revisions and flashcards'})
   await expect(library.locator('li')).toHaveCount(5)
   await expect(library.getByText('Page 1 of 6',{exact:true})).toBeVisible()
@@ -66,7 +69,7 @@ test('archived revision retries failed audio without requiring its original docu
   })
   await page.route('**/api/v1/actions/audio-1/sections/0/source', route => route.fulfill({json:{filename:'Archived.pdf',excerpt:'Archived source passage.',verification:'saved_snapshot'}}))
   await page.goto('/study-assistant')
-  await page.getByRole('tab',{name:'Saved library',exact:true}).click()
+  await selectWorkspace(page, 'Saved library')
   await page.locator('li').filter({hasText:'sectioned audio revision'}).first().getByRole('button',{name:'Open',exact:true}).click()
   await expect(page.getByRole('heading',{name:'Audio revision transcript',exact:true})).toBeVisible()
   await expect(page.getByRole('button',{name:'Play from here',exact:true}).first()).toBeDisabled()
@@ -90,12 +93,12 @@ async function start(page: Page) {
   return state
 }
 async function run(page: Page, command: string) {
-  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await selectWorkspace(page, 'Study tools')
   await page.locator('#action-command').fill(command)
   await page.getByRole('button',{name:'Run action',exact:true}).click()
 }
 async function openAudio(page: Page) {
-  await page.getByRole('tab',{name:'Saved library',exact:true}).click()
+  await selectWorkspace(page, 'Saved library')
   const row = page.locator('li').filter({hasText:'sectioned audio revision'}).first()
   await row.getByRole('button',{name:'Open',exact:true}).click()
   await expect(page.getByRole('heading',{name:'Audio revision transcript',exact:true})).toBeVisible()
@@ -122,14 +125,14 @@ test('theme survives refresh and document response languages remain selectable',
   await page.getByRole('button',{name:/Switch to .* mode/}).click()
   const theme = await page.locator('html').getAttribute('data-theme')
   await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme!)
-  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await selectWorkspace(page, 'Ask a question')
   await page.getByRole('button',{name:'Tamil',exact:true}).click()
   await expect(page.getByRole('button',{name:'Tamil',exact:true})).toHaveAttribute('aria-pressed','true')
-  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await selectWorkspace(page, 'Ask a question')
   await page.getByRole('button',{name:'Sinhala',exact:true}).click()
   await expect(page.getByRole('button',{name:'Sinhala',exact:true})).toHaveAttribute('aria-pressed','true')
   await page.getByRole('button',{name:'English',exact:true}).click()
-  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await selectWorkspace(page, 'Study tools')
   await expect(page.locator('#action-command')).toBeVisible()
   await page.locator('#action-command').scrollIntoViewIfNeeded()
   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBeGreaterThan(0)
@@ -146,7 +149,7 @@ test('document upload and removal preserve indexed documents workflow', async ({
 
 test('audio upload, transcription, question correction, answer audio and IndexedDB history', async ({page}) => {
   const state = await start(page)
-  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await selectWorkspace(page, 'Ask a question')
   await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'question.wav',mimeType:'audio/wav',buffer:silentWav(1)})
   await page.locator('#voice-submit-btn').click()
   await expect(page.getByRole('textbox',{name:'Your Question',exact:true})).toHaveValue('Explain dogs.')
@@ -157,7 +160,7 @@ test('audio upload, transcription, question correction, answer audio and Indexed
   expect(state.asks[0].document_grounded).toBe(true)
   await expect.poll(()=>state.tts).toBe(1)
   await page.reload()
-  await page.getByRole('tab',{name:'History',exact:true}).click()
+  await selectWorkspace(page, 'History')
   const history = page.getByRole('button',{name:/Explain dogs clearly/})
   await expect(history).toBeVisible()
   await history.click()
@@ -170,7 +173,7 @@ test('document workspace separates OpenClaw controls from documents', async ({pa
   await start(page)
   await expect(page.getByRole('heading',{name:'Document Study',exact:true})).toBeVisible()
   await expect(page.getByRole('heading',{name:'Document actions and audio revision'})).toBeHidden()
-  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await selectWorkspace(page, 'Study tools')
   await expect(page.getByRole('heading',{name:'Document actions and audio revision'})).toBeVisible()
   await expect(page.getByRole('button',{name:'Document Study',exact:true})).toHaveCount(0)
   await expect(page.getByRole('button',{name:/specialized|tutor/i})).toHaveCount(0)
@@ -178,7 +181,7 @@ test('document workspace separates OpenClaw controls from documents', async ({pa
 
 test('Sinhala answer editing and explicit speech approval are retained', async ({page}) => {
   const state = await start(page)
-  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await selectWorkspace(page, 'Ask a question')
   await page.getByRole('button',{name:'Sinhala',exact:true}).click()
   await page.locator('input[type=file][accept*="audio/wav"]').first().setInputFiles({name:'question.wav',mimeType:'audio/wav',buffer:silentWav(1)})
   await page.locator('#voice-submit-btn').click()
@@ -196,7 +199,7 @@ test('Sinhala answer editing and explicit speech approval are retained', async (
 for (const command of ['Summarize this document','Save the summary','Summarize this document and save it']) {
   test(`existing summary UI: ${command}`, async ({page}) => {
     const state = await start(page)
-    await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+    await selectWorkspace(page, 'Study tools')
     await page.locator('#action-document').selectOption('doc-1')
     await run(page,command)
     await expect(page.getByText('A concise document summary.',{exact:true})).toBeVisible()
@@ -210,7 +213,7 @@ for (const command of ['Summarize this document','Save the summary','Summarize t
 test('microphone records a synthetic browser stream and submits its transcript', async ({page,context}) => {
   await context.grantPermissions(['microphone'])
   const state = await start(page)
-  await page.getByRole('tab',{name:'Ask a question',exact:true}).click()
+  await selectWorkspace(page, 'Ask a question')
   await page.getByRole('button',{name:'Start recording',exact:true}).first().click()
   await expect(page.getByRole('button',{name:'Stop recording',exact:true})).toBeVisible()
   // Wait for the browser MediaRecorder to produce a nonempty audio chunk.
@@ -233,8 +236,9 @@ const generations = [
 ]
 for (const command of generations) test(`generation UI: ${command}`, async ({page}) => {
   const state = await start(page)
-  await page.getByRole('tab',{name:'OpenClaw studio',exact:true}).click()
+  await selectWorkspace(page, 'Study tools')
   await page.locator('#action-document').selectOption('doc-1')
+  await page.getByText('Advanced options',{exact:true}).click()
   await page.locator('#action-provider').selectOption('direct')
   await run(page, command)
   await expect(page.getByRole('heading',{name:command.includes('flashcards') ? 'Saved revision flashcards' : 'Audio revision transcript',exact:true})).toBeVisible()

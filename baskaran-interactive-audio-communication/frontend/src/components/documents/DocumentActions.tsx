@@ -227,7 +227,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
 
   const library = libraryTarget && createPortal(<SavedLibrary items={savedActions} busy={busy} selectedId={result?.action_id} onOpen={item => { onOpenSaved?.(); void openSaved(item) }} onDelete={setDeletePending} onRefresh={() => void refreshSaved()} />, libraryTarget)
   if (!capabilities?.enabled) return <>
-    <section className="nb-card p-6"><h2 className="vl-section-title">OpenClaw studio</h2>
+    <section className="nb-card p-6"><h2 className="vl-section-title">Study tools</h2>
       <p role="status" className="mt-3">{capabilitiesError ? 'Study actions could not be loaded. Check your connection and refresh.' : capabilities ? 'Study actions are currently unavailable.' : 'Loading study actions…'}</p>
     </section>{library}
   </>
@@ -235,11 +235,13 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
     <section className="rounded-[20px] p-6" style={{ border: '1px solid var(--border)', background: 'var(--surface-soft)' }}>
       <h2 className="text-lg font-semibold">Document actions and audio revision</h2>
       <p className="mt-2 text-sm">Summarize your document or create a short spoken revision with a transcript and audio download. Limit: {capabilities.max_document_chars.toLocaleString()} extracted characters.</p>
-      <label htmlFor="action-provider" className="mt-4 block text-sm">Execution mode</label>
+      <details className="mt-4 text-sm"><summary className="cursor-pointer font-semibold">Advanced options</summary>
+      <label htmlFor="action-provider" className="mt-4 block text-sm">Processing mode</label>
       <select id="action-provider" className="nb-input mt-2 w-full" disabled={busy} value={executionProvider} onChange={event => setExecutionProvider(event.target.value as 'direct' | 'openclaw_mcp')}>
-        <option value="openclaw_mcp">OpenClaw agent</option><option value="direct">Direct backend</option>
+        <option value="openclaw_mcp">Study assistant</option><option value="direct">Standard processing</option>
       </select>
-      <p className="mt-2 text-sm">Direct backend runs the same generation and save workflow when OpenClaw is unavailable. Your chosen mode is used; it does not switch automatically.</p>
+      <p className="mt-2 text-sm">Choose how to run new study tasks. Both modes support generating and saving study materials; the selected mode stays in use until you change it.</p>
+      </details>
       <label htmlFor="action-language" className="mt-4 block text-sm">Output language</label>
       <select id="action-language" className="nb-input mt-2 w-full" value={language} disabled={busy}
         onChange={event => {
@@ -291,7 +293,7 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
         {busy ? status : 'Run action'}
       </button>
       <button className="vl-btn-secondary ml-3 mt-4" disabled={busy} onClick={() => setCommand(examples[voiceLanguage].audio)}>Use audio revision command</button>
-      <p className="mt-2 text-sm" role="status">{!busy && status} {result?.provider === 'openclaw_mcp' ? 'OpenClaw' : result?.provider === 'direct' ? 'Direct backend' : ''}</p>
+      <p className="mt-2 text-sm" role="status">{!busy && status}</p>
       {error && <p role="alert" className="mt-3 text-sm" style={{ color: 'var(--warning)' }}>{error}</p>}
       {result && <div ref={resultAnchor} className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ scrollMarginTop: 110 }}>
         <h3 className="font-semibold">Opened study result</h3><a className="vl-btn-secondary" href="#saved-library-title">Back to saved library</a>
