@@ -1,0 +1,862 @@
+{
+  "project": "R26-SE-041",
+  "member": {
+    "member": "Baskaran V",
+    "sid": "IT22172600",
+    "title": "MULTILINGUAL INTERACTIVE AUDIO COMMUNICATION",
+    "directory": "baskaran-interactive-audio-communication",
+    "overview": "VoiceLearn enables students to ask voice questions about uploaded lecture material and receive retrieval-grounded answers with language-specific speech output. The component combines a Next.js interface, a FastAPI application, Supabase identity and storage, ChromaDB retrieval, and separately deployed Modal speech and language services.",
+    "purpose": "The deployment supports evaluation of the complete document-to-voice learning experience across English, Tamil and Sinhala. Its purpose is to verify document ingestion, transcription, answer generation, audio playback, persistence and controlled fallback behavior under the selected language configuration.",
+    "initialization": "The database and storage environment must contain the required Supabase tables, row-level policies and private document/audio buckets. API startup attempts schema creation through an exec_sql RPC, but errors are non-fatal. Operators must verify the actual schema rather than interpreting successful startup as proof that migrations succeeded. ChromaDB must retain its index and remain reachable from the API.",
+    "metrics": [
+      [
+        "API and retrieval availability",
+        "API /health, Chroma connectivity and successful source retrieval."
+      ],
+      [
+        "Speech-processing latency",
+        "Cold/warm ASR, transcript correction and TTS response durations by language."
+      ],
+      [
+        "Document ingestion behavior",
+        "Accepted files, indexing duration, failed ingestion and cache availability."
+      ],
+      [
+        "Answer and audio completeness",
+        "Grounded answers, enabled TTS output, revision downloads and persistent history."
+      ]
+    ],
+    "scenarios": [
+      [
+        "Document upload and grounded questions",
+        "Sign in, upload a lecture document and ask a question requiring its content. Repeat using an unrelated question.",
+        "The answer follows the document-based workflow and private documents remain isolated by owner."
+      ],
+      [
+        "Multilingual voice input",
+        "Submit English, Tamil and Sinhala recordings through their configured ASR routes.",
+        "The selected route returns usable transcription or an explicit controlled failure/fallback."
+      ],
+      [
+        "Speech output and revision playback",
+        "Enable and test the applicable TTS routes; generate revision audio and inspect download/playback controls.",
+        "Audio is playable for enabled languages and a text response remains understandable when TTS is unavailable."
+      ],
+      [
+        "Persistence and service failure",
+        "Restart the API/index, reopen history and simulate an unavailable model URL in a test environment.",
+        "Persisted documents/history survive restart and errors are visible without silently losing learner state."
+      ]
+    ],
+    "issues": [
+      [
+        "Frontend container requires a prior build",
+        "The Dockerfile copies .next/standalone instead of creating it.",
+        "Run the validated production Next.js build before building the runner image."
+      ],
+      [
+        "Compose defaults need production adjustment",
+        "The client URL points to localhost and the API has a development source mount.",
+        "Configure the public API during the frontend build and prepare a production override without the development mount."
+      ],
+      [
+        "Health-check tooling and model artifacts",
+        "Compose checks call curl; the backend Dockerfile does not explicitly install it. Gemma expects a populated model volume.",
+        "Verify/install the health-check executable and provision the base weights and V2 adapter before acceptance."
+      ]
+    ],
+    "lessons": [
+      "Language-specific endpoint selection must be checked against current routing code rather than an older model overview.",
+      "Prebuilt frontend variables and backend runtime variables have different release behavior.",
+      "Liveness does not establish retrieval quality, migration success or audio completeness."
+    ]
+  },
+  "blocks": [
+    [
+      "h1",
+      "1. DEPLOYMENT OVERVIEW"
+    ],
+    [
+      "h2",
+      "1.1 Overview"
+    ],
+    [
+      "p",
+      "VoiceLearn enables students to ask voice questions about uploaded lecture material and receive retrieval-grounded answers with language-specific speech output. The component combines a Next.js interface, a FastAPI application, Supabase identity and storage, ChromaDB retrieval, and separately deployed Modal speech and language services."
+    ],
+    [
+      "p",
+      "The repository contains a Next.js frontend, FastAPI backend, Dockerfiles, Docker Compose configuration, Modal endpoint definitions, Supabase integration, and tests. The Koji AWS guide identifies `voicelearn-audio` as an independent Vercel project; it does not establish this component's current backend host or live health. The root `.github/workflows/` contains a Koji workflow, not an audio release pipeline. Automated audio production deployment is therefore not evidenced by the inspected root workflows."
+    ],
+    [
+      "h2",
+      "1.2 Purpose of the Deployment"
+    ],
+    [
+      "p",
+      "The deployment supports evaluation of the complete document-to-voice learning experience across English, Tamil and Sinhala. Its purpose is to verify document ingestion, transcription, answer generation, audio playback, persistence and controlled fallback behavior under the selected language configuration."
+    ],
+    [
+      "p",
+      "A repeatable deployment must connect the interface, application services, model inference and persistent data while retaining the configuration and evidence required to reproduce the release. The assessment therefore considers both installation correctness and the learner-facing workflow."
+    ],
+    [
+      "h2",
+      "1.3 Scope of the Deployment"
+    ],
+    [
+      "p",
+      "This report covers the multilingual interactive audio communication component only. The shared learning interface, research website and other three research components retain their own deployment responsibilities. The scope includes environment preparation, model endpoint configuration, application release, secure service access, verification, backup and recovery."
+    ],
+    [
+      "p",
+      "The report is based on the inspected project repository. Hosting already documented in source is identified separately from proposed installation steps. No new cloud release, paid inference or production database migration was executed during preparation. Runtime acceptance results require a release-specific evidence record."
+    ],
+    [
+      "h2",
+      "1.4 Key Metrics Monitored"
+    ],
+    [
+      "p",
+      "The following metrics define the operational monitoring plan for deployment evaluation. They are selected from the component workflow and should be collected during a controlled acceptance run; measured values are not supplied in the available deployment evidence."
+    ],
+    [
+      "table",
+      [
+        [
+          "Metric",
+          "Description"
+        ],
+        [
+          "API and retrieval availability",
+          "API /health, Chroma connectivity and successful source retrieval."
+        ],
+        [
+          "Speech-processing latency",
+          "Cold/warm ASR, transcript correction and TTS response durations by language."
+        ],
+        [
+          "Document ingestion behavior",
+          "Accepted files, indexing duration, failed ingestion and cache availability."
+        ],
+        [
+          "Answer and audio completeness",
+          "Grounded answers, enabled TTS output, revision downloads and persistent history."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.5 Deployment Success Metrics"
+    ],
+    [
+      "p",
+      "Deployment success is evaluated against installation, integration and learner workflow criteria. Health checks alone are insufficient because an API can answer a liveness request while a model, database, index or private storage service remains unavailable."
+    ],
+    [
+      "table",
+      [
+        [
+          "Indicator",
+          "Acceptance criterion"
+        ],
+        [
+          "Service initialization",
+          "Required processes start with the selected environment and no unresolved startup failure."
+        ],
+        [
+          "Configuration consistency",
+          "Frontend origin, API URL, model endpoints and persistent paths match the release record."
+        ],
+        [
+          "Functional completeness",
+          "All mandatory component scenarios produce the expected outcomes."
+        ],
+        [
+          "Data persistence",
+          "Required learner state and files remain available after a controlled restart."
+        ],
+        [
+          "Recovery readiness",
+          "A compatible previous release and tested backup procedure are identified."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.6 Success Rate and Error Monitoring"
+    ],
+    [
+      "p",
+      "For a release trial, calculate deployment success rate as successfully verified required services divided by all required services, multiplied by 100. Calculate workflow error rate from failed requests divided by total observed requests over the same recorded test interval. Keep configuration failures, model failures and invalid-input rejections separate so that expected rejection behavior is not mistaken for an outage."
+    ],
+    [
+      "p",
+      "No measured deployment percentage or incident trend is asserted here. The release record must identify the test period, number of requests, endpoint/model revisions, and observed failures before reporting quantitative results."
+    ],
+    [
+      "h2",
+      "1.7 Key Outcomes of the Deployment"
+    ],
+    [
+      "p",
+      "The repository review establishes the component architecture, required configuration, release dependencies, verification scenarios and recovery requirements. A completed deployment should demonstrate a usable multilingual interactive audio communication workflow and durable handling of the component data described below. Operational success remains subject to the acceptance criteria and pending items identified in this report."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "2. DEPLOYMENT PROCESS"
+    ],
+    [
+      "p",
+      "The deployment process follows environment preparation, initialization, application/model release, access configuration and scenario-based verification. The steps are specific to this component and preserve its actual hosting and storage architecture."
+    ],
+    [
+      "h2",
+      "2.1 Deployment Environment Preparation"
+    ],
+    [
+      "table",
+      [
+        [
+          "Layer",
+          "Implementation",
+          "Hosting arrangement"
+        ],
+        [
+          "Browser interface",
+          "Next.js 14 / React 18",
+          "Separate Vercel project documented; standalone Docker runner also supplied"
+        ],
+        [
+          "API",
+          "FastAPI, `app.main:app`",
+          "CPU container or persistent Python service; production host to confirm"
+        ],
+        [
+          "Retrieval index",
+          "ChromaDB, BGE embeddings/reranking",
+          "Compose ChromaDB service or configured local persistent store"
+        ],
+        [
+          "User identity and files",
+          "Supabase Auth, database, private Storage",
+          "Credentials supplied through backend/frontend environments"
+        ],
+        [
+          "Speech and generation",
+          "Independent Modal services",
+          "Language-specific ASR/TTS and answer-generation endpoints"
+        ],
+        [
+          "Local state",
+          "Documents, history, optional actions",
+          "Persistent writable storage on backend host"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "Current configuration and routing include Gemma base/fine-tuned answer endpoints and language-specific speech services. The older README model table is insufficient to identify all active production models. Endpoint selection must follow `app/core/config.py` and `app/services/modal_client.py` for the chosen release."
+    ],
+    [
+      "p",
+      "Select the release commit and install dependencies in an isolated environment. Record the actual operating system, runtime versions, host allocation, storage mapping and public endpoints. CPU/RAM specifications and concurrent-user capacity should be taken from the selected host and measurements rather than assumed from the presence of deployment scripts."
+    ],
+    [
+      "h2",
+      "2.2 Service and Data Initialization"
+    ],
+    [
+      "p",
+      "The database and storage environment must contain the required Supabase tables, row-level policies and private document/audio buckets. API startup attempts schema creation through an exec_sql RPC, but errors are non-fatal. Operators must verify the actual schema rather than interpreting successful startup as proof that migrations succeeded. ChromaDB must retain its index and remain reachable from the API."
+    ],
+    [
+      "h2",
+      "2.3 Deployment of System Components"
+    ],
+    [
+      "p",
+      "Configure application and model services using the following repository-supported variables and deployment sequence. Commands use a Linux deployment shell unless a PowerShell helper is explicitly identified."
+    ],
+    [
+      "p",
+      "The backend Dockerfile uses Python 3.11, installs ffmpeg and build tools, and caches BGE models during image construction. Its runtime enables offline Hugging Face access, so model-cache build success is essential. The frontend Dockerfile uses a Node 20 runner and expects an already-created `.next/standalone` output."
+    ],
+    [
+      "table",
+      [
+        [
+          "Configuration",
+          "Purpose"
+        ],
+        [
+          "`SUPABASE_URL`, `SUPABASE_ANON_KEY`",
+          "Supabase connection and public identity configuration"
+        ],
+        [
+          "`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`",
+          "Backend-only privileged access and token validation"
+        ],
+        [
+          "`ALLOWED_ORIGINS`",
+          "JSON list of permitted frontend origins"
+        ],
+        [
+          "`NEXT_PUBLIC_API_URL`",
+          "Browser-reachable HTTPS API URL, configured before frontend build"
+        ],
+        [
+          "`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`",
+          "Public frontend identity configuration"
+        ],
+        [
+          "`CHROMA_HOST`, `CHROMA_PORT`, `CHROMA_COLLECTION`",
+          "Vector-store connection and collection"
+        ],
+        [
+          "`MODAL_WHISPER_URL`, `MODAL_INDIC_STT_URL`, `MODAL_SINHALA_ASR_URL`",
+          "English/fallback, Tamil, and Sinhala ASR routing"
+        ],
+        [
+          "`MODAL_TRANSCRIPT_CORRECTOR_URL`",
+          "Transcript correction service"
+        ],
+        [
+          "`MODAL_BASE_GEMMA_URL`, `MODAL_FINETUNED_GEMMA_V2_URL`",
+          "Separate base and tuned answer-generation URLs"
+        ],
+        [
+          "`MODAL_RAG_GENERATOR_URL`, `MODAL_LOCALIZER_URL`",
+          "Other configured generation/localization paths"
+        ],
+        [
+          "`MODAL_ENGLISH_KOKORO_TTS_URL`",
+          "English audio generation"
+        ],
+        [
+          "`MODAL_INDIC_PARLER_MIXED_TTS_URL`",
+          "Current Tamil TTS route"
+        ],
+        [
+          "`MODAL_SINHALA_VITS_TTS_URL`",
+          "Sinhala audio generation"
+        ],
+        [
+          "`USE_ENGLISH_TTS`, `USE_TAMIL_TTS`",
+          "Feature switches; defaults are false"
+        ],
+        [
+          "`USE_DIRECT_MULTILINGUAL_GEMMA`",
+          "Current direct multilingual generation switch"
+        ],
+        [
+          "`LOCAL_DOCUMENT_STORE_PATH`, `LOCAL_HISTORY_STORE_PATH`",
+          "Persistent local document/history directories"
+        ],
+        [
+          "`DEBUG`",
+          "Set false for production; interactive API docs are disabled"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "Optional retrieval endpoints use `USE_MODAL_RETRIEVAL_MODELS`, `MODAL_BGE_EMBED_URL`, and `MODAL_BGE_RERANK_URL`. Optional document actions use `ACTIONS_ENABLED`, the selected provider, and persistent `ACTIONS_STORE_PATH`. Configure the OpenClaw path only when that provider is intentionally selected."
+    ],
+    [
+      "p",
+      "1. Select and record the release commit. Configure private backend `.env` and frontend `.env.local` using the supplied examples."
+    ],
+    [
+      "p",
+      "2. Verify Supabase tables, row-level policies, and private `documents`/`audio` buckets. Startup attempts migration through an `exec_sql` RPC, but migration failures are non-fatal. A healthy API therefore does not prove schema/bucket provisioning succeeded. Review schema explicitly before acceptance."
+    ],
+    [
+      "p",
+      "3. Authenticate Modal and deploy the endpoint files used by the configured release. From the component root, examples are:"
+    ],
+    [
+      "code",
+      "modal deploy backend/modal_endpoints/whisper_stt.py\nmodal deploy backend/modal_endpoints/tamil_asr_qwen3.py\nmodal deploy backend/modal_endpoints/sinhala_whisper_asr.py\nmodal deploy backend/modal_endpoints/gemma_answer_generator.py\nmodal deploy backend/modal_endpoints/english_kokoro_tts.py\nmodal deploy backend/modal_endpoints/indic_parler_mixed_tts.py\nmodal deploy backend/modal_endpoints/sinhala_vits_tts.py"
+    ],
+    [
+      "p",
+      "Configure the printed URLs, including `/generate` URLs for Gemma classes. The Gemma deployment mounts `voicelearn-models` and expects base weights under `/models/gemma/base` and the V2 adapter under `/models/gemma/adapters/v2`, unless its base-path override is used. Provision these artifacts before inference; creating an empty volume does not install weights. Deploy other correction/localization endpoints only when the configured workflow requires them."
+    ],
+    [
+      "p",
+      "4. Build the frontend before using its Docker runner. From `frontend/`:"
+    ],
+    [
+      "code",
+      "npm ci\nnpm run type-check\nnpm run build"
+    ],
+    [
+      "p",
+      "5. For the supplied local Compose arrangement, run `docker compose up --build -d` from the component root. It exposes frontend port 3000, API port 8000, and ChromaDB port 8001. Validate the configured health checks in the built images: both use `curl`, while the backend Dockerfile does not explicitly install it."
+    ],
+    [
+      "p",
+      "6. For production, prepare a reviewed Compose override or host configuration. Replace the Compose frontend's `http://localhost:8000` URL with the public API URL in the actual build, remove the development source bind mount, configure HTTPS, keep ChromaDB private, and persist writable state. Those adjustments are deployment work still required, not changes supplied by this report. Alternatively publish the Next.js build through its separate Vercel project while deploying the API/index independently."
+    ],
+    [
+      "p",
+      "Browser `localhost` refers to the learner's device. Setting a public frontend variable only at container runtime does not reliably replace values already embedded during `next build`."
+    ],
+    [
+      "h2",
+      "2.4 Secure Access Configuration"
+    ],
+    [
+      "p",
+      "The hosted browser interface and API require compatible HTTPS endpoints and exact permitted frontend origins. Private credentials belong in the backend or deployment-secret store. Public frontend variables may contain the API origin and public identity key, but must not contain database passwords, service-role credentials or private deployment tokens."
+    ],
+    [
+      "p",
+      "Restrict internal process and database/index ports to the required application network. Access control must match the intended audience and be verified independently of CORS. Record how an administrator inspects logs and restarts the service using the tools selected for this component."
+    ],
+    [
+      "h2",
+      "2.5 Execution of Testing Scenarios"
+    ],
+    [
+      "p",
+      "Execute the following component-specific scenarios using isolated test accounts, representative source material and a recorded release configuration. The descriptions are acceptance procedures, not claims that the scenarios have already passed."
+    ],
+    [
+      "h3",
+      "2.5.1 Scenario 1 - Document upload and grounded questions"
+    ],
+    [
+      "p",
+      "Test procedure: Sign in, upload a lecture document and ask a question requiring its content. Repeat using an unrelated question."
+    ],
+    [
+      "p",
+      "Expected behavior: The answer follows the document-based workflow and private documents remain isolated by owner."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.2 Scenario 2 - Multilingual voice input"
+    ],
+    [
+      "p",
+      "Test procedure: Submit English, Tamil and Sinhala recordings through their configured ASR routes."
+    ],
+    [
+      "p",
+      "Expected behavior: The selected route returns usable transcription or an explicit controlled failure/fallback."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.3 Scenario 3 - Speech output and revision playback"
+    ],
+    [
+      "p",
+      "Test procedure: Enable and test the applicable TTS routes; generate revision audio and inspect download/playback controls."
+    ],
+    [
+      "p",
+      "Expected behavior: Audio is playable for enabled languages and a text response remains understandable when TTS is unavailable."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.4 Scenario 4 - Persistence and service failure"
+    ],
+    [
+      "p",
+      "Test procedure: Restart the API/index, reopen history and simulate an unavailable model URL in a test environment."
+    ],
+    [
+      "p",
+      "Expected behavior: Persisted documents/history survive restart and errors are visible without silently losing learner state."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h2",
+      "2.6 Backup and Recovery Strategy"
+    ],
+    [
+      "p",
+      "Persist the Chroma volume, local documents/history, optional local actions, and the model cache appropriate to the deployment. The supplied Compose file mounts documents/history but does not mount `local_actions`; add persistence when actions are enabled. Ensure the non-root runtime user can write to mounted directories. Back up source documents together with their corresponding index/metadata."
+    ],
+    [
+      "p",
+      "Monitor ingestion time, ASR/generation/TTS latency, missing model files, failed migrations, retrieval errors, disk usage, and private storage availability. Do not infer production capacity from model sizes or health checks; benchmark the chosen workload."
+    ],
+    [
+      "p",
+      "Keep previous backend images, frontend artifacts, Modal code/model versions, and environment configuration. Roll back to a compatible previous application release while retaining document/history volumes. Revert model routes separately where necessary and repeat the language-specific acceptance checks. Confirm schema compatibility before reverting code after a schema change."
+    ],
+    [
+      "h2",
+      "2.7 Deployment Details"
+    ],
+    [
+      "table",
+      [
+        [
+          "Deployment item",
+          "Recorded arrangement"
+        ],
+        [
+          "Research project",
+          "BioLearnX / R26-SE-041"
+        ],
+        [
+          "Component owner",
+          "Baskaran V / IT22172600"
+        ],
+        [
+          "Source directory",
+          "baskaran-interactive-audio-communication/"
+        ],
+        [
+          "Release identification",
+          "Repository commit and application/model artifact versions to be recorded at release."
+        ],
+        [
+          "Environment evidence",
+          "Documented source configuration; live installation details require operator confirmation."
+        ],
+        [
+          "Execution mode",
+          "Independent component deployment and scenario-based acceptance."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "2.8 Deployment Checklist"
+    ],
+    [
+      "h3",
+      "Pre-Deployment"
+    ],
+    [
+      "bullet",
+      "Select and record the release commit."
+    ],
+    [
+      "bullet",
+      "Resolve the component-specific pending installation items."
+    ],
+    [
+      "bullet",
+      "Verify dependency installation, secrets, origins and endpoint URLs."
+    ],
+    [
+      "bullet",
+      "Prepare persistent storage and a consistent backup."
+    ],
+    [
+      "h3",
+      "During Deployment"
+    ],
+    [
+      "bullet",
+      "Initialize required schema/index/model artifacts."
+    ],
+    [
+      "bullet",
+      "Deploy compatible model and application versions."
+    ],
+    [
+      "bullet",
+      "Apply HTTPS routing and exact frontend-origin configuration."
+    ],
+    [
+      "bullet",
+      "Verify startup logs and required process status."
+    ],
+    [
+      "h3",
+      "Post-Deployment"
+    ],
+    [
+      "bullet",
+      "Run component scenarios and record observed results."
+    ],
+    [
+      "bullet",
+      "Verify persistence and intended data-access boundaries."
+    ],
+    [
+      "bullet",
+      "Review cold-start errors, timeouts and partial outputs."
+    ],
+    [
+      "bullet",
+      "Confirm rollback target and update the release record."
+    ],
+    [
+      "h2",
+      "2.9 Deployment Verification and Completion"
+    ],
+    [
+      "p",
+      "Deployment is complete only when required services and dependencies are reachable, the interface uses the intended API, persistent storage is retained, and mandatory scenarios pass with evidence. Record any unresolved issue as a release limitation. The current report provides a verification procedure and source-based readiness assessment; it does not replace operator sign-off."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "3. ISSUES, RESOLUTION, AND MONITORING"
+    ],
+    [
+      "h2",
+      "3.1 Issues Encountered During Deployment Review"
+    ],
+    [
+      "p",
+      "The following items were identified from source inspection and configuration review. They are confirmed repository/deployment requirements, rather than invented incidents from a live installation."
+    ],
+    [
+      "h3",
+      "Issue 1: Frontend container requires a prior build"
+    ],
+    [
+      "p",
+      "The Dockerfile copies .next/standalone instead of creating it."
+    ],
+    [
+      "h3",
+      "Issue 2: Compose defaults need production adjustment"
+    ],
+    [
+      "p",
+      "The client URL points to localhost and the API has a development source mount."
+    ],
+    [
+      "h3",
+      "Issue 3: Health-check tooling and model artifacts"
+    ],
+    [
+      "p",
+      "Compose checks call curl; the backend Dockerfile does not explicitly install it. Gemma expects a populated model volume."
+    ],
+    [
+      "h2",
+      "3.2 Resolutions and Required Actions"
+    ],
+    [
+      "h3",
+      "Resolution for Issue 1"
+    ],
+    [
+      "p",
+      "Run the validated production Next.js build before building the runner image."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 2"
+    ],
+    [
+      "p",
+      "Configure the public API during the frontend build and prepare a production override without the development mount."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 3"
+    ],
+    [
+      "p",
+      "Verify/install the health-check executable and provision the base weights and V2 adapter before acceptance."
+    ],
+    [
+      "p",
+      "These actions must be verified in the release environment. Their presence in this report does not mean the corresponding source code, host configuration or production installation was modified during report preparation."
+    ],
+    [
+      "h2",
+      "3.3 Impact Analysis"
+    ],
+    [
+      "p",
+      "Configuration and build gaps can prevent a usable client release even when individual backend services exist. Missing model artifacts or mismatched endpoints can interrupt inference, while incomplete persistence can cause learner state or feedback loss after restart. The listed actions address these concrete release dependencies. No outage duration, user count or production incident severity is inferred without a live record."
+    ],
+    [
+      "h2",
+      "3.4 Monitoring and System Observability"
+    ],
+    [
+      "p",
+      "Collect application logs, process status, model-platform logs and persistent-storage usage for the selected deployment. Correlate API and model events using request/job/session identifiers wherever available. Inspect both total request duration and individual processing stages, since a slow or unavailable dependency can be hidden by an otherwise responsive API."
+    ],
+    [
+      "p",
+      "Use the metrics in Section 1.4 for a consistent monitoring record. Separate startup/liveness checks from full workflow checks, and retain cold-start observations alongside warm-request behavior. No additional monitoring dashboard is claimed to be installed by this report."
+    ],
+    [
+      "h2",
+      "3.5 Monitoring Results"
+    ],
+    [
+      "table",
+      [
+        [
+          "Result category",
+          "Evidence status"
+        ],
+        [
+          "Repository architecture and configuration",
+          "Reviewed and described in this report."
+        ],
+        [
+          "Live process uptime and dependency health",
+          "Not measured during report preparation."
+        ],
+        [
+          "Workflow latency and error rate",
+          "Requires a recorded acceptance run."
+        ],
+        [
+          "Backup restoration and runtime recovery",
+          "Requires verification in an isolated environment."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "3.6 User Feedback"
+    ],
+    [
+      "p",
+      "No new deployment user-feedback study was supplied or conducted for this report. Collect feedback after the component scenarios using the intended learner audience. Record whether users can complete the workflow, understand errors, interpret results and recover their prior work. Keep reported comments and participant counts separate from proposed usability improvements."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "4. POST-DEPLOYMENT VALIDATION, DOCUMENTATION, AND LESSONS LEARNED"
+    ],
+    [
+      "h2",
+      "4.1 Post-Deployment Validation"
+    ],
+    [
+      "p",
+      "Post-deployment validation checks the integrated learning workflow after the selected release is installed. The procedure covers infrastructure, application dependencies, interface behavior and persistence. Validation should use representative learning material and controlled test state rather than modifying real learner records for convenience."
+    ],
+    [
+      "p",
+      "From the backend environment, install the test dependencies required by the checked-out tests and run:"
+    ],
+    [
+      "code",
+      "pytest tests/ -v"
+    ],
+    [
+      "p",
+      "Check API `/health`, browser authentication, document upload/indexing, source-grounded retrieval, and an English/Tamil/Sinhala voice request. Test each enabled TTS route and the text fallback when a voice service is unavailable. Test revision playback/download and section navigation if enabled. Confirm history persists after API restart and one user's documents are inaccessible to another."
+    ],
+    [
+      "p",
+      "Check cold model startup separately from a warm request. The `/health` response only reports API liveness/version; it does not validate all Modal services, the BGE cache, Supabase schema, or retrieval index. Record endpoint identifiers, flags, image/build version, and actual acceptance results."
+    ],
+    [
+      "h2",
+      "4.2 Validation Activities"
+    ],
+    [
+      "table",
+      [
+        [
+          "Validation level",
+          "Activities and evidence required"
+        ],
+        [
+          "Infrastructure",
+          "Inspect process/container status, HTTPS endpoint reachability, persistent mounts and startup logs."
+        ],
+        [
+          "Application",
+          "Verify dependency configuration, model response handling, error behavior and the component-specific scenarios."
+        ],
+        [
+          "User interface",
+          "Validate the hosted production build, uploads/actions, result display and learner-visible failure behavior."
+        ],
+        [
+          "Data and recovery",
+          "Restart services, confirm state retention, inspect access boundaries and verify compatible restoration."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "4.3 Supporting Operational Artefacts"
+    ],
+    [
+      "p",
+      "Retain the source commit, runtime/package manifests, environment-variable names, deployment scripts/configuration, model identifiers, schema versions, test output and scenario evidence with the release. Store private environment values outside the published report. The editable report source and rendered PDF provide the documentation layer; application artefacts remain in the component directory."
+    ],
+    [
+      "p",
+      "The following source-based limitations and supporting references remain relevant to release sign-off:"
+    ],
+    [
+      "p",
+      "Pending confirmation includes the CPU backend host, actual public API URL, release automation, model-volume contents, enabled language routes, persistent-directory permissions, and live acceptance results. The frontend build prerequisite, `curl` health-check dependency, localhost production URL, and development mount must be resolved before treating the supplied Compose setup as a production release."
+    ],
+    [
+      "p",
+      "Repository references: [component guide](../baskaran-interactive-audio-communication/README.md), [Compose configuration](../baskaran-interactive-audio-communication/docker-compose.yml), [frontend Dockerfile](../baskaran-interactive-audio-communication/frontend/Dockerfile), [backend Dockerfile](../baskaran-interactive-audio-communication/backend/Dockerfile), [settings](../baskaran-interactive-audio-communication/backend/app/core/config.py), [model routing](../baskaran-interactive-audio-communication/backend/app/services/modal_client.py), and [document actions](../baskaran-interactive-audio-communication/backend/ACTIONS.md)."
+    ],
+    [
+      "h2",
+      "4.4 Key Lessons Learned"
+    ],
+    [
+      "p",
+      "The following lessons are derived from implementation and deployment review. They describe engineering implications of the available source, rather than unrecorded user trials or production performance claims."
+    ],
+    [
+      "bullet",
+      "Language-specific endpoint selection must be checked against current routing code rather than an older model overview."
+    ],
+    [
+      "bullet",
+      "Prebuilt frontend variables and backend runtime variables have different release behavior."
+    ],
+    [
+      "bullet",
+      "Liveness does not establish retrieval quality, migration success or audio completeness."
+    ],
+    [
+      "bullet",
+      "A report should distinguish the installed architecture, planned checks and measured results so that later releases remain auditable."
+    ],
+    [
+      "h2",
+      "4.5 Conclusion of Post-Deployment Assessment"
+    ],
+    [
+      "p",
+      "The deployment review establishes a component-specific architecture, reproducible installation sequence, verification scenarios, monitoring plan and recovery requirements for multilingual interactive audio communication. The identified pending items must be resolved and the acceptance evidence recorded before certifying a successful live deployment. The supporting documentation provides a reproducible operational basis for component evaluation and future releases."
+    ]
+  ]
+}

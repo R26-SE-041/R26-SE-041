@@ -1,0 +1,862 @@
+{
+  "project": "R26-SE-041",
+  "member": {
+    "member": "Kojithan P. Y",
+    "sid": "IT22264220",
+    "title": "INTERACTIVE INFOGRAPHIC GENERATION",
+    "directory": "koji-interactive-infographic-generator",
+    "overview": "The interactive visualization component provides prompt-to-image and sketch-to-image generation, biology anatomy diagrams, editable labels, region-based questions, persistent learning history, and optional 3D conversion. It separates CPU application services from GPU inference so that learning requests can be queued and completed independently of the browser session.",
+    "purpose": "The deployment supports evaluation of a complete visual learning workflow, including authenticated access, durable execution, model integration, private asset storage, and recovery after process interruption. Its purpose is to verify that the visualization interface and independently hosted services operate as one reproducible component.",
+    "initialization": "The API and worker share the existing Supabase project and backend configuration. Required schema changes are applied with python -m studio.migrate before code that depends on them is released. The AWS activation process does not apply migrations. Component-owned job, history, document and chunk tables, pgvector support, and private storage must be available for the selected features.",
+    "metrics": [
+      [
+        "API and worker availability",
+        "API /health and /ready, service status, and job processing progress."
+      ],
+      [
+        "Job completion and queue delay",
+        "Submitted, completed and failed jobs; queue waiting time and lease recovery."
+      ],
+      [
+        "Model response time",
+        "Cold and warm inference duration, retries and endpoint failures."
+      ],
+      [
+        "Retrieval and storage integrity",
+        "Owner-scoped sources, private asset access, and saved history consistency."
+      ]
+    ],
+    "scenarios": [
+      [
+        "Prompt and sketch generation",
+        "Sign in, submit a prompt and a sketch, wait for durable jobs, and inspect generated output and labels.",
+        "A completed result and corresponding history event are available without requiring the original browser tab to remain open."
+      ],
+      [
+        "Label editing and conversation recovery",
+        "Change labels, reopen a conversation after browser refresh, and export the supported labeled result.",
+        "Edited labels and linked generation versions remain associated with the correct account and image."
+      ],
+      [
+        "PDF-grounded image questions",
+        "Upload a representative text PDF, select it for a region question, and inspect cited passages. Repeat with a second account.",
+        "Sources belong to the signed-in owner and selected documents; missing evidence is reported explicitly."
+      ],
+      [
+        "Worker restart and optional 3D conversion",
+        "Restart the worker during a controlled job and run a 3D conversion where its endpoint is configured.",
+        "Job recovery follows the implemented lease/call-handle behavior and saved GLB output remains linked to its source."
+      ]
+    ],
+    "issues": [
+      [
+        "Release configuration is installation-dependent",
+        "Receiver control files, deployment tokens, production switches and origin values need operator confirmation.",
+        "Verify the installed receiver and protected environment before enabling automatic release."
+      ],
+      [
+        "Schema and agent compatibility",
+        "PDF features require matching migrations and an interactive agent that accepts the new context fields.",
+        "Apply reviewed migrations first and release the dependent agent/API/client together."
+      ],
+      [
+        "Model cache and endpoint changes",
+        "CPU PDF embeddings need a cache; queued jobs preserve their captured model URLs.",
+        "Persist cache files, record endpoint versions, and distinguish existing jobs from new jobs after configuration changes."
+      ]
+    ],
+    "lessons": [
+      "A persistent worker is necessary for long-running model jobs and browser-independent completion.",
+      "Frontend, CPU API and GPU agents benefit from independent releases with explicit compatibility checks.",
+      "Database readiness, account isolation and model-output behavior require separate acceptance evidence."
+    ]
+  },
+  "blocks": [
+    [
+      "h1",
+      "1. DEPLOYMENT OVERVIEW"
+    ],
+    [
+      "h2",
+      "1.1 Overview"
+    ],
+    [
+      "p",
+      "The interactive visualization component provides prompt-to-image and sketch-to-image generation, biology anatomy diagrams, editable labels, region-based questions, persistent learning history, and optional 3D conversion. It separates CPU application services from GPU inference so that learning requests can be queued and completed independently of the browser session."
+    ],
+    [
+      "p",
+      "The repository documents a Vercel web client, an AWS EC2 CPU API and worker, Modal model services, and an existing Supabase project. It includes a component-specific GitHub Actions release workflow, systemd templates, an authenticated HTTPS release receiver, artifact verification, and automatic activation rollback. The documented frontend is `https://koji-studio.vercel.app`; availability and currently active release were not checked for this report. Render configuration is an alternative retained in the repository; the AWS deployment guide describes the EC2 release path."
+    ],
+    [
+      "h2",
+      "1.2 Purpose of the Deployment"
+    ],
+    [
+      "p",
+      "The deployment supports evaluation of a complete visual learning workflow, including authenticated access, durable execution, model integration, private asset storage, and recovery after process interruption. Its purpose is to verify that the visualization interface and independently hosted services operate as one reproducible component."
+    ],
+    [
+      "p",
+      "A repeatable deployment must connect the interface, application services, model inference and persistent data while retaining the configuration and evidence required to reproduce the release. The assessment therefore considers both installation correctness and the learner-facing workflow."
+    ],
+    [
+      "h2",
+      "1.3 Scope of the Deployment"
+    ],
+    [
+      "p",
+      "This report covers the interactive infographic generation component only. The shared learning interface, research website and other three research components retain their own deployment responsibilities. The scope includes environment preparation, model endpoint configuration, application release, secure service access, verification, backup and recovery."
+    ],
+    [
+      "p",
+      "The report is based on the inspected project repository. Hosting already documented in source is identified separately from proposed installation steps. No new cloud release, paid inference or production database migration was executed during preparation. Runtime acceptance results require a release-specific evidence record."
+    ],
+    [
+      "h2",
+      "1.4 Key Metrics Monitored"
+    ],
+    [
+      "p",
+      "The following metrics define the operational monitoring plan for deployment evaluation. They are selected from the component workflow and should be collected during a controlled acceptance run; measured values are not supplied in the available deployment evidence."
+    ],
+    [
+      "table",
+      [
+        [
+          "Metric",
+          "Description"
+        ],
+        [
+          "API and worker availability",
+          "API /health and /ready, service status, and job processing progress."
+        ],
+        [
+          "Job completion and queue delay",
+          "Submitted, completed and failed jobs; queue waiting time and lease recovery."
+        ],
+        [
+          "Model response time",
+          "Cold and warm inference duration, retries and endpoint failures."
+        ],
+        [
+          "Retrieval and storage integrity",
+          "Owner-scoped sources, private asset access, and saved history consistency."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.5 Deployment Success Metrics"
+    ],
+    [
+      "p",
+      "Deployment success is evaluated against installation, integration and learner workflow criteria. Health checks alone are insufficient because an API can answer a liveness request while a model, database, index or private storage service remains unavailable."
+    ],
+    [
+      "table",
+      [
+        [
+          "Indicator",
+          "Acceptance criterion"
+        ],
+        [
+          "Service initialization",
+          "Required processes start with the selected environment and no unresolved startup failure."
+        ],
+        [
+          "Configuration consistency",
+          "Frontend origin, API URL, model endpoints and persistent paths match the release record."
+        ],
+        [
+          "Functional completeness",
+          "All mandatory component scenarios produce the expected outcomes."
+        ],
+        [
+          "Data persistence",
+          "Required learner state and files remain available after a controlled restart."
+        ],
+        [
+          "Recovery readiness",
+          "A compatible previous release and tested backup procedure are identified."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.6 Success Rate and Error Monitoring"
+    ],
+    [
+      "p",
+      "For a release trial, calculate deployment success rate as successfully verified required services divided by all required services, multiplied by 100. Calculate workflow error rate from failed requests divided by total observed requests over the same recorded test interval. Keep configuration failures, model failures and invalid-input rejections separate so that expected rejection behavior is not mistaken for an outage."
+    ],
+    [
+      "p",
+      "No measured deployment percentage or incident trend is asserted here. The release record must identify the test period, number of requests, endpoint/model revisions, and observed failures before reporting quantitative results."
+    ],
+    [
+      "h2",
+      "1.7 Key Outcomes of the Deployment"
+    ],
+    [
+      "p",
+      "The repository review establishes the component architecture, required configuration, release dependencies, verification scenarios and recovery requirements. A completed deployment should demonstrate a usable interactive infographic generation workflow and durable handling of the component data described below. Operational success remains subject to the acceptance criteria and pending items identified in this report."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "2. DEPLOYMENT PROCESS"
+    ],
+    [
+      "p",
+      "The deployment process follows environment preparation, initialization, application/model release, access configuration and scenario-based verification. The steps are specific to this component and preserve its actual hosting and storage architecture."
+    ],
+    [
+      "h2",
+      "2.1 Deployment Environment Preparation"
+    ],
+    [
+      "table",
+      [
+        [
+          "Layer",
+          "Implementation",
+          "Deployment responsibility"
+        ],
+        [
+          "Web client",
+          "React Native / Expo web export",
+          "Vercel serves the tested static client and `/studio-api` proxy"
+        ],
+        [
+          "API",
+          "FastAPI, `studio.main:app`",
+          "EC2 systemd service `koji-api.service`"
+        ],
+        [
+          "Durable worker",
+          "`python -m studio.worker`",
+          "EC2 systemd service `koji-worker.service`"
+        ],
+        [
+          "Model inference",
+          "Prompt, image, sketch, interactive, evaluation, and 3D agents",
+          "Independent Modal deployments"
+        ],
+        [
+          "Identity and persistent data",
+          "Supabase Auth, PostgreSQL/pgvector, private Storage",
+          "Existing Supabase project"
+        ],
+        [
+          "Release control",
+          "GitHub Actions and HTTPS receiver",
+          "Test, package, verify, activate, and check readiness"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "An authenticated request creates a durable job in PostgreSQL. The worker calls Modal and stores results and history in private Supabase storage and tables. Closing the browser does not stop the job. Browser API calls normally use the same-origin proxy; PDF uploads use the API origin directly and therefore require its CORS configuration."
+    ],
+    [
+      "p",
+      "Select the release commit and install dependencies in an isolated environment. Record the actual operating system, runtime versions, host allocation, storage mapping and public endpoints. CPU/RAM specifications and concurrent-user capacity should be taken from the selected host and measurements rather than assumed from the presence of deployment scripts."
+    ],
+    [
+      "h2",
+      "2.2 Service and Data Initialization"
+    ],
+    [
+      "p",
+      "The API and worker share the existing Supabase project and backend configuration. Required schema changes are applied with python -m studio.migrate before code that depends on them is released. The AWS activation process does not apply migrations. Component-owned job, history, document and chunk tables, pgvector support, and private storage must be available for the selected features."
+    ],
+    [
+      "h2",
+      "2.3 Deployment of System Components"
+    ],
+    [
+      "p",
+      "Configure application and model services using the following repository-supported variables and deployment sequence. Commands use a Linux deployment shell unless a PowerShell helper is explicitly identified."
+    ],
+    [
+      "p",
+      "The documented Ubuntu installation uses `/home/ubuntu/koji/backend`, a private `.env`, and `.venv/bin/python`. Install CPU dependencies from `backend/studio/requirements.txt`; GPU dependencies belong to the respective Modal images. Provision a persistent worker and allow model-cache downloads needed for CPU PDF embeddings."
+    ],
+    [
+      "table",
+      [
+        [
+          "Configuration",
+          "Location / purpose"
+        ],
+        [
+          "`DATABASE_URL`",
+          "Backend PostgreSQL connection with TLS"
+        ],
+        [
+          "`SUPABASE_URL`, `SUPABASE_ANON_KEY`",
+          "Backend identity validation"
+        ],
+        [
+          "`SUPABASE_SERVICE_ROLE_KEY`",
+          "Backend-only storage and service access"
+        ],
+        [
+          "`CORS_ORIGINS`",
+          "Exact permitted frontend origins"
+        ],
+        [
+          "Model endpoint URLs",
+          "Values from current Modal deployments, using `backend/studio/.env.example`"
+        ],
+        [
+          "`EXPO_PUBLIC_STUDIO_API_URL`",
+          "Public API origin embedded in frontend build"
+        ],
+        [
+          "`EXPO_PUBLIC_STUDIO_PROXY_PATH`",
+          "`/studio-api` for the production web client"
+        ],
+        [
+          "`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`",
+          "Public authentication configuration"
+        ],
+        [
+          "`KOJI_DEPLOY_ENABLED`",
+          "Enables production jobs"
+        ],
+        [
+          "`KOJI_EC2_DEPLOY_ENABLED`",
+          "Enables the configured HTTPS EC2 release receiver"
+        ],
+        [
+          "`KOJI_MODEL_DEPLOY_ENABLED`",
+          "Enables optional automatic model deployment"
+        ],
+        [
+          "`KOJI_DEPLOY_TOKEN`",
+          "Private shared receiver token; at least 40 characters"
+        ],
+        [
+          "`KOJI_VERCEL_TOKEN`",
+          "Private Vercel deployment credential"
+        ],
+        [
+          "`KOJI_MODAL_TOKEN_ID`, `KOJI_MODAL_TOKEN_SECRET`",
+          "Private model deployment credentials"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "Repository build variables map the public values through `KOJI_STUDIO_API_URL`, `KOJI_STUDIO_PROXY_PATH`, `KOJI_SUPABASE_URL`, and `KOJI_SUPABASE_ANON_KEY`. Configure project/organization IDs and the production environment following the AWS guide. Each target Modal account must contain the secrets required by its agents, including `hf-secret` where applicable."
+    ],
+    [
+      "p",
+      "1. Select the release commit and configure the existing Supabase project. Review and apply all required migrations before releasing dependent code. From the component backend:"
+    ],
+    [
+      "code",
+      "python -m studio.migrate"
+    ],
+    [
+      "p",
+      "This uses real database credentials and changes the target schema. Automatic EC2 deployment does not run migrations. The PDF feature requires the document/library migrations as well as the job/history schema."
+    ],
+    [
+      "p",
+      "2. Deploy changed Modal services before dependent API/client changes. The PowerShell helper `backend/deploy_all.ps1` deploys the listed agents sequentially. Its `-IncludeSupabaseServices` switch adds the orchestrator and skill generator. Use the configured destination account and required secrets."
+    ],
+    [
+      "p",
+      "3. For initial EC2 installation, install and verify the API/worker services. Install the receiver and activation script in `/home/ubuntu/koji/deploy-control`, configure its mode-600 environment file, and install `koji-deploy.service` following the AWS guide. Control scripts require administrator installation separately from routine application releases."
+    ],
+    [
+      "p",
+      "4. Configure HTTPS routing: Caddy sends `/internal/koji-deploy*` to `127.0.0.1:8766` and application requests to `127.0.0.1:8000`. Keep both internal ports private."
+    ],
+    [
+      "p",
+      "5. Configure the protected `koji-production` environment and production switches. Release through `.github/workflows/koji-interactive.yml` from `main`, an allowed `koji-release-*` tag, or an appropriate manual dispatch from `main`."
+    ],
+    [
+      "p",
+      "6. The workflow runs frontend/backend checks, packages tested artifacts, deploys affected enabled model services, activates the backend, and publishes the frontend after required backend success. A frontend-only change does not restart the API/worker."
+    ],
+    [
+      "p",
+      "For manual frontend packaging, run from the component frontend:"
+    ],
+    [
+      "code",
+      "npm ci\nnpm run build:web\npython ../ci/pack_vercel.py"
+    ],
+    [
+      "p",
+      "Publish the resulting prebuilt artifact through the configured release path. Public build-variable changes require a new frontend build. Backend environment changes require restarting both API and worker; existing queued jobs retain the model URLs captured when they were created."
+    ],
+    [
+      "h2",
+      "2.4 Secure Access Configuration"
+    ],
+    [
+      "p",
+      "The hosted browser interface and API require compatible HTTPS endpoints and exact permitted frontend origins. Private credentials belong in the backend or deployment-secret store. Public frontend variables may contain the API origin and public identity key, but must not contain database passwords, service-role credentials or private deployment tokens."
+    ],
+    [
+      "p",
+      "Restrict internal process and database/index ports to the required application network. Access control must match the intended audience and be verified independently of CORS. Record how an administrator inspects logs and restarts the service using the tools selected for this component."
+    ],
+    [
+      "h2",
+      "2.5 Execution of Testing Scenarios"
+    ],
+    [
+      "p",
+      "Execute the following component-specific scenarios using isolated test accounts, representative source material and a recorded release configuration. The descriptions are acceptance procedures, not claims that the scenarios have already passed."
+    ],
+    [
+      "h3",
+      "2.5.1 Scenario 1 - Prompt and sketch generation"
+    ],
+    [
+      "p",
+      "Test procedure: Sign in, submit a prompt and a sketch, wait for durable jobs, and inspect generated output and labels."
+    ],
+    [
+      "p",
+      "Expected behavior: A completed result and corresponding history event are available without requiring the original browser tab to remain open."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.2 Scenario 2 - Label editing and conversation recovery"
+    ],
+    [
+      "p",
+      "Test procedure: Change labels, reopen a conversation after browser refresh, and export the supported labeled result."
+    ],
+    [
+      "p",
+      "Expected behavior: Edited labels and linked generation versions remain associated with the correct account and image."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.3 Scenario 3 - PDF-grounded image questions"
+    ],
+    [
+      "p",
+      "Test procedure: Upload a representative text PDF, select it for a region question, and inspect cited passages. Repeat with a second account."
+    ],
+    [
+      "p",
+      "Expected behavior: Sources belong to the signed-in owner and selected documents; missing evidence is reported explicitly."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.4 Scenario 4 - Worker restart and optional 3D conversion"
+    ],
+    [
+      "p",
+      "Test procedure: Restart the worker during a controlled job and run a 3D conversion where its endpoint is configured."
+    ],
+    [
+      "p",
+      "Expected behavior: Job recovery follows the implemented lease/call-handle behavior and saved GLB output remains linked to its source."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h2",
+      "2.6 Backup and Recovery Strategy"
+    ],
+    [
+      "p",
+      "Monitor API/worker logs, queue delay, failed jobs, Modal errors, database/storage usage, and embedding cache availability. Size EC2 from measured CPU/RAM and concurrent jobs; the repository does not establish a verified capacity figure for this report."
+    ],
+    [
+      "p",
+      "The activation process verifies commit and hashes, builds a CPU environment, checks imports/database readiness, and restores the previous source and environment if activation or readiness fails. Backups remain under `deploy-backups/`, and environments under `deploy-environments/`. Retain the active release and a known good rollback target. Database migrations and Modal model changes require their own compatibility/rollback plan; restoring application files does not reverse either."
+    ],
+    [
+      "p",
+      "Avoid restoring learner data merely to roll back code. Prefer a compatible previous release, then repeat readiness and a small acceptance check."
+    ],
+    [
+      "h2",
+      "2.7 Deployment Details"
+    ],
+    [
+      "table",
+      [
+        [
+          "Deployment item",
+          "Recorded arrangement"
+        ],
+        [
+          "Research project",
+          "BioLearnX / R26-SE-041"
+        ],
+        [
+          "Component owner",
+          "Kojithan P. Y / IT22264220"
+        ],
+        [
+          "Source directory",
+          "koji-interactive-infographic-generator/"
+        ],
+        [
+          "Release identification",
+          "Repository commit and application/model artifact versions to be recorded at release."
+        ],
+        [
+          "Environment evidence",
+          "Documented source configuration; live installation details require operator confirmation."
+        ],
+        [
+          "Execution mode",
+          "Independent component deployment and scenario-based acceptance."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "2.8 Deployment Checklist"
+    ],
+    [
+      "h3",
+      "Pre-Deployment"
+    ],
+    [
+      "bullet",
+      "Select and record the release commit."
+    ],
+    [
+      "bullet",
+      "Resolve the component-specific pending installation items."
+    ],
+    [
+      "bullet",
+      "Verify dependency installation, secrets, origins and endpoint URLs."
+    ],
+    [
+      "bullet",
+      "Prepare persistent storage and a consistent backup."
+    ],
+    [
+      "h3",
+      "During Deployment"
+    ],
+    [
+      "bullet",
+      "Initialize required schema/index/model artifacts."
+    ],
+    [
+      "bullet",
+      "Deploy compatible model and application versions."
+    ],
+    [
+      "bullet",
+      "Apply HTTPS routing and exact frontend-origin configuration."
+    ],
+    [
+      "bullet",
+      "Verify startup logs and required process status."
+    ],
+    [
+      "h3",
+      "Post-Deployment"
+    ],
+    [
+      "bullet",
+      "Run component scenarios and record observed results."
+    ],
+    [
+      "bullet",
+      "Verify persistence and intended data-access boundaries."
+    ],
+    [
+      "bullet",
+      "Review cold-start errors, timeouts and partial outputs."
+    ],
+    [
+      "bullet",
+      "Confirm rollback target and update the release record."
+    ],
+    [
+      "h2",
+      "2.9 Deployment Verification and Completion"
+    ],
+    [
+      "p",
+      "Deployment is complete only when required services and dependencies are reachable, the interface uses the intended API, persistent storage is retained, and mandatory scenarios pass with evidence. Record any unresolved issue as a release limitation. The current report provides a verification procedure and source-based readiness assessment; it does not replace operator sign-off."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "3. ISSUES, RESOLUTION, AND MONITORING"
+    ],
+    [
+      "h2",
+      "3.1 Issues Encountered During Deployment Review"
+    ],
+    [
+      "p",
+      "The following items were identified from source inspection and configuration review. They are confirmed repository/deployment requirements, rather than invented incidents from a live installation."
+    ],
+    [
+      "h3",
+      "Issue 1: Release configuration is installation-dependent"
+    ],
+    [
+      "p",
+      "Receiver control files, deployment tokens, production switches and origin values need operator confirmation."
+    ],
+    [
+      "h3",
+      "Issue 2: Schema and agent compatibility"
+    ],
+    [
+      "p",
+      "PDF features require matching migrations and an interactive agent that accepts the new context fields."
+    ],
+    [
+      "h3",
+      "Issue 3: Model cache and endpoint changes"
+    ],
+    [
+      "p",
+      "CPU PDF embeddings need a cache; queued jobs preserve their captured model URLs."
+    ],
+    [
+      "h2",
+      "3.2 Resolutions and Required Actions"
+    ],
+    [
+      "h3",
+      "Resolution for Issue 1"
+    ],
+    [
+      "p",
+      "Verify the installed receiver and protected environment before enabling automatic release."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 2"
+    ],
+    [
+      "p",
+      "Apply reviewed migrations first and release the dependent agent/API/client together."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 3"
+    ],
+    [
+      "p",
+      "Persist cache files, record endpoint versions, and distinguish existing jobs from new jobs after configuration changes."
+    ],
+    [
+      "p",
+      "These actions must be verified in the release environment. Their presence in this report does not mean the corresponding source code, host configuration or production installation was modified during report preparation."
+    ],
+    [
+      "h2",
+      "3.3 Impact Analysis"
+    ],
+    [
+      "p",
+      "Configuration and build gaps can prevent a usable client release even when individual backend services exist. Missing model artifacts or mismatched endpoints can interrupt inference, while incomplete persistence can cause learner state or feedback loss after restart. The listed actions address these concrete release dependencies. No outage duration, user count or production incident severity is inferred without a live record."
+    ],
+    [
+      "h2",
+      "3.4 Monitoring and System Observability"
+    ],
+    [
+      "p",
+      "Collect application logs, process status, model-platform logs and persistent-storage usage for the selected deployment. Correlate API and model events using request/job/session identifiers wherever available. Inspect both total request duration and individual processing stages, since a slow or unavailable dependency can be hidden by an otherwise responsive API."
+    ],
+    [
+      "p",
+      "Use the metrics in Section 1.4 for a consistent monitoring record. Separate startup/liveness checks from full workflow checks, and retain cold-start observations alongside warm-request behavior. No additional monitoring dashboard is claimed to be installed by this report."
+    ],
+    [
+      "h2",
+      "3.5 Monitoring Results"
+    ],
+    [
+      "table",
+      [
+        [
+          "Result category",
+          "Evidence status"
+        ],
+        [
+          "Repository architecture and configuration",
+          "Reviewed and described in this report."
+        ],
+        [
+          "Live process uptime and dependency health",
+          "Not measured during report preparation."
+        ],
+        [
+          "Workflow latency and error rate",
+          "Requires a recorded acceptance run."
+        ],
+        [
+          "Backup restoration and runtime recovery",
+          "Requires verification in an isolated environment."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "3.6 User Feedback"
+    ],
+    [
+      "p",
+      "No new deployment user-feedback study was supplied or conducted for this report. Collect feedback after the component scenarios using the intended learner audience. Record whether users can complete the workflow, understand errors, interpret results and recover their prior work. Keep reported comments and participant counts separate from proposed usability improvements."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "4. POST-DEPLOYMENT VALIDATION, DOCUMENTATION, AND LESSONS LEARNED"
+    ],
+    [
+      "h2",
+      "4.1 Post-Deployment Validation"
+    ],
+    [
+      "p",
+      "Post-deployment validation checks the integrated learning workflow after the selected release is installed. The procedure covers infrastructure, application dependencies, interface behavior and persistence. Validation should use representative learning material and controlled test state rather than modifying real learner records for convenience."
+    ],
+    [
+      "p",
+      "Run the prescribed frontend checks:"
+    ],
+    [
+      "code",
+      "npm run typecheck\nnpm run test:unit\nnpm run build:web"
+    ],
+    [
+      "p",
+      "From the backend, install `studio/requirements-dev.txt` and run `python ../ci/check.py`. PostgreSQL integration checks require `STUDIO_TEST_DATABASE_URL` pointing to a disposable pgvector-enabled database. Never use the production database for those checks. Deployment unit checks run from the repository root:"
+    ],
+    [
+      "code",
+      "python -m unittest discover -s koji-interactive-infographic-generator/ci/tests -p 'test_*.py'"
+    ],
+    [
+      "p",
+      "After release, verify API `/health`, API `/ready`, frontend `/studio-api/ready`, and the status of both systemd services. Perform a controlled signed-in generation, reopen saved history, edit labels, and test an owner-scoped PDF question. Check a second account cannot access the first account's private content. Test 3D conversion when that endpoint is included in the release. Model calls may consume GPU credits."
+    ],
+    [
+      "p",
+      "Record the commit, artifact hashes, service status, readiness results, and acceptance evidence. Readiness alone does not prove model output quality."
+    ],
+    [
+      "h2",
+      "4.2 Validation Activities"
+    ],
+    [
+      "table",
+      [
+        [
+          "Validation level",
+          "Activities and evidence required"
+        ],
+        [
+          "Infrastructure",
+          "Inspect process/container status, HTTPS endpoint reachability, persistent mounts and startup logs."
+        ],
+        [
+          "Application",
+          "Verify dependency configuration, model response handling, error behavior and the component-specific scenarios."
+        ],
+        [
+          "User interface",
+          "Validate the hosted production build, uploads/actions, result display and learner-visible failure behavior."
+        ],
+        [
+          "Data and recovery",
+          "Restart services, confirm state retention, inspect access boundaries and verify compatible restoration."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "4.3 Supporting Operational Artefacts"
+    ],
+    [
+      "p",
+      "Retain the source commit, runtime/package manifests, environment-variable names, deployment scripts/configuration, model identifiers, schema versions, test output and scenario evidence with the release. Store private environment values outside the published report. The editable report source and rendered PDF provide the documentation layer; application artefacts remain in the component directory."
+    ],
+    [
+      "p",
+      "The following source-based limitations and supporting references remain relevant to release sign-off:"
+    ],
+    [
+      "p",
+      "This report establishes that deployment automation exists in source. Production receiver installation, environment-switch values, applied migrations, active Modal accounts, runtime health, and acceptance results require operator confirmation."
+    ],
+    [
+      "p",
+      "Repository references: [component guide](../koji-interactive-infographic-generator/README.md), [AWS release guide](../koji-interactive-infographic-generator/deploy/aws/README.md), [workflow](../.github/workflows/koji-interactive.yml), [Modal helper](../koji-interactive-infographic-generator/backend/deploy_all.ps1), and [authentication guide](../koji-interactive-infographic-generator/docs/authentication.md)."
+    ],
+    [
+      "h2",
+      "4.4 Key Lessons Learned"
+    ],
+    [
+      "p",
+      "The following lessons are derived from implementation and deployment review. They describe engineering implications of the available source, rather than unrecorded user trials or production performance claims."
+    ],
+    [
+      "bullet",
+      "A persistent worker is necessary for long-running model jobs and browser-independent completion."
+    ],
+    [
+      "bullet",
+      "Frontend, CPU API and GPU agents benefit from independent releases with explicit compatibility checks."
+    ],
+    [
+      "bullet",
+      "Database readiness, account isolation and model-output behavior require separate acceptance evidence."
+    ],
+    [
+      "bullet",
+      "A report should distinguish the installed architecture, planned checks and measured results so that later releases remain auditable."
+    ],
+    [
+      "h2",
+      "4.5 Conclusion of Post-Deployment Assessment"
+    ],
+    [
+      "p",
+      "The deployment review establishes a component-specific architecture, reproducible installation sequence, verification scenarios, monitoring plan and recovery requirements for interactive infographic generation. The identified pending items must be resolved and the acceptance evidence recorded before certifying a successful live deployment. The supporting documentation provides a reproducible operational basis for component evaluation and future releases."
+    ]
+  ]
+}

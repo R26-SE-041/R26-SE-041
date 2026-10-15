@@ -1,0 +1,846 @@
+{
+  "project": "R26-SE-041",
+  "member": {
+    "member": "Sarmitha S",
+    "sid": "IT22637482",
+    "title": "INTELLIGENT IMAGE-TO-TEXT AND STUDY NOTE GENERATION",
+    "directory": "sarmitha-image-text-extractor-study-gen",
+    "overview": "The image-to-notes component enhances handwritten images, extracts Sinhala text, translates the result into Tamil and English, and collects corrected OCR crops for future model training. The FastAPI CPU application invokes independent Modal enhancement, OCR and translation endpoints and returns text, line information and comparison images to an Expo interface.",
+    "purpose": "The deployment supports evaluation of handwritten-image processing as a usable biology learning aid. Its purpose is to validate model connectivity, accepted upload handling, OCR cleanup, translation completeness, feedback retention and interface integration without treating optional correction agents as active in the current route.",
+    "initialization": "The CPU backend loads endpoint URLs and allowed origins from its environment. The current /api/process route creates enhancement output for comparison but sends the original image bytes to line-level TrOCR extraction. It then cleans Sinhala output and translates it sequentially. SinhaLM/Qwen visual context correction is skipped by this route. A writable persistent backend/dataset directory is needed when retaining learner corrections.",
+    "metrics": [
+      [
+        "API and endpoint availability",
+        "Root API response and successful enhancement/OCR/translation calls."
+      ],
+      [
+        "Processing latency",
+        "Cold/warm model duration and total image processing time."
+      ],
+      [
+        "Output completeness",
+        "Sinhala text, line confidence/crops, enhancement image and both translations."
+      ],
+      [
+        "Feedback persistence and input handling",
+        "Retained corrections, supported media types, rejected oversized inputs and disk growth."
+      ]
+    ],
+    "scenarios": [
+      [
+        "Sinhala handwritten-image processing",
+        "Submit a representative accepted image to /api/process and inspect returned images and line-level text.",
+        "OCR uses original image bytes and returns cleaned Sinhala output with comparison data."
+      ],
+      [
+        "Tamil and English translation",
+        "Process a meaningful Sinhala sample and inspect both translation fields, including a controlled translation failure.",
+        "Both translations contain usable output when their service succeeds; empty fields are detected during acceptance."
+      ],
+      [
+        "Upload validation and failure behavior",
+        "Submit an unsupported media type, an oversized upload and a request with an unavailable model URL.",
+        "The API rejects invalid input and returns an identifiable configuration/inference error."
+      ],
+      [
+        "Correction feedback and restart",
+        "Save an isolated crop correction through /api/feedback/ocr, then restart and inspect images and metadata.",
+        "The crop and matching JSONL entry survive restart in the persistent dataset location."
+      ]
+    ],
+    "issues": [
+      [
+        "Frontend API module is missing",
+        "The Expo screen imports @/lib/api, absent from the inspected checkout.",
+        "Restore its types, upload handling and configurable HTTPS origin, then validate install/export."
+      ],
+      [
+        "Translation may be incomplete without total request failure",
+        "The processing route catches translation errors and can return empty language fields.",
+        "Check both translated fields explicitly and retain a visible partial-result handling policy."
+      ],
+      [
+        "Local feedback and public-access configuration",
+        "Feedback writes local JSONL and timestamp-based filenames; inspected routes have no application authentication.",
+        "Use one worker initially, persist the dataset and configure access appropriate to the intended deployment audience."
+      ]
+    ],
+    "lessons": [
+      "Model filenames and comments can lag behind the active implementation; the enhancement service now uses Swin2SR.",
+      "A successful processing response does not guarantee complete translation output.",
+      "Feedback datasets require durable storage and release procedures that preserve training material."
+    ]
+  },
+  "blocks": [
+    [
+      "h1",
+      "1. DEPLOYMENT OVERVIEW"
+    ],
+    [
+      "h2",
+      "1.1 Overview"
+    ],
+    [
+      "p",
+      "The image-to-notes component enhances handwritten images, extracts Sinhala text, translates the result into Tamil and English, and collects corrected OCR crops for future model training. The FastAPI CPU application invokes independent Modal enhancement, OCR and translation endpoints and returns text, line information and comparison images to an Expo interface."
+    ],
+    [
+      "p",
+      "The repository contains a FastAPI CPU API, an Expo/React Native interface, Modal model definitions, and OCR cleanup tests. No component-specific Dockerfile, production hosting manifest, or root release workflow was found. The hosting procedure below is proposed from the supplied code; it does not certify an existing public deployment."
+    ],
+    [
+      "p",
+      "The interface imports `@/lib/api`, but `frontend-rn/lib/api` is absent from this checkout. Its API implementation and production URL configuration must be restored or implemented before frontend release. An `EXPO_PUBLIC_API_URL` mechanism cannot be assumed from the current source."
+    ],
+    [
+      "h2",
+      "1.2 Purpose of the Deployment"
+    ],
+    [
+      "p",
+      "The deployment supports evaluation of handwritten-image processing as a usable biology learning aid. Its purpose is to validate model connectivity, accepted upload handling, OCR cleanup, translation completeness, feedback retention and interface integration without treating optional correction agents as active in the current route."
+    ],
+    [
+      "p",
+      "A repeatable deployment must connect the interface, application services, model inference and persistent data while retaining the configuration and evidence required to reproduce the release. The assessment therefore considers both installation correctness and the learner-facing workflow."
+    ],
+    [
+      "h2",
+      "1.3 Scope of the Deployment"
+    ],
+    [
+      "p",
+      "This report covers the intelligent image-to-text and study note generation component only. The shared learning interface, research website and other three research components retain their own deployment responsibilities. The scope includes environment preparation, model endpoint configuration, application release, secure service access, verification, backup and recovery."
+    ],
+    [
+      "p",
+      "The report is based on the inspected project repository. Hosting already documented in source is identified separately from proposed installation steps. No new cloud release, paid inference or production database migration was executed during preparation. Runtime acceptance results require a release-specific evidence record."
+    ],
+    [
+      "h2",
+      "1.4 Key Metrics Monitored"
+    ],
+    [
+      "p",
+      "The following metrics define the operational monitoring plan for deployment evaluation. They are selected from the component workflow and should be collected during a controlled acceptance run; measured values are not supplied in the available deployment evidence."
+    ],
+    [
+      "table",
+      [
+        [
+          "Metric",
+          "Description"
+        ],
+        [
+          "API and endpoint availability",
+          "Root API response and successful enhancement/OCR/translation calls."
+        ],
+        [
+          "Processing latency",
+          "Cold/warm model duration and total image processing time."
+        ],
+        [
+          "Output completeness",
+          "Sinhala text, line confidence/crops, enhancement image and both translations."
+        ],
+        [
+          "Feedback persistence and input handling",
+          "Retained corrections, supported media types, rejected oversized inputs and disk growth."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.5 Deployment Success Metrics"
+    ],
+    [
+      "p",
+      "Deployment success is evaluated against installation, integration and learner workflow criteria. Health checks alone are insufficient because an API can answer a liveness request while a model, database, index or private storage service remains unavailable."
+    ],
+    [
+      "table",
+      [
+        [
+          "Indicator",
+          "Acceptance criterion"
+        ],
+        [
+          "Service initialization",
+          "Required processes start with the selected environment and no unresolved startup failure."
+        ],
+        [
+          "Configuration consistency",
+          "Frontend origin, API URL, model endpoints and persistent paths match the release record."
+        ],
+        [
+          "Functional completeness",
+          "All mandatory component scenarios produce the expected outcomes."
+        ],
+        [
+          "Data persistence",
+          "Required learner state and files remain available after a controlled restart."
+        ],
+        [
+          "Recovery readiness",
+          "A compatible previous release and tested backup procedure are identified."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.6 Success Rate and Error Monitoring"
+    ],
+    [
+      "p",
+      "For a release trial, calculate deployment success rate as successfully verified required services divided by all required services, multiplied by 100. Calculate workflow error rate from failed requests divided by total observed requests over the same recorded test interval. Keep configuration failures, model failures and invalid-input rejections separate so that expected rejection behavior is not mistaken for an outage."
+    ],
+    [
+      "p",
+      "No measured deployment percentage or incident trend is asserted here. The release record must identify the test period, number of requests, endpoint/model revisions, and observed failures before reporting quantitative results."
+    ],
+    [
+      "h2",
+      "1.7 Key Outcomes of the Deployment"
+    ],
+    [
+      "p",
+      "The repository review establishes the component architecture, required configuration, release dependencies, verification scenarios and recovery requirements. A completed deployment should demonstrate a usable intelligent image-to-text and study note generation workflow and durable handling of the component data described below. Operational success remains subject to the acceptance criteria and pending items identified in this report."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "2. DEPLOYMENT PROCESS"
+    ],
+    [
+      "p",
+      "The deployment process follows environment preparation, initialization, application/model release, access configuration and scenario-based verification. The steps are specific to this component and preserve its actual hosting and storage architecture."
+    ],
+    [
+      "h2",
+      "2.1 Deployment Environment Preparation"
+    ],
+    [
+      "table",
+      [
+        [
+          "Layer",
+          "Implementation",
+          "Proposed hosting arrangement"
+        ],
+        [
+          "Interface",
+          "Expo / React Native, web-capable",
+          "Independent static web deployment after validated export"
+        ],
+        [
+          "CPU API",
+          "FastAPI, `main:app`",
+          "Persistent Python service behind HTTPS"
+        ],
+        [
+          "Enhancement",
+          "Fine-tuned Swin2SR",
+          "Modal T4 endpoint in `srcnn_app.py`"
+        ],
+        [
+          "Sinhala OCR",
+          "Fine-tuned TrOCR",
+          "Modal T4 text/line endpoints in `trocr_app.py`"
+        ],
+        [
+          "Translation",
+          "NLLB-200 distilled 600M",
+          "Modal T4 endpoint in `translate_app.py`"
+        ],
+        [
+          "Feedback dataset",
+          "Crop images and JSONL metadata",
+          "Persistent writable backend `dataset/` directory"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "The source filename `srcnn_app.py` is historical: the current model implementation is Swin2SR. In the current `/api/process` route, enhancement is generated for comparison/download, while OCR receives the original image bytes to preserve handwriting characteristics. OCR output is cleaned and translated sequentially. SinhaLM/Qwen visual correction is skipped in this active route and the response sets `context_improved` to false. Additional agent files are optional deployments, not prerequisites for the current main processing path."
+    ],
+    [
+      "p",
+      "Select the release commit and install dependencies in an isolated environment. Record the actual operating system, runtime versions, host allocation, storage mapping and public endpoints. CPU/RAM specifications and concurrent-user capacity should be taken from the selected host and measurements rather than assumed from the presence of deployment scripts."
+    ],
+    [
+      "h2",
+      "2.2 Service and Data Initialization"
+    ],
+    [
+      "p",
+      "The CPU backend loads endpoint URLs and allowed origins from its environment. The current /api/process route creates enhancement output for comparison but sends the original image bytes to line-level TrOCR extraction. It then cleans Sinhala output and translates it sequentially. SinhaLM/Qwen visual context correction is skipped by this route. A writable persistent backend/dataset directory is needed when retaining learner corrections."
+    ],
+    [
+      "h2",
+      "2.3 Deployment of System Components"
+    ],
+    [
+      "p",
+      "Configure application and model services using the following repository-supported variables and deployment sequence. Commands use a Linux deployment shell unless a PowerShell helper is explicitly identified."
+    ],
+    [
+      "p",
+      "Use an isolated Python environment and `backend/requirements.txt`. GPU dependencies are installed in Modal images rather than the CPU backend. Validate a clean frontend install against the checked-in package/lock files and Expo runtime before selecting a build image."
+    ],
+    [
+      "table",
+      [
+        [
+          "Variable",
+          "Purpose"
+        ],
+        [
+          "`SRCNN_MODAL_URL`",
+          "Swin2SR enhancement endpoint despite its historical variable name"
+        ],
+        [
+          "`TROCR_MODAL_URL`",
+          "Text-only OCR endpoint when that client path is used"
+        ],
+        [
+          "`TROCR_LINES_MODAL_URL`",
+          "Required line-extraction endpoint for `/api/process`"
+        ],
+        [
+          "`TRANSLATE_MODAL_URL`",
+          "Tamil/English translation endpoint"
+        ],
+        [
+          "`ALLOWED_ORIGINS`",
+          "Comma-separated frontend origins; default `http://localhost:3000`"
+        ],
+        [
+          "`MAX_UPLOAD_BYTES`",
+          "Upload limit; default 10 MiB"
+        ],
+        [
+          "`QWEN_MODAL_URL`, `SINHALM_MODAL_URL`, `VISUAL_OCR_MODAL_URL`",
+          "Optional agent configuration; not invoked by the current main pipeline"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "The model definitions reference `sarmisarmitha/swin2sr-sinhala-image-enhancement`, `sarmisarmitha/trocr-sinhala-handwritten-ocr`, and `facebook/nllb-200-distilled-600M`. Confirm access to all referenced artifacts, including the TrOCR subfolder defined in source, before building the Modal images."
+    ],
+    [
+      "p",
+      "1. Record the release commit. Restore the frontend API module with upload/request handling, response types, and explicit configurable HTTPS backend origin. Match `/api/process` and error responses; do not hardcode a learner-device localhost address into the production client."
+    ],
+    [
+      "p",
+      "2. Authenticate Modal and deploy the active model services from `backend/`:"
+    ],
+    [
+      "code",
+      "modal deploy modal_functions/srcnn_app.py\nmodal deploy modal_functions/trocr_app.py\nmodal deploy modal_functions/translate_app.py"
+    ],
+    [
+      "p",
+      "Record the printed function URLs separately. Configure both TrOCR text and line URLs where required; `/api/process` specifically uses `TROCR_LINES_MODAL_URL`. Enhancement and TrOCR have 300-second scaledown windows in source. Cold-start acceptance must be measured separately from warm inference."
+    ],
+    [
+      "p",
+      "3. Prepare the CPU API environment from `backend/`:"
+    ],
+    [
+      "code",
+      "python -m venv .venv\nsource .venv/bin/activate\npython -m pip install -r requirements.txt"
+    ],
+    [
+      "p",
+      "Populate `.env` from `.env.example`, using the deployed URLs and exact frontend origins. Mount a writable persistent directory at `backend/dataset` if feedback retention is required. The feedback module creates the image directory during import, so directory permissions are a startup requirement."
+    ],
+    [
+      "p",
+      "4. Configure a process manager to run the API behind an HTTPS reverse proxy:"
+    ],
+    [
+      "code",
+      "python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1"
+    ],
+    [
+      "p",
+      "A single worker is the initial choice because feedback appends to a local JSONL file and uses timestamp-derived crop names; concurrent multi-worker dataset writing has not been established as safe. Set proxy upload limits and request timeouts to accommodate the configured image limit and measured multi-model processing duration."
+    ],
+    [
+      "p",
+      "5. After restoring the frontend module and its public configuration, run from `frontend-rn/`:"
+    ],
+    [
+      "code",
+      "npm ci\nnpx tsc --noEmit\nnpx expo export --platform web"
+    ],
+    [
+      "p",
+      "Host the successfully exported web directory, normally `dist/`, with HTTPS and routing compatible with the generated Expo export. No web hosting manifest is supplied in this component. Validate web deployment first; native Android/iOS distribution requires separate build/signing configuration and is not evidenced by this repository's deployment setup."
+    ],
+    [
+      "h2",
+      "2.4 Secure Access Configuration"
+    ],
+    [
+      "p",
+      "The hosted browser interface and API require compatible HTTPS endpoints and exact permitted frontend origins. Private credentials belong in the backend or deployment-secret store. Public frontend variables may contain the API origin and public identity key, but must not contain database passwords, service-role credentials or private deployment tokens."
+    ],
+    [
+      "p",
+      "Restrict internal process and database/index ports to the required application network. Access control must match the intended audience and be verified independently of CORS. Record how an administrator inspects logs and restarts the service using the tools selected for this component."
+    ],
+    [
+      "h2",
+      "2.5 Execution of Testing Scenarios"
+    ],
+    [
+      "p",
+      "Execute the following component-specific scenarios using isolated test accounts, representative source material and a recorded release configuration. The descriptions are acceptance procedures, not claims that the scenarios have already passed."
+    ],
+    [
+      "h3",
+      "2.5.1 Scenario 1 - Sinhala handwritten-image processing"
+    ],
+    [
+      "p",
+      "Test procedure: Submit a representative accepted image to /api/process and inspect returned images and line-level text."
+    ],
+    [
+      "p",
+      "Expected behavior: OCR uses original image bytes and returns cleaned Sinhala output with comparison data."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.2 Scenario 2 - Tamil and English translation"
+    ],
+    [
+      "p",
+      "Test procedure: Process a meaningful Sinhala sample and inspect both translation fields, including a controlled translation failure."
+    ],
+    [
+      "p",
+      "Expected behavior: Both translations contain usable output when their service succeeds; empty fields are detected during acceptance."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.3 Scenario 3 - Upload validation and failure behavior"
+    ],
+    [
+      "p",
+      "Test procedure: Submit an unsupported media type, an oversized upload and a request with an unavailable model URL."
+    ],
+    [
+      "p",
+      "Expected behavior: The API rejects invalid input and returns an identifiable configuration/inference error."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.4 Scenario 4 - Correction feedback and restart"
+    ],
+    [
+      "p",
+      "Test procedure: Save an isolated crop correction through /api/feedback/ocr, then restart and inspect images and metadata."
+    ],
+    [
+      "p",
+      "Expected behavior: The crop and matching JSONL entry survive restart in the persistent dataset location."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h2",
+      "2.6 Backup and Recovery Strategy"
+    ],
+    [
+      "p",
+      "Monitor enhancement/OCR/translation errors, cold starts, request duration, dataset disk usage, missing URLs, and model build/download failures. Persist feedback images and `dataset/metadata.jsonl` together. Store dataset backups privately and confirm they can be restored."
+    ],
+    [
+      "p",
+      "The inspected routes do not enforce application authentication. Before deployment to an intended authenticated audience, implement or configure the required access control and test it. CORS alone does not prevent direct API calls. Configure upload/request protection according to that audience rather than assuming the Expo client provides backend access control."
+    ],
+    [
+      "p",
+      "Retain the previous API/client build, model source/revision references, and environment configuration. Roll back application code and compatible Modal endpoints independently, retaining the feedback dataset. Recheck a representative OCR request and translation pair after rollback. Model repositories are referenced by identifiers without an explicit immutable revision in the inspected definitions; record the resolved model revisions for reproducible releases."
+    ],
+    [
+      "h2",
+      "2.7 Deployment Details"
+    ],
+    [
+      "table",
+      [
+        [
+          "Deployment item",
+          "Recorded arrangement"
+        ],
+        [
+          "Research project",
+          "BioLearnX / R26-SE-041"
+        ],
+        [
+          "Component owner",
+          "Sarmitha S / IT22637482"
+        ],
+        [
+          "Source directory",
+          "sarmitha-image-text-extractor-study-gen/"
+        ],
+        [
+          "Release identification",
+          "Repository commit and application/model artifact versions to be recorded at release."
+        ],
+        [
+          "Environment evidence",
+          "Documented source configuration; live installation details require operator confirmation."
+        ],
+        [
+          "Execution mode",
+          "Independent component deployment and scenario-based acceptance."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "2.8 Deployment Checklist"
+    ],
+    [
+      "h3",
+      "Pre-Deployment"
+    ],
+    [
+      "bullet",
+      "Select and record the release commit."
+    ],
+    [
+      "bullet",
+      "Resolve the component-specific pending installation items."
+    ],
+    [
+      "bullet",
+      "Verify dependency installation, secrets, origins and endpoint URLs."
+    ],
+    [
+      "bullet",
+      "Prepare persistent storage and a consistent backup."
+    ],
+    [
+      "h3",
+      "During Deployment"
+    ],
+    [
+      "bullet",
+      "Initialize required schema/index/model artifacts."
+    ],
+    [
+      "bullet",
+      "Deploy compatible model and application versions."
+    ],
+    [
+      "bullet",
+      "Apply HTTPS routing and exact frontend-origin configuration."
+    ],
+    [
+      "bullet",
+      "Verify startup logs and required process status."
+    ],
+    [
+      "h3",
+      "Post-Deployment"
+    ],
+    [
+      "bullet",
+      "Run component scenarios and record observed results."
+    ],
+    [
+      "bullet",
+      "Verify persistence and intended data-access boundaries."
+    ],
+    [
+      "bullet",
+      "Review cold-start errors, timeouts and partial outputs."
+    ],
+    [
+      "bullet",
+      "Confirm rollback target and update the release record."
+    ],
+    [
+      "h2",
+      "2.9 Deployment Verification and Completion"
+    ],
+    [
+      "p",
+      "Deployment is complete only when required services and dependencies are reachable, the interface uses the intended API, persistent storage is retained, and mandatory scenarios pass with evidence. Record any unresolved issue as a release limitation. The current report provides a verification procedure and source-based readiness assessment; it does not replace operator sign-off."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "3. ISSUES, RESOLUTION, AND MONITORING"
+    ],
+    [
+      "h2",
+      "3.1 Issues Encountered During Deployment Review"
+    ],
+    [
+      "p",
+      "The following items were identified from source inspection and configuration review. They are confirmed repository/deployment requirements, rather than invented incidents from a live installation."
+    ],
+    [
+      "h3",
+      "Issue 1: Frontend API module is missing"
+    ],
+    [
+      "p",
+      "The Expo screen imports @/lib/api, absent from the inspected checkout."
+    ],
+    [
+      "h3",
+      "Issue 2: Translation may be incomplete without total request failure"
+    ],
+    [
+      "p",
+      "The processing route catches translation errors and can return empty language fields."
+    ],
+    [
+      "h3",
+      "Issue 3: Local feedback and public-access configuration"
+    ],
+    [
+      "p",
+      "Feedback writes local JSONL and timestamp-based filenames; inspected routes have no application authentication."
+    ],
+    [
+      "h2",
+      "3.2 Resolutions and Required Actions"
+    ],
+    [
+      "h3",
+      "Resolution for Issue 1"
+    ],
+    [
+      "p",
+      "Restore its types, upload handling and configurable HTTPS origin, then validate install/export."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 2"
+    ],
+    [
+      "p",
+      "Check both translated fields explicitly and retain a visible partial-result handling policy."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 3"
+    ],
+    [
+      "p",
+      "Use one worker initially, persist the dataset and configure access appropriate to the intended deployment audience."
+    ],
+    [
+      "p",
+      "These actions must be verified in the release environment. Their presence in this report does not mean the corresponding source code, host configuration or production installation was modified during report preparation."
+    ],
+    [
+      "h2",
+      "3.3 Impact Analysis"
+    ],
+    [
+      "p",
+      "Configuration and build gaps can prevent a usable client release even when individual backend services exist. Missing model artifacts or mismatched endpoints can interrupt inference, while incomplete persistence can cause learner state or feedback loss after restart. The listed actions address these concrete release dependencies. No outage duration, user count or production incident severity is inferred without a live record."
+    ],
+    [
+      "h2",
+      "3.4 Monitoring and System Observability"
+    ],
+    [
+      "p",
+      "Collect application logs, process status, model-platform logs and persistent-storage usage for the selected deployment. Correlate API and model events using request/job/session identifiers wherever available. Inspect both total request duration and individual processing stages, since a slow or unavailable dependency can be hidden by an otherwise responsive API."
+    ],
+    [
+      "p",
+      "Use the metrics in Section 1.4 for a consistent monitoring record. Separate startup/liveness checks from full workflow checks, and retain cold-start observations alongside warm-request behavior. No additional monitoring dashboard is claimed to be installed by this report."
+    ],
+    [
+      "h2",
+      "3.5 Monitoring Results"
+    ],
+    [
+      "table",
+      [
+        [
+          "Result category",
+          "Evidence status"
+        ],
+        [
+          "Repository architecture and configuration",
+          "Reviewed and described in this report."
+        ],
+        [
+          "Live process uptime and dependency health",
+          "Not measured during report preparation."
+        ],
+        [
+          "Workflow latency and error rate",
+          "Requires a recorded acceptance run."
+        ],
+        [
+          "Backup restoration and runtime recovery",
+          "Requires verification in an isolated environment."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "3.6 User Feedback"
+    ],
+    [
+      "p",
+      "No new deployment user-feedback study was supplied or conducted for this report. Collect feedback after the component scenarios using the intended learner audience. Record whether users can complete the workflow, understand errors, interpret results and recover their prior work. Keep reported comments and participant counts separate from proposed usability improvements."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "4. POST-DEPLOYMENT VALIDATION, DOCUMENTATION, AND LESSONS LEARNED"
+    ],
+    [
+      "h2",
+      "4.1 Post-Deployment Validation"
+    ],
+    [
+      "p",
+      "Post-deployment validation checks the integrated learning workflow after the selected release is installed. The procedure covers infrastructure, application dependencies, interface behavior and persistence. Validation should use representative learning material and controlled test state rather than modifying real learner records for convenience."
+    ],
+    [
+      "p",
+      "From the backend, run the existing cleanup checks:"
+    ],
+    [
+      "code",
+      "python -m unittest discover -s tests -p 'test_*.py'"
+    ],
+    [
+      "p",
+      "Check `/` for API liveness and submit a representative Sinhala handwritten image to `/api/process`. Confirm original/enhanced images, cleaned Sinhala output, line crops/confidence, and Tamil/English fields are present. Translation failures are caught and can leave an empty translation field while processing otherwise succeeds; check translation content explicitly."
+    ],
+    [
+      "p",
+      "Test enhancement-only and OCR-only routes when included in the release. Test invalid media types, uploads above the configured limit, absent endpoint configuration, model errors, and CORS from the hosted client. The process route permits JPEG, PNG, WebP, and BMP content types; it does not establish support for arbitrary document/PDF uploads."
+    ],
+    [
+      "p",
+      "Submit a controlled correction to `/api/feedback/ocr`, verify its crop/metadata are saved, restart the API, and confirm persistence. Use an isolated dataset for acceptance so test corrections do not contaminate real training data. Check mobile/web upload behavior through the restored API client."
+    ],
+    [
+      "p",
+      "There is no dedicated `/health` or dependency-readiness endpoint in the inspected `main.py`. A successful `/` response only establishes that the API answers requests. Record end-to-end latency and OCR/translation behavior separately; no runtime pass results or quality metrics were collected for this report."
+    ],
+    [
+      "h2",
+      "4.2 Validation Activities"
+    ],
+    [
+      "table",
+      [
+        [
+          "Validation level",
+          "Activities and evidence required"
+        ],
+        [
+          "Infrastructure",
+          "Inspect process/container status, HTTPS endpoint reachability, persistent mounts and startup logs."
+        ],
+        [
+          "Application",
+          "Verify dependency configuration, model response handling, error behavior and the component-specific scenarios."
+        ],
+        [
+          "User interface",
+          "Validate the hosted production build, uploads/actions, result display and learner-visible failure behavior."
+        ],
+        [
+          "Data and recovery",
+          "Restart services, confirm state retention, inspect access boundaries and verify compatible restoration."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "4.3 Supporting Operational Artefacts"
+    ],
+    [
+      "p",
+      "Retain the source commit, runtime/package manifests, environment-variable names, deployment scripts/configuration, model identifiers, schema versions, test output and scenario evidence with the release. Store private environment values outside the published report. The editable report source and rendered PDF provide the documentation layer; application artefacts remain in the component directory."
+    ],
+    [
+      "p",
+      "The following source-based limitations and supporting references remain relevant to release sign-off:"
+    ],
+    [
+      "p",
+      "Pending items include the missing frontend API module, validated Expo install/export, selected public hosts/URLs, persistent feedback storage, audience-specific access control, release automation, and live inference acceptance. SinhaLM/Qwen correction should only be described as active after the route is changed and validated."
+    ],
+    [
+      "p",
+      "Repository references: [API entry point](../sarmitha-image-text-extractor-study-gen/backend/main.py), [active processing route](../sarmitha-image-text-extractor-study-gen/backend/app/api/routes.py), [settings](../sarmitha-image-text-extractor-study-gen/backend/app/core/config.py), [feedback persistence](../sarmitha-image-text-extractor-study-gen/backend/app/api/feedback.py), [enhancement service](../sarmitha-image-text-extractor-study-gen/backend/modal_functions/srcnn_app.py), [OCR service](../sarmitha-image-text-extractor-study-gen/backend/modal_functions/trocr_app.py), [translation service](../sarmitha-image-text-extractor-study-gen/backend/modal_functions/translate_app.py), and [frontend](../sarmitha-image-text-extractor-study-gen/frontend-rn/app/index.tsx)."
+    ],
+    [
+      "h2",
+      "4.4 Key Lessons Learned"
+    ],
+    [
+      "p",
+      "The following lessons are derived from implementation and deployment review. They describe engineering implications of the available source, rather than unrecorded user trials or production performance claims."
+    ],
+    [
+      "bullet",
+      "Model filenames and comments can lag behind the active implementation; the enhancement service now uses Swin2SR."
+    ],
+    [
+      "bullet",
+      "A successful processing response does not guarantee complete translation output."
+    ],
+    [
+      "bullet",
+      "Feedback datasets require durable storage and release procedures that preserve training material."
+    ],
+    [
+      "bullet",
+      "A report should distinguish the installed architecture, planned checks and measured results so that later releases remain auditable."
+    ],
+    [
+      "h2",
+      "4.5 Conclusion of Post-Deployment Assessment"
+    ],
+    [
+      "p",
+      "The deployment review establishes a component-specific architecture, reproducible installation sequence, verification scenarios, monitoring plan and recovery requirements for intelligent image-to-text and study note generation. The identified pending items must be resolved and the acceptance evidence recorded before certifying a successful live deployment. The supporting documentation provides a reproducible operational basis for component evaluation and future releases."
+    ]
+  ]
+}

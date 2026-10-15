@@ -1,0 +1,867 @@
+{
+  "project": "R26-SE-041",
+  "member": {
+    "member": "Nishara T",
+    "sid": "IT22223876",
+    "title": "ADAPTIVE QUIZ GENERATION AND RECOMMENDATION",
+    "directory": "nishy-adaptive-quiz-recommender",
+    "overview": "The adaptive assessment component converts learning documents into grounded quizzes, evaluates submitted answers, adjusts question difficulty, and produces analytics and topic recommendations. A LangGraph workflow coordinates the agents, while SQLite stores learner-session data and checkpoints and ChromaDB stores document embeddings.",
+    "purpose": "The deployment supports assessment of a complete document-to-quiz workflow, including generation, evaluation, adaptation, hints, recommendations and session recovery. Its purpose is to establish reproducible operation of the CPU application with the fine-tuned Qwen Modal service and persistent local data.",
+    "initialization": "The backend requires writable session and checkpoint database directories, an upload location and a persistent Chroma index. The graph compiles during application startup, and database service initialization creates tables and applies additive migrations. Existing state must be backed up before schema-changing releases. A single backend process is the initial deployment arrangement because multi-replica session and local-state behavior has not been demonstrated.",
+    "metrics": [
+      [
+        "API and generation availability",
+        "API /health, Modal generation failures and complete quiz requests."
+      ],
+      [
+        "Quiz processing time",
+        "Document ingestion, question generation, hints and answer-evaluation latency."
+      ],
+      [
+        "Grounding and adaptive behavior",
+        "Source support, answer-type handling, difficulty changes and recommendations."
+      ],
+      [
+        "Session persistence",
+        "Session database, checkpoints, uploads and retrieval index after restart."
+      ]
+    ],
+    "scenarios": [
+      [
+        "Document ingestion and grounded quiz",
+        "Upload a supported document, create a session and inspect generated questions with their source context.",
+        "Questions follow the supplied material and rejected/unsupported generation is handled explicitly."
+      ],
+      [
+        "MCQ and open-ended evaluation",
+        "Submit correct and incorrect examples for both supported answer types and inspect feedback.",
+        "Evaluation is returned through the intended route and the session records the submitted answer."
+      ],
+      [
+        "Adaptation, hints and recommendations",
+        "Advance through questions with different performance patterns, request hints and view final recommendations.",
+        "Difficulty and recommendations reflect the implemented session logic, with usable learner feedback."
+      ],
+      [
+        "Restart, checkpoints and model timeout",
+        "Restart during an isolated session and simulate an unavailable model endpoint.",
+        "Session/checkpoint state is retained and model failure produces an understandable outcome."
+      ]
+    ],
+    "issues": [
+      [
+        "Frontend API module is missing",
+        "Quiz/upload/result pages import @/lib/api, which is absent in the inspected checkout.",
+        "Restore or implement the module against the backend contracts, then pass TypeScript and production build checks."
+      ],
+      [
+        "Production hosting and automation are not evidenced",
+        "No component-specific Dockerfile, hosting manifest or root release workflow was found.",
+        "Record the selected persistent host and establish a reproducible release procedure before sign-off."
+      ],
+      [
+        "Local state and dependency compatibility",
+        "SQLite/Chroma persistence and LangGraph checkpoint package compatibility need clean-environment validation.",
+        "Use one worker initially, validate installed packages and test coordinated backup/restore."
+      ]
+    ],
+    "lessons": [
+      "Persistent state is part of the assessment deployment, not an incidental local development file.",
+      "A static health response must be complemented by a complete quiz and evaluation scenario.",
+      "Horizontal scaling requires shared-state and background-work design beyond the current single-instance setup."
+    ]
+  },
+  "blocks": [
+    [
+      "h1",
+      "1. DEPLOYMENT OVERVIEW"
+    ],
+    [
+      "h2",
+      "1.1 Overview"
+    ],
+    [
+      "p",
+      "The adaptive assessment component converts learning documents into grounded quizzes, evaluates submitted answers, adjusts question difficulty, and produces analytics and topic recommendations. A LangGraph workflow coordinates the agents, while SQLite stores learner-session data and checkpoints and ChromaDB stores document embeddings."
+    ],
+    [
+      "p",
+      "The repository supplies a FastAPI backend, Next.js frontend, a fine-tuned Qwen Modal endpoint, and backend tests. Its README documents a deployed Modal generation URL, but live availability was not checked. No component-specific production Dockerfile, hosting manifest, or root CI/CD workflow was found. The frontend and CPU hosting arrangement below is a proposed deployment procedure based on the supplied source."
+    ],
+    [
+      "p",
+      "The frontend imports `@/lib/api` from quiz/upload/result pages, but `frontend/lib/api` is absent from this checkout. Restore or implement that module and validate its contracts before claiming that the frontend can be built and released."
+    ],
+    [
+      "h2",
+      "1.2 Purpose of the Deployment"
+    ],
+    [
+      "p",
+      "The deployment supports assessment of a complete document-to-quiz workflow, including generation, evaluation, adaptation, hints, recommendations and session recovery. Its purpose is to establish reproducible operation of the CPU application with the fine-tuned Qwen Modal service and persistent local data."
+    ],
+    [
+      "p",
+      "A repeatable deployment must connect the interface, application services, model inference and persistent data while retaining the configuration and evidence required to reproduce the release. The assessment therefore considers both installation correctness and the learner-facing workflow."
+    ],
+    [
+      "h2",
+      "1.3 Scope of the Deployment"
+    ],
+    [
+      "p",
+      "This report covers the adaptive quiz generation and recommendation component only. The shared learning interface, research website and other three research components retain their own deployment responsibilities. The scope includes environment preparation, model endpoint configuration, application release, secure service access, verification, backup and recovery."
+    ],
+    [
+      "p",
+      "The report is based on the inspected project repository. Hosting already documented in source is identified separately from proposed installation steps. No new cloud release, paid inference or production database migration was executed during preparation. Runtime acceptance results require a release-specific evidence record."
+    ],
+    [
+      "h2",
+      "1.4 Key Metrics Monitored"
+    ],
+    [
+      "p",
+      "The following metrics define the operational monitoring plan for deployment evaluation. They are selected from the component workflow and should be collected during a controlled acceptance run; measured values are not supplied in the available deployment evidence."
+    ],
+    [
+      "table",
+      [
+        [
+          "Metric",
+          "Description"
+        ],
+        [
+          "API and generation availability",
+          "API /health, Modal generation failures and complete quiz requests."
+        ],
+        [
+          "Quiz processing time",
+          "Document ingestion, question generation, hints and answer-evaluation latency."
+        ],
+        [
+          "Grounding and adaptive behavior",
+          "Source support, answer-type handling, difficulty changes and recommendations."
+        ],
+        [
+          "Session persistence",
+          "Session database, checkpoints, uploads and retrieval index after restart."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.5 Deployment Success Metrics"
+    ],
+    [
+      "p",
+      "Deployment success is evaluated against installation, integration and learner workflow criteria. Health checks alone are insufficient because an API can answer a liveness request while a model, database, index or private storage service remains unavailable."
+    ],
+    [
+      "table",
+      [
+        [
+          "Indicator",
+          "Acceptance criterion"
+        ],
+        [
+          "Service initialization",
+          "Required processes start with the selected environment and no unresolved startup failure."
+        ],
+        [
+          "Configuration consistency",
+          "Frontend origin, API URL, model endpoints and persistent paths match the release record."
+        ],
+        [
+          "Functional completeness",
+          "All mandatory component scenarios produce the expected outcomes."
+        ],
+        [
+          "Data persistence",
+          "Required learner state and files remain available after a controlled restart."
+        ],
+        [
+          "Recovery readiness",
+          "A compatible previous release and tested backup procedure are identified."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "1.6 Success Rate and Error Monitoring"
+    ],
+    [
+      "p",
+      "For a release trial, calculate deployment success rate as successfully verified required services divided by all required services, multiplied by 100. Calculate workflow error rate from failed requests divided by total observed requests over the same recorded test interval. Keep configuration failures, model failures and invalid-input rejections separate so that expected rejection behavior is not mistaken for an outage."
+    ],
+    [
+      "p",
+      "No measured deployment percentage or incident trend is asserted here. The release record must identify the test period, number of requests, endpoint/model revisions, and observed failures before reporting quantitative results."
+    ],
+    [
+      "h2",
+      "1.7 Key Outcomes of the Deployment"
+    ],
+    [
+      "p",
+      "The repository review establishes the component architecture, required configuration, release dependencies, verification scenarios and recovery requirements. A completed deployment should demonstrate a usable adaptive quiz generation and recommendation workflow and durable handling of the component data described below. Operational success remains subject to the acceptance criteria and pending items identified in this report."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "2. DEPLOYMENT PROCESS"
+    ],
+    [
+      "p",
+      "The deployment process follows environment preparation, initialization, application/model release, access configuration and scenario-based verification. The steps are specific to this component and preserve its actual hosting and storage architecture."
+    ],
+    [
+      "h2",
+      "2.1 Deployment Environment Preparation"
+    ],
+    [
+      "table",
+      [
+        [
+          "Layer",
+          "Source implementation",
+          "Proposed deployment arrangement"
+        ],
+        [
+          "Interface",
+          "Next.js 15.3.3 / React 19",
+          "Independently hosted Next.js production build"
+        ],
+        [
+          "API",
+          "FastAPI, `app.main:app`",
+          "One persistent CPU service behind HTTPS"
+        ],
+        [
+          "Assessment state",
+          "SQLite session database",
+          "Writable persistent disk"
+        ],
+        [
+          "Workflow checkpointing",
+          "SQLite LangGraph checkpoints",
+          "Same persistent backend installation"
+        ],
+        [
+          "Document retrieval",
+          "Local embeddings and Chroma PersistentClient",
+          "Persistent index directory; CPU model cache"
+        ],
+        [
+          "Text generation",
+          "Qwen2.5-7B-Instruct with Nishy LoRA",
+          "Modal A10G endpoint"
+        ],
+        [
+          "Source files",
+          "Uploaded learning documents",
+          "Persistent upload directory"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "The code uses SQLite and local Chroma persistence, rather than the Supabase data architecture used by some other components. A single backend instance/process is the initial deployment choice because session work, checkpoints, and local files have not been demonstrated to support multiple independent replicas."
+    ],
+    [
+      "p",
+      "Select the release commit and install dependencies in an isolated environment. Record the actual operating system, runtime versions, host allocation, storage mapping and public endpoints. CPU/RAM specifications and concurrent-user capacity should be taken from the selected host and measurements rather than assumed from the presence of deployment scripts."
+    ],
+    [
+      "h2",
+      "2.2 Service and Data Initialization"
+    ],
+    [
+      "p",
+      "The backend requires writable session and checkpoint database directories, an upload location and a persistent Chroma index. The graph compiles during application startup, and database service initialization creates tables and applies additive migrations. Existing state must be backed up before schema-changing releases. A single backend process is the initial deployment arrangement because multi-replica session and local-state behavior has not been demonstrated."
+    ],
+    [
+      "h2",
+      "2.3 Deployment of System Components"
+    ],
+    [
+      "p",
+      "Configure application and model services using the following repository-supported variables and deployment sequence. Commands use a Linux deployment shell unless a PowerShell helper is explicitly identified."
+    ],
+    [
+      "p",
+      "Use an isolated Python environment and `backend/requirements.txt`. Python 3.11 matches the Modal inference image; validate the CPU requirements in a clean environment before selecting the host runtime. The frontend package metadata takes precedence over the README's older Next.js 14 description."
+    ],
+    [
+      "table",
+      [
+        [
+          "Variable",
+          "Purpose"
+        ],
+        [
+          "`MODAL_ENDPOINT_URL`",
+          "Generation endpoint; default documented in component README"
+        ],
+        [
+          "`MODAL_API_KEY`",
+          "Optional authorization value sent by the backend client"
+        ],
+        [
+          "`MODAL_REQUEST_TIMEOUT_SEC`",
+          "Model request timeout; source default 45 seconds"
+        ],
+        [
+          "`MODAL_MAX_NEW_TOKENS`",
+          "Generation bound; source default 180"
+        ],
+        [
+          "`FRONTEND_URL`",
+          "Production origin added to backend CORS allowlist"
+        ],
+        [
+          "`NEXT_PUBLIC_API_URL`",
+          "Public browser API URL, configured before frontend build"
+        ],
+        [
+          "`SQLITE_DB_PATH`",
+          "Session database; default `./db/sessions.db`"
+        ],
+        [
+          "`CHECKPOINT_DB_PATH`",
+          "Checkpoint database; default `./db/checkpoints.db`"
+        ],
+        [
+          "`CHROMA_PERSIST_DIR`",
+          "Vector index; default `./db/chroma`"
+        ],
+        [
+          "`UPLOAD_DIR`",
+          "Source uploads; default `./data/uploads`"
+        ],
+        [
+          "`MAX_FILE_SIZE_MB`",
+          "Upload size bound; default 50 MB"
+        ],
+        [
+          "`DEBUG`",
+          "Set false to avoid debug logging/reload through the script entry point"
+        ]
+      ]
+    ],
+    [
+      "p",
+      "Set persistent paths relative to a fixed backend working directory or use absolute persistent paths. The Modal endpoint requires the existing `huggingface-secret` containing `HF_TOKEN`. It caches `Qwen/Qwen2.5-7B-Instruct` and the adapter `Nishy11/nishy-qwen2.5-7b-v4` during image construction."
+    ],
+    [
+      "p",
+      "1. Record the release commit, restore the missing frontend API module, and review its request/response types against backend routers. Validate dependency compatibility, especially the installed LangGraph and checkpoint packages."
+    ],
+    [
+      "p",
+      "2. Authenticate Modal, provision its Hugging Face secret privately, and deploy from the component backend:"
+    ],
+    [
+      "code",
+      "modal deploy modal_inference/qwen_endpoint.py"
+    ],
+    [
+      "p",
+      "Record the returned endpoint and configure `MODAL_ENDPOINT_URL`. The model uses an A10G GPU, a 600-second function timeout, and a 600-second scaledown window in source. These are configuration values, not measured release latency."
+    ],
+    [
+      "p",
+      "3. Prepare the backend environment from `backend/`:"
+    ],
+    [
+      "code",
+      "python -m venv .venv\nsource .venv/bin/activate\npython -m pip install -r requirements.txt"
+    ],
+    [
+      "p",
+      "Populate the private `.env` from `.env.example`. Create/persist the database parent directories, upload directory, and embedding cache. Set `FRONTEND_URL` to the exact hosted origin."
+    ],
+    [
+      "p",
+      "4. Configure a process manager to run the following from the backend working directory, behind an HTTPS reverse proxy:"
+    ],
+    [
+      "code",
+      "python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1"
+    ],
+    [
+      "p",
+      "Use a single worker initially and no reload option. Startup compiles the graph; database service initialization creates tables and performs additive migrations. Back up existing state before introducing a version that changes its schema."
+    ],
+    [
+      "p",
+      "5. From `frontend/`, configure `NEXT_PUBLIC_API_URL` to the HTTPS API origin and run:"
+    ],
+    [
+      "code",
+      "npm ci\nnpx tsc --noEmit\nnpm run build\nnpm run start"
+    ],
+    [
+      "p",
+      "The final command applies to a managed Node server. An independent Next.js hosting project can run the same build without a local persistent frontend process. The missing API module must be fixed first. Rebuild after public API URL changes; the configured default is localhost."
+    ],
+    [
+      "p",
+      "6. Expose only the intended HTTPS application endpoints. Keep database, vector index, and document files outside public web roots. Record the selected host, process-manager configuration, and persistent-volume mapping in the release record."
+    ],
+    [
+      "h2",
+      "2.4 Secure Access Configuration"
+    ],
+    [
+      "p",
+      "The hosted browser interface and API require compatible HTTPS endpoints and exact permitted frontend origins. Private credentials belong in the backend or deployment-secret store. Public frontend variables may contain the API origin and public identity key, but must not contain database passwords, service-role credentials or private deployment tokens."
+    ],
+    [
+      "p",
+      "Restrict internal process and database/index ports to the required application network. Access control must match the intended audience and be verified independently of CORS. Record how an administrator inspects logs and restarts the service using the tools selected for this component."
+    ],
+    [
+      "h2",
+      "2.5 Execution of Testing Scenarios"
+    ],
+    [
+      "p",
+      "Execute the following component-specific scenarios using isolated test accounts, representative source material and a recorded release configuration. The descriptions are acceptance procedures, not claims that the scenarios have already passed."
+    ],
+    [
+      "h3",
+      "2.5.1 Scenario 1 - Document ingestion and grounded quiz"
+    ],
+    [
+      "p",
+      "Test procedure: Upload a supported document, create a session and inspect generated questions with their source context."
+    ],
+    [
+      "p",
+      "Expected behavior: Questions follow the supplied material and rejected/unsupported generation is handled explicitly."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.2 Scenario 2 - MCQ and open-ended evaluation"
+    ],
+    [
+      "p",
+      "Test procedure: Submit correct and incorrect examples for both supported answer types and inspect feedback."
+    ],
+    [
+      "p",
+      "Expected behavior: Evaluation is returned through the intended route and the session records the submitted answer."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.3 Scenario 3 - Adaptation, hints and recommendations"
+    ],
+    [
+      "p",
+      "Test procedure: Advance through questions with different performance patterns, request hints and view final recommendations."
+    ],
+    [
+      "p",
+      "Expected behavior: Difficulty and recommendations reflect the implemented session logic, with usable learner feedback."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h3",
+      "2.5.4 Scenario 4 - Restart, checkpoints and model timeout"
+    ],
+    [
+      "p",
+      "Test procedure: Restart during an isolated session and simulate an unavailable model endpoint."
+    ],
+    [
+      "p",
+      "Expected behavior: Session/checkpoint state is retained and model failure produces an understandable outcome."
+    ],
+    [
+      "p",
+      "Evidence to retain: request/test identifier, relevant screenshot or response, timestamps, service/model version and the observed pass/fail outcome."
+    ],
+    [
+      "h2",
+      "2.6 Backup and Recovery Strategy"
+    ],
+    [
+      "p",
+      "Back up SQLite using a consistent database backup mechanism or while writes are stopped; do not copy only a live `.db` file while ignoring journal/WAL state. Back up session data, checkpoints, uploads, and Chroma index as a compatible set. Verify restoration in an isolated environment."
+    ],
+    [
+      "p",
+      "Monitor model timeouts, queue/session processing, failed questions, disk usage, SQLite contention, and retrieval errors. Local embedding weights need cache space and initial download access. Measure concurrent sessions before increasing capacity. Multiple replicas require a deliberate redesign of shared state and background work; they are not established by the current setup."
+    ],
+    [
+      "p",
+      "Keep the previous frontend build, backend release/environment, and model adapter reference. Restore compatible application code and model routing independently. If additive database changes make the old release incompatible, use a reviewed migration plan or restore from a consistent backup while accounting for subsequent learner data. Repeat upload, answer, and persistence checks after rollback."
+    ],
+    [
+      "h2",
+      "2.7 Deployment Details"
+    ],
+    [
+      "table",
+      [
+        [
+          "Deployment item",
+          "Recorded arrangement"
+        ],
+        [
+          "Research project",
+          "BioLearnX / R26-SE-041"
+        ],
+        [
+          "Component owner",
+          "Nishara T / IT22223876"
+        ],
+        [
+          "Source directory",
+          "nishy-adaptive-quiz-recommender/"
+        ],
+        [
+          "Release identification",
+          "Repository commit and application/model artifact versions to be recorded at release."
+        ],
+        [
+          "Environment evidence",
+          "Documented source configuration; live installation details require operator confirmation."
+        ],
+        [
+          "Execution mode",
+          "Independent component deployment and scenario-based acceptance."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "2.8 Deployment Checklist"
+    ],
+    [
+      "h3",
+      "Pre-Deployment"
+    ],
+    [
+      "bullet",
+      "Select and record the release commit."
+    ],
+    [
+      "bullet",
+      "Resolve the component-specific pending installation items."
+    ],
+    [
+      "bullet",
+      "Verify dependency installation, secrets, origins and endpoint URLs."
+    ],
+    [
+      "bullet",
+      "Prepare persistent storage and a consistent backup."
+    ],
+    [
+      "h3",
+      "During Deployment"
+    ],
+    [
+      "bullet",
+      "Initialize required schema/index/model artifacts."
+    ],
+    [
+      "bullet",
+      "Deploy compatible model and application versions."
+    ],
+    [
+      "bullet",
+      "Apply HTTPS routing and exact frontend-origin configuration."
+    ],
+    [
+      "bullet",
+      "Verify startup logs and required process status."
+    ],
+    [
+      "h3",
+      "Post-Deployment"
+    ],
+    [
+      "bullet",
+      "Run component scenarios and record observed results."
+    ],
+    [
+      "bullet",
+      "Verify persistence and intended data-access boundaries."
+    ],
+    [
+      "bullet",
+      "Review cold-start errors, timeouts and partial outputs."
+    ],
+    [
+      "bullet",
+      "Confirm rollback target and update the release record."
+    ],
+    [
+      "h2",
+      "2.9 Deployment Verification and Completion"
+    ],
+    [
+      "p",
+      "Deployment is complete only when required services and dependencies are reachable, the interface uses the intended API, persistent storage is retained, and mandatory scenarios pass with evidence. Record any unresolved issue as a release limitation. The current report provides a verification procedure and source-based readiness assessment; it does not replace operator sign-off."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "3. ISSUES, RESOLUTION, AND MONITORING"
+    ],
+    [
+      "h2",
+      "3.1 Issues Encountered During Deployment Review"
+    ],
+    [
+      "p",
+      "The following items were identified from source inspection and configuration review. They are confirmed repository/deployment requirements, rather than invented incidents from a live installation."
+    ],
+    [
+      "h3",
+      "Issue 1: Frontend API module is missing"
+    ],
+    [
+      "p",
+      "Quiz/upload/result pages import @/lib/api, which is absent in the inspected checkout."
+    ],
+    [
+      "h3",
+      "Issue 2: Production hosting and automation are not evidenced"
+    ],
+    [
+      "p",
+      "No component-specific Dockerfile, hosting manifest or root release workflow was found."
+    ],
+    [
+      "h3",
+      "Issue 3: Local state and dependency compatibility"
+    ],
+    [
+      "p",
+      "SQLite/Chroma persistence and LangGraph checkpoint package compatibility need clean-environment validation."
+    ],
+    [
+      "h2",
+      "3.2 Resolutions and Required Actions"
+    ],
+    [
+      "h3",
+      "Resolution for Issue 1"
+    ],
+    [
+      "p",
+      "Restore or implement the module against the backend contracts, then pass TypeScript and production build checks."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 2"
+    ],
+    [
+      "p",
+      "Record the selected persistent host and establish a reproducible release procedure before sign-off."
+    ],
+    [
+      "h3",
+      "Resolution for Issue 3"
+    ],
+    [
+      "p",
+      "Use one worker initially, validate installed packages and test coordinated backup/restore."
+    ],
+    [
+      "p",
+      "These actions must be verified in the release environment. Their presence in this report does not mean the corresponding source code, host configuration or production installation was modified during report preparation."
+    ],
+    [
+      "h2",
+      "3.3 Impact Analysis"
+    ],
+    [
+      "p",
+      "Configuration and build gaps can prevent a usable client release even when individual backend services exist. Missing model artifacts or mismatched endpoints can interrupt inference, while incomplete persistence can cause learner state or feedback loss after restart. The listed actions address these concrete release dependencies. No outage duration, user count or production incident severity is inferred without a live record."
+    ],
+    [
+      "h2",
+      "3.4 Monitoring and System Observability"
+    ],
+    [
+      "p",
+      "Collect application logs, process status, model-platform logs and persistent-storage usage for the selected deployment. Correlate API and model events using request/job/session identifiers wherever available. Inspect both total request duration and individual processing stages, since a slow or unavailable dependency can be hidden by an otherwise responsive API."
+    ],
+    [
+      "p",
+      "Use the metrics in Section 1.4 for a consistent monitoring record. Separate startup/liveness checks from full workflow checks, and retain cold-start observations alongside warm-request behavior. No additional monitoring dashboard is claimed to be installed by this report."
+    ],
+    [
+      "h2",
+      "3.5 Monitoring Results"
+    ],
+    [
+      "table",
+      [
+        [
+          "Result category",
+          "Evidence status"
+        ],
+        [
+          "Repository architecture and configuration",
+          "Reviewed and described in this report."
+        ],
+        [
+          "Live process uptime and dependency health",
+          "Not measured during report preparation."
+        ],
+        [
+          "Workflow latency and error rate",
+          "Requires a recorded acceptance run."
+        ],
+        [
+          "Backup restoration and runtime recovery",
+          "Requires verification in an isolated environment."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "3.6 User Feedback"
+    ],
+    [
+      "p",
+      "No new deployment user-feedback study was supplied or conducted for this report. Collect feedback after the component scenarios using the intended learner audience. Record whether users can complete the workflow, understand errors, interpret results and recover their prior work. Keep reported comments and participant counts separate from proposed usability improvements."
+    ],
+    [
+      "break",
+      ""
+    ],
+    [
+      "h1",
+      "4. POST-DEPLOYMENT VALIDATION, DOCUMENTATION, AND LESSONS LEARNED"
+    ],
+    [
+      "h2",
+      "4.1 Post-Deployment Validation"
+    ],
+    [
+      "p",
+      "Post-deployment validation checks the integrated learning workflow after the selected release is installed. The procedure covers infrastructure, application dependencies, interface behavior and persistence. Validation should use representative learning material and controlled test state rather than modifying real learner records for convenience."
+    ],
+    [
+      "p",
+      "Install the backend test runner separately if it is not present; it is not listed in the runtime requirements. From the backend environment, run `python -m pytest tests/` using isolated test state. Run frontend TypeScript and production build checks after restoring its API module."
+    ],
+    [
+      "p",
+      "Check `/health` and then a full document-to-quiz flow: upload a supported document, create a session, generate questions with source grounding, submit MCQ/open-ended answers, request a hint where supported, advance, and view results/recommendations. Restart the service and verify persistence of sessions, source documents, vector index, and graph checkpoints."
+    ],
+    [
+      "p",
+      "Test unavailable model responses and timeout behavior. `/health` returns a static healthy response and does not check database or Modal availability. Successful deployment requires real workflow evidence in addition to liveness."
+    ],
+    [
+      "p",
+      "Record actual test results, release commit, model/adapter version, persistent paths, hosted frontend/API URLs, and acceptance date. No pass/fail runtime results were collected for this report."
+    ],
+    [
+      "h2",
+      "4.2 Validation Activities"
+    ],
+    [
+      "table",
+      [
+        [
+          "Validation level",
+          "Activities and evidence required"
+        ],
+        [
+          "Infrastructure",
+          "Inspect process/container status, HTTPS endpoint reachability, persistent mounts and startup logs."
+        ],
+        [
+          "Application",
+          "Verify dependency configuration, model response handling, error behavior and the component-specific scenarios."
+        ],
+        [
+          "User interface",
+          "Validate the hosted production build, uploads/actions, result display and learner-visible failure behavior."
+        ],
+        [
+          "Data and recovery",
+          "Restart services, confirm state retention, inspect access boundaries and verify compatible restoration."
+        ]
+      ]
+    ],
+    [
+      "h2",
+      "4.3 Supporting Operational Artefacts"
+    ],
+    [
+      "p",
+      "Retain the source commit, runtime/package manifests, environment-variable names, deployment scripts/configuration, model identifiers, schema versions, test output and scenario evidence with the release. Store private environment values outside the published report. The editable report source and rendered PDF provide the documentation layer; application artefacts remain in the component directory."
+    ],
+    [
+      "p",
+      "The following source-based limitations and supporting references remain relevant to release sign-off:"
+    ],
+    [
+      "p",
+      "Pending items are the missing frontend API module, validated dependency installation/build, production CPU/frontend hosts, durable-disk provisioning, release automation, and live acceptance evidence. Authentication and learner-data access controls must be assessed for the intended hosting audience; this report does not establish an authenticated production deployment."
+    ],
+    [
+      "p",
+      "Repository references: [component guide](../nishy-adaptive-quiz-recommender/README.md), [API entry point](../nishy-adaptive-quiz-recommender/backend/app/main.py), [SQLite service](../nishy-adaptive-quiz-recommender/backend/app/services/db_service.py), [retrieval persistence](../nishy-adaptive-quiz-recommender/backend/app/services/rag_service.py), [checkpoint workflow](../nishy-adaptive-quiz-recommender/backend/app/graph/graph.py), [Modal endpoint](../nishy-adaptive-quiz-recommender/backend/modal_inference/qwen_endpoint.py), and [frontend configuration](../nishy-adaptive-quiz-recommender/frontend/next.config.mjs)."
+    ],
+    [
+      "h2",
+      "4.4 Key Lessons Learned"
+    ],
+    [
+      "p",
+      "The following lessons are derived from implementation and deployment review. They describe engineering implications of the available source, rather than unrecorded user trials or production performance claims."
+    ],
+    [
+      "bullet",
+      "Persistent state is part of the assessment deployment, not an incidental local development file."
+    ],
+    [
+      "bullet",
+      "A static health response must be complemented by a complete quiz and evaluation scenario."
+    ],
+    [
+      "bullet",
+      "Horizontal scaling requires shared-state and background-work design beyond the current single-instance setup."
+    ],
+    [
+      "bullet",
+      "A report should distinguish the installed architecture, planned checks and measured results so that later releases remain auditable."
+    ],
+    [
+      "h2",
+      "4.5 Conclusion of Post-Deployment Assessment"
+    ],
+    [
+      "p",
+      "The deployment review establishes a component-specific architecture, reproducible installation sequence, verification scenarios, monitoring plan and recovery requirements for adaptive quiz generation and recommendation. The identified pending items must be resolved and the acceptance evidence recorded before certifying a successful live deployment. The supporting documentation provides a reproducible operational basis for component evaluation and future releases."
+    ]
+  ]
+}
