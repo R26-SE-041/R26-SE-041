@@ -1,0 +1,82 @@
+import { expect, test, type CDPSession } from '@playwright/test'
+import { mockBackend } from './backendMock'
+
+async function finger(cdp: CDPSession, type: 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel', x=0, y=0) {
+  await cdp.send('Input.dispatchTouchEvent', {type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{x,y,id:1,radiusX:7,radiusY:7,force:1}]})
+}
+
+test('real touch drag follows the finger, commits once, and preserves tap and cancellation', async ({browser}) => {
+  const context=await browser.newContext({viewport:{width:412,height:915},isMobile:true,hasTouch:true})
+  const page=await context.newPage()
+  const state=await mockBackend(page)
+  await page.goto('/study-assistant')
+  const cdp=await context.newCDPSession(page)
+  const dock=page.getByRole('navigation',{name:'Workspace navigation'})
+  const docs=await page.locator('#tab-study-documents').boundingBox()
+  const ask=await page.locator('#tab-study-question').boundingBox()
+  const history=await page.locator('#tab-study-history').boundingBox()
+  const saved=await page.locator('#tab-saved-library-title').boundingBox()
+  const x=docs!.x+docs!.width/2, y=docs!.y+docs!.height/2, end=ask!.x+ask!.width/2
+  await page.evaluate(()=>{(window as any).tabChanges=[];window.addEventListener('hashchange',()=>{(window as any).tabChanges.push(location.hash)})})
+  await finger(cdp,'touchStart',x,y)
+  await finger(cdp,'touchMove',x+(end-x)*0.45,y)
+  await expect(dock).toHaveAttribute('data-dragging','true')
+  const fraction=await dock.evaluate(el=>parseFloat((el as HTMLElement).style.getPropertyValue('--workspace-index')))
+  expect(fraction).toBeGreaterThan(0.25)
+  expect(fraction).toBeLessThan(0.7)
+  expect(await dock.locator('[role=tablist]').evaluate(el=>parseFloat(getComputedStyle(el,'::before').transitionDuration))).toBe(0)
+  await expect(page.locator('#tab-study-documents')).toHaveAttribute('aria-selected','true')
+  await page.screenshot({path:'.workspace-runtime/glass-touch-drag.png'})
+  await finger(cdp,'touchMove',end,y)
+  await finger(cdp,'touchEnd')
+  await expect(page.locator('#tab-study-question')).toHaveAttribute('aria-selected','true')
+  await expect(page.locator('#tab-study-question')).toBeFocused()
+  await expect(dock).toHaveAttribute('data-dragging','false')
+  await expect.poll(()=>page.evaluate(()=>(window as any).tabChanges.length)).toBe(1)
+
+  // A new deliberate tap is not swallowed by the previous drag's ghost-click guard.
+  await page.touchscreen.tap(x,y)
+  await expect(page.locator('#tab-study-documents')).toHaveAttribute('aria-selected','true')
+  await expect.poll(()=>page.evaluate(()=>(window as any).tabChanges.length)).toBe(2)
+  const last=history!.x+history!.width/2
+  await finger(cdp,'touchStart',x,y)
+  for(let step=1;step<=12;step++) await finger(cdp,'touchMove',x+(last-x)*step/12,y)
+  await expect(page.locator('#tab-study-documents')).toHaveAttribute('aria-selected','true')
+  await finger(cdp,'touchEnd')
+  await expect(page.locator('#tab-study-history')).toHaveAttribute('aria-selected','true')
+  await expect.poll(()=>page.evaluate(()=>(window as any).tabChanges.length)).toBe(3)
+
+  await finger(cdp,'touchStart',last,y)
+  await finger(cdp,'touchMove',saved!.x+saved!.width/2,y)
+  await expect(dock).toHaveAttribute('data-dragging','true')
+  await finger(cdp,'touchCancel')
+  await expect(dock).toHaveAttribute('data-dragging','false')
+  await expect(page.locator('#tab-study-history')).toHaveAttribute('aria-selected','true')
+  expect(await dock.evaluate(el=>(el as HTMLElement).style.getPropertyValue('--workspace-index'))).toBe('4')
+  expect(state.actions).toHaveLength(0)
+  expect(state.asks).toHaveLength(0)
+  await context.close()
+})
+
+test('vertical touch movement and release outside the dock do not select another section', async ({browser}) => {
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
+  const page=await context.newPage()
+  await mockBackend(page)
+  await page.goto('/study-assistant')
+  const cdp=await context.newCDPSession(page)
+  const dock=page.getByRole('navigation',{name:'Workspace navigation'})
+  const docs=await page.locator('#tab-study-documents').boundingBox()
+  const ask=await page.locator('#tab-study-question').boundingBox()
+  const x=docs!.x+docs!.width/2, y=docs!.y+docs!.height/2
+  await finger(cdp,'touchStart',x,y)
+  await finger(cdp,'touchMove',x,y-40)
+  await finger(cdp,'touchEnd')
+  await expect(page.locator('#tab-study-documents')).toHaveAttribute('aria-selected','true')
+  await finger(cdp,'touchStart',x,y)
+  await finger(cdp,'touchMove',ask!.x+ask!.width/2,y)
+  await finger(cdp,'touchMove',ask!.x+ask!.width/2,docs!.y-40)
+  await finger(cdp,'touchEnd')
+  await expect(dock).toHaveAttribute('data-dragging','false')
+  await expect(page.locator('#tab-study-documents')).toHaveAttribute('aria-selected','true')
+  await context.close()
+})

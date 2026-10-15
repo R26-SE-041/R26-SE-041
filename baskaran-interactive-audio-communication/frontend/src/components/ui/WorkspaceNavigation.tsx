@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 
 export const workspaceSections = [
   { id: 'study-documents', title: 'Documents', detail: 'Your uploaded files', path: 'M6 3h8l4 4v14H6z M14 3v5h5 M9 12h6 M9 16h6' },
@@ -16,19 +16,82 @@ export function workspaceSectionFromHash(): WorkspaceSection {
 export function WorkspaceNavigation({ active, onSelect }: { active: WorkspaceSection; onSelect: (section: WorkspaceSection) => void }) {
   const media = '(max-width: 900px), (hover: none) and (pointer: coarse)'
   const [mobile, setMobile] = useState(() => window.matchMedia(media).matches)
+  const [preview, setPreview] = useState<number | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const gesture = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
+  const suppressClickUntil = useRef(0)
+  const selectedIndex = workspaceSections.findIndex(section => section.id === active)
   useEffect(() => {
     const query = window.matchMedia(media)
     const update = () => setMobile(query.matches)
     query.addEventListener('change', update)
     return () => query.removeEventListener('change', update)
   }, [])
+  useEffect(() => {
+    gesture.current = null; setDragging(false); setPreview(null)
+  }, [mobile, active])
+
+  function position(event: PointerEvent<HTMLDivElement>) {
+    const box = event.currentTarget.getBoundingClientRect()
+    const cell = (box.width - 12) / workspaceSections.length
+    return Math.max(0, Math.min(workspaceSections.length - 1, (event.clientX - box.left - 6) / cell - 0.5))
+  }
+  function finish(event: PointerEvent<HTMLDivElement>, commit: boolean) {
+    const current = gesture.current
+    if (!current || current.id !== event.pointerId) return
+    gesture.current = null
+    if (current.moved) {
+      // Swiping can emit a compatibility click after pointerup. Consume it,
+      // while a subsequent intentional tap resets suppression on pointerdown.
+      suppressClickUntil.current = Date.now() + 500
+      const box = event.currentTarget.getBoundingClientRect()
+      if (commit && event.clientY >= box.top - 16 && event.clientY <= box.bottom + 16) {
+        const target = workspaceSections[Math.round(position(event))].id
+        if (target !== active) onSelect(target)
+        document.getElementById(`tab-${target}`)?.focus({ preventScroll: true })
+      }
+    }
+    setDragging(false)
+    setPreview(null)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
   const shortTitles = ['Docs', 'Ask', 'Tools', 'Saved', 'History']
-  return <nav aria-label="Workspace navigation" className="vl-workspace-nav"
-    style={{ '--workspace-index': workspaceSections.findIndex(section => section.id === active) } as CSSProperties}>
+  return <nav aria-label="Workspace navigation" className="vl-workspace-nav" data-dragging={dragging}
+    style={{ '--workspace-index': preview ?? selectedIndex } as CSSProperties}>
     <p>Your workspace</p>
-    <div id="workspace-sections" role="tablist" aria-label="Study workspace" aria-orientation={mobile ? 'horizontal' : 'vertical'}>
+    <div id="workspace-sections" role="tablist" aria-label="Study workspace" aria-orientation={mobile ? 'horizontal' : 'vertical'}
+      onPointerDown={event => {
+        if (!mobile || !event.isPrimary || event.button !== 0 || gesture.current) return
+        suppressClickUntil.current = 0
+        gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+      }}
+      onPointerMove={event => {
+        const current = gesture.current
+        if (!current || current.id !== event.pointerId) return
+        if (!current.moved) {
+          const dx = Math.abs(event.clientX - current.x), dy = Math.abs(event.clientY - current.y)
+          if (Math.max(dx, dy) < 6) return
+          if (dy > dx) { finish(event, false); return }
+          current.moved = true
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setDragging(true)
+        }
+        event.preventDefault()
+        setPreview(position(event))
+      }}
+      onPointerUp={event => finish(event, true)}
+      onPointerLeave={event => { if (event.pointerType === 'mouse' && !gesture.current?.moved) finish(event, false) }}
+      onPointerCancel={event => finish(event, false)}
+      onLostPointerCapture={event => { if (event.target === event.currentTarget) finish(event, false) }}
+      onClickCapture={event => {
+        if (event.detail > 0 && Date.now() < suppressClickUntil.current) {
+          suppressClickUntil.current = 0
+          event.preventDefault(); event.stopPropagation()
+        }
+      }}>
     {workspaceSections.map((section, index) => <button key={section.id} type="button" role="tab"
       id={`tab-${section.id}`} aria-controls={`panel-${section.id}`} aria-selected={active === section.id}
+      data-previewed={preview !== null && Math.round(preview) === index}
       aria-label={section.title} tabIndex={active === section.id ? 0 : -1} onClick={() => onSelect(section.id)}
       onKeyDown={event => {
         const offset = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0

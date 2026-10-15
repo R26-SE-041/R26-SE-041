@@ -442,12 +442,16 @@ audio { width: 100%; }
   .vl-workspace-nav { position: fixed; top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 50%; width: min(480px, calc(100% - 24px)); transform: translateX(-50%); z-index: 40; padding: 0; border: 1px solid rgba(255,255,255,.8); border-radius: 34px; background: linear-gradient(135deg, rgba(255,255,255,.82), rgba(244,241,235,.72)); -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%); box-shadow: 0 8px 32px rgba(45,35,25,.14), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.35); }
   .vl-workspace-nav p { display: none; }
   .vl-workspace-nav [role=tablist] { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 6px; isolation: isolate; }
+  .vl-workspace-nav [role=tablist], .vl-workspace-nav [role=tab] { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  .vl-workspace-nav[data-dragging=true] [role=tablist]::before { transition: none; transform: translateX(calc(var(--workspace-index) * 100%)) scaleX(1.04); }
   .vl-workspace-nav [role=tablist]::before { content: ''; position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px) / 5); border-radius: 27px; background: linear-gradient(150deg, rgba(255,255,255,.94), rgba(231,219,207,.58)); border: 1px solid rgba(255,255,255,.9); box-shadow: 0 3px 10px rgba(70,48,29,.09), inset 0 1px 1px rgba(255,255,255,1); transform: translateX(calc(var(--workspace-index) * 100%)); transition: transform 280ms cubic-bezier(.22,.75,.25,1); z-index: -1; pointer-events: none; }
   .vl-workspace-nav [role=tab] { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; min-height: 62px; padding: 8px 2px; border: 0; border-radius: 27px; text-align: center; background: transparent; box-shadow: none; font-size: 12px; line-height: 1.3; color: var(--text-muted); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .vl-workspace-nav [role=tab] svg { width: 22px; height: 22px; transition: transform 220ms ease; }
   .vl-workspace-nav [role=tab][aria-selected=true] { background: transparent; color: var(--primary); box-shadow: none; }
   .vl-workspace-nav [role=tab][aria-selected=true] svg { transform: translateY(-1px); }
   .vl-workspace-nav [role=tab]:hover { background: transparent; color: var(--primary); }
+  .vl-workspace-nav[data-dragging=true] [role=tab] { color: var(--text-muted); }
+  .vl-workspace-nav[data-dragging=true] [role=tab][data-previewed=true] { color: var(--primary); }
   .vl-nav-title-full, .vl-nav-detail { display: none; }
   .vl-nav-title-short { display: block; white-space: nowrap; font-weight: 600; }
   .vl-workspace main { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
