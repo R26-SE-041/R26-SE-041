@@ -21,3 +21,13 @@ Use case: identity-preserve. Edit target: attached photograph of Ms. Malithi Naw
 Use case: identity-preserve. Edit target: the supplied low-resolution academic portrait of Prof. Nuwan Kodagoda. Upscale and conservatively restore this exact photograph to a sharper high-resolution square portrait. Preserve his exact identity, age, facial proportions, expression, eyes, nose, mouth, hairstyle, skin tone, glasses, suit, shirt, tie, pose and composition. Reduce compression artifacts and gently improve photographic clarity. Keep the pale blue background, clothing and framing unchanged. Do not beautify, reshape facial features, make him younger, change his glasses or invent accessories. Natural photographic texture, no stylization, no text, no watermark.
 
 Supervisor output: 1254 × 1254; saved as public/assets/images/nuwan-kodagoda.jpg using the built-in image_gen tool.
+
+## Kojithan T-shirt logo replacement — 15 October 2026
+
+Tool: built-in image_gen, localized clothing edit. Final asset: `public/assets/images/kojithan-nike.png` (1254 × 1254). The original `kojithan.jpg` is retained.
+
+Only the generated lower-shirt patch (x=475–1074, y=1075–1253) was composited onto the original decoded image, with feathered top and side boundaries. The result is saved losslessly as PNG. Pixel comparison confirmed zero changed pixels outside this patch, preserving the original face, hair, neck, background and upper shirt exactly.
+
+Final prompt:
+
+> Use case: identity-preserve / precise-object-edit. Edit target: the supplied square academic portrait of Kojithan. Replace ONLY the large black lettering on the bottom-center of his white T-shirt with one simple authentic black Nike swoosh logo (symbol only, no wordmark and no other text). Remove all of the old lettering cleanly and continue the white cotton fabric and its natural shading. Put the swoosh in the same lower-chest region, fully visible within the existing crop, approximately centered at x=760,y=1175 in this 1254x1254 source and about 270 pixels wide. Keep the shirt's weave, folds, lighting and perspective natural. CRITICAL INVARIANTS: do not modify the face in any way, identity, facial features, expression, eyes, smile, teeth, skin texture, hair, ears, neck, pose, body, background, crop, dimensions, or tonal appearance. Everything outside the lower T-shirt lettering region must remain exactly as in the source image. No face enhancement, retouching, beautification, sharpening, recoloring, reframing or additional logos. Preserve the original square photo composition, grayscale subject and pale blue background. This is a localized clothing logo replacement only.
