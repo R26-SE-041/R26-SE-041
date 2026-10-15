@@ -574,6 +574,30 @@ async def test_native_rewrite_uses_selected_model_language(env, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_native_rewrite_retries_original_source_before_giving_up(env, monkeypatch):
+    from app.services import modal_client
+    monkeypatch.setattr(modal_client, "call_localizer", AsyncMock(return_value={"localized_text": "Cats බළලුන්."}))
+    rewrite = AsyncMock(side_effect=[{"answer": "Still English."}, {"answer": "බළලුන් නිදා ගනී."}])
+    monkeypatch.setattr(modal_client, "call_answer_generator", rewrite)
+    assert await service.localize_action_text("Cats sleep.", "sinhala") == "බළලුන් නිදා ගනී."
+    assert rewrite.await_count == 2
+    assert rewrite.await_args.kwargs["context_chunks"] == ["Cats sleep."]
+
+
+@pytest.mark.asyncio
+async def test_localization_bounds_source_passages_and_keeps_all_words(env, monkeypatch):
+    from app.services import modal_client
+    source = " ".join(f"word{i}" for i in range(180))
+    localizer = AsyncMock(return_value={"localized_text": "බළලුන් නිදා ගනී."})
+    monkeypatch.setattr(modal_client, "call_localizer", localizer)
+    translated = await service.localize_action_text(source, "sinhala")
+    passages = [call.args[0] for call in localizer.await_args_list]
+    assert len(passages) > 1 and all(len(passage) <= 400 for passage in passages)
+    assert " ".join(passages) == source
+    assert translated.split("\n\n") == ["බළලුන් නිදා ගනී."] * len(passages)
+
+
+@pytest.mark.asyncio
 async def test_mcp_translation_failure_retains_specific_error(env, monkeypatch):
     settings, doc, session, app = env
     settings.actions_provider = "openclaw_mcp"
@@ -850,6 +874,41 @@ def test_retry_audio_reuses_prepared_sections_and_rechecks_owner_source(env, mon
         assert action["trace"] == service.required_tools("audio_revision")
         assert generator.await_count == 1 and tts.await_count == 4  # 2 first job, 2 missing sections.
         assert client.post(f"/api/v1/actions/{new}/retry").status_code == 409
+        local_document_store.save_document(document_id=doc, user_id="alice", filename="lecture.txt",
+            file_type="txt", chunk_count=1, uploaded_at=datetime.now(), content=b"Changed source.")
+        assert client.post(f"/api/v1/actions/{old}/retry").status_code == 409
+
+
+def test_retry_incomplete_sinhala_translates_only_missing_sections_then_creates_audio(env, monkeypatch):
+    doc, session, app, generator, tts = section_fixture(env, monkeypatch)
+    native = "බළලුන් නිදා ගනී."
+    localizer = AsyncMock(side_effect=[native, native, ValueError("Sinhala translation unavailable.")])
+    monkeypatch.setattr(service, "localize_action_text", localizer)
+    with TestClient(app) as client:
+        old = client.post("/api/v1/actions", json={"command": "Create an audio revision of this document",
+            "document_id": doc, "session_id": session, "language": "sinhala", "revision_mode": "sectioned"}).json()["action_id"]
+        partial = store.get(old)
+        assert partial["status"] == "partial" and "summarize_document" not in partial["trace"]
+        assert [s["script_language"] for s in partial["sections"]] == ["sinhala", "sinhala", "english"]
+        tts.assert_not_awaited()
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "bob"}
+        assert client.post(f"/api/v1/actions/{old}/retry").status_code == 404
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "alice"}
+        store.update(old, style="detailed", target_duration=60)
+        localizer.reset_mock(side_effect=True)
+        localizer.return_value = native
+        response = client.post(f"/api/v1/actions/{old}/retry")
+        assert response.status_code == 202
+        new = response.json()["action_id"]
+        complete = client.get(f"/api/v1/actions/{new}").json()
+        assert complete["status"] == "complete" and complete["audio_ready"] and complete["audio_saved"]
+        assert complete["summary_language"] == "sinhala"
+        assert all(s["script_language"] == "sinhala" for s in complete["sections"])
+        assert complete["style"] == "detailed" and complete["target_duration"] == 60
+        assert localizer.await_count == 1 and generator.await_count == 1 and tts.await_count == 3
+        assert client.get(f"/api/v1/actions/{new}/audio").status_code == 200
+        assert client.get(f"/api/v1/actions/{new}/download").text == "\n\n".join([native] * 3)
+        assert store.get(old)["status"] == "partial"
         local_document_store.save_document(document_id=doc, user_id="alice", filename="lecture.txt",
             file_type="txt", chunk_count=1, uploaded_at=datetime.now(), content=b"Changed source.")
         assert client.post(f"/api/v1/actions/{old}/retry").status_code == 409

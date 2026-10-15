@@ -187,18 +187,21 @@ def action_status(action_id: str, user_id: Annotated[str, Depends(owner)]):
 
 @router.post("/{action_id}/retry", status_code=202)
 async def retry_audio(action_id: str, tasks: BackgroundTasks, user_id: Annotated[str, Depends(owner)]):
-    """New ticket, same verified source/scripts; no translation regeneration."""
+    """Resume translation or speech on a new ticket, retaining verified work."""
     import copy
     previous = owned(action_id, user_id)
     if not getattr(get_settings(), "actions_sectioned_enabled", False):
         raise HTTPException(422, "Sectioned audio revision is disabled.")
     sections = previous.get("sections", [])
-    if (previous["status"] != "partial" or previous.get("revision_mode") != "sectioned"
-            or not sections or "summarize_document" not in previous["trace"]
-            or previous.get("summary_language") != previous.get("language")
-            or any(s.get("script_language") != previous["language"] or not s.get("script") for s in sections)
-            or service.section_transcript(sections) != previous["summary"]):
-        raise HTTPException(409, "A complete prepared section transcript is required for audio retry.")
+    if (previous["status"] != "partial" or previous.get("intent") != "audio_revision"
+            or previous.get("revision_mode") != "sectioned" or not sections or not previous.get("summary")
+            or any(s.get("script_language") not in {"english", previous["language"]} or not s.get("script") for s in sections)):
+        raise HTTPException(409, "Prepared revision sections are required for retry.")
+    if ("summarize_document" in previous["trace"] and (
+            previous.get("summary_language") != previous.get("language")
+            or any(s.get("script_language") != previous["language"] for s in sections)
+            or service.section_transcript(sections) != previous["summary"])):
+        raise HTTPException(409, "The prepared section transcript could not be verified.")
     try:
         filename, content = await service.document_bytes(previous["document_id"], user_id)
         source = service.extract(filename, content)
@@ -210,6 +213,8 @@ async def retry_audio(action_id: str, tasks: BackgroundTasks, user_id: Annotated
     for section in sections:
         if source[section["source_start"]:section["source_end"]] != section["source_text"]:
             raise HTTPException(409, "Source passage verification failed.")
+        if section.get("script_language") != previous["language"]:
+            section.update(audio_id=None, duration=None)
         if section.get("audio_id"):
             try:
                 _, durations = service.revision_sections.concatenate_wavs([store.artifact(section["audio_id"], "wav").read_bytes()])
@@ -219,7 +224,8 @@ async def retry_audio(action_id: str, tasks: BackgroundTasks, user_id: Annotated
         section.pop("start_seconds", None); section.pop("end_seconds", None)
     ticket = store.create(user_id, previous["session_id"], previous["document_id"], "audio_revision",
                           previous, previous["language"], "sectioned")
-    store.update(ticket, sections=sections, source_hash=previous["source_hash"], retry_of=action_id)
+    store.update(ticket, sections=sections, source_hash=previous["source_hash"], retry_of=action_id,
+                 **{key: previous[key] for key in ("style", "target_duration", "selected_source") if key in previous})
     store.update(ticket, requested_provider=previous.get("requested_provider"))
     tasks.add_task(service.run_action, ticket)
     return {"action_id": ticket}

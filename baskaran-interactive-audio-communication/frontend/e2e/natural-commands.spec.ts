@@ -80,3 +80,31 @@ test('section generation failure offers an explicit single-audio recovery withou
  await expect.poll(()=>state.actions.length).toBe(2)
  expect(state.actions[1].revision_mode).toBe('single')
 })
+
+test('incomplete Sinhala sections can resume translation and load the completed audio on mobile',async({page})=>{
+ const state=await mockBackend(page)
+ await page.setViewportSize({width:384,height:832})
+ const native='බළලුන් නිදා ගනී.'
+ const sections=Array.from({length:3},(_,id)=>({id,title:`Topic ${id+1}`,script:id<2?native:'Cats sleep.',script_language:id<2?'sinhala':'english',duration:null,start_seconds:null,end_seconds:null}))
+ const partial={action_id:'new-1',status:'partial',intent:'audio_revision',revision_mode:'sectioned',language:'sinhala',summary_language:'english',summary:'Cats sleep.',sections,saved:false,audio_ready:false,audio_saved:false,error:'A valid Sinhala transcript could not be prepared.',trace:[],confirmation:''}
+ await page.route('**/api/v1/actions/new-1',route=>route.fulfill({json:partial}))
+ let retries=0
+ await page.route('**/api/v1/actions/new-1/retry',route=>{
+  expect(route.request().method()).toBe('POST');retries++
+  return route.fulfill({status:202,json:{action_id:'resumed-1'}})
+ })
+ await page.route('**/api/v1/actions/resumed-1',route=>route.fulfill({json:{...partial,action_id:'resumed-1',status:'complete',summary_language:'sinhala',summary:[native,native,native].join('\n\n'),error:null,saved:true,audio_ready:true,audio_saved:true,sections:sections.map((section,id)=>({...section,script:native,script_language:'sinhala',duration:10,start_seconds:id*10,end_seconds:(id+1)*10}))}}))
+ await page.goto('/study-assistant#study-actions')
+ await page.locator('#action-document').selectOption('doc-1')
+ await page.locator('#action-command').fill('Make Sinhala audio')
+ await page.getByRole('button',{name:'Run action',exact:true}).click()
+ await expect(page.getByText('Section languages: Mixed; සිංහල translation is incomplete.',{exact:true})).toBeVisible()
+ const retry=page.getByRole('button',{name:'Retry translation and audio',exact:true})
+ await expect(retry).toBeEnabled()
+ await retry.click()
+ await expect(page.getByText('Transcript language: සිංහල',{exact:true})).toHaveCount(4)
+ await expect(page.locator('audio')).toHaveAttribute('src',/^blob:/)
+ await expect(page.getByRole('button',{name:'Play from here',exact:true}).first()).toBeEnabled()
+ expect(retries).toBe(1);expect(state.actions).toHaveLength(1)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})

@@ -318,9 +318,12 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       {result && (result.status !== 'failed' || result.summary || result.flashcards?.length) && <div ref={resultAnchor} className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ scrollMarginTop: 110 }}>
         <h3 className="font-semibold">Opened study result</h3><a className="vl-btn-secondary" href="#saved-library-title">Back to saved library</a>
       </div>}
-      {result?.status === 'partial' && result.revision_mode === 'sectioned' && result.summary_language === result.language
-        && !!result.sections?.length && result.sections.every(section => section.script_language === result.language) &&
-        <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>Retry audio using prepared transcript</button>}
+      {result?.status === 'partial' && result.intent === 'audio_revision' && result.revision_mode === 'sectioned'
+        && !!result.sections?.length &&
+        <button className="vl-btn-secondary mt-3" disabled={busy} onClick={() => void execute(result.action_id)}>
+          {result.summary_language === result.language && result.sections.every(section => section.script_language === result.language)
+            ? 'Retry audio using prepared transcript' : 'Retry translation and audio'}
+        </button>}
       {audioUrl && <audio ref={audioPlayer} className="mt-4 w-full" src={audioUrl} controls
         onSeeking={() => { const player = audioPlayer.current; if (player && replayEnd.current !== null && player.currentTime >= replayEnd.current) replayEnd.current = null }}
         onTimeUpdate={() => {
@@ -338,7 +341,9 @@ export function DocumentActions({ documents, libraryTarget, onOpenSaved, active:
       </label>}
       {result?.summary && result.intent !== 'flashcards' && <div className="mt-5">
         {result.intent === 'audio_revision' && <h3 className="mb-3 font-semibold">Audio revision transcript</h3>}
-        <p className="mb-3 text-sm">Transcript language: {languageLabels[result.summary_language]}</p>
+        <p className="mb-3 text-sm">{showSections && result.sections?.some(section => section.script_language !== result.summary_language)
+          ? `Section languages: Mixed; ${languageLabels[result.language]} translation is incomplete.`
+          : `Transcript language: ${languageLabels[result.summary_language]}`}</p>
         {(!(result.sections?.length) || !showSections) && <MarkdownContent content={result.summary} />}
       </div>}
       {!!result?.flashcards?.length && <div className="mt-5"><h3 className="font-semibold">{result.saved ? 'Saved revision flashcards' : 'Revision flashcards'}</h3>
