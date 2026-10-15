@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from "react-native";
 import { cloudEnabled, getCloudHistory, studioRequest } from "../studioClient";
 import { deleteConversation, deleteHistoryItem, GenerationHistoryItem, listHistory, loadHistoryItem, syncLocalHistory, updateHistoryItem } from "../historyStorage";
-import { ArchiveFilter, ArchivePeriod, CreationSummary, creationTitle, dateGroup, filterArchive, localSummaries, modeLabel } from "../historyView";
+import { CreationSummary, creationTitle, dateGroup, filterArchive, localSummaries, modeLabel } from "../historyView";
 import { headingFont, makeSharedStyles, useAppTheme } from "../theme";
 import Icon from "./Icon";
 import AnatomyOverlay from "./AnatomyOverlay";
@@ -25,8 +25,6 @@ export default function CreationArchive({ onResume }: Props) {
   const [creation, setCreation] = useState<GenerationHistoryItem | null>(null);
   const [events, setEvents] = useState<SavedEvent[]>([]);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<ArchiveFilter>("all");
-  const [period, setPeriod] = useState<ArchivePeriod>("all");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +50,6 @@ export default function CreationArchive({ onResume }: Props) {
       let rows: CreationSummary[];
       if (cloud) {
         const params = new URLSearchParams({ query: query.trim() });
-        if (filter !== "all") params.set("mode", filter);
-        if (period !== "all") params.set("since", new Date(Date.now() - (period === "week" ? 7 : 30) * 86400000).toISOString());
         if (older) { params.set("before", older.updatedAt); params.set("before_id", older.id); }
         const chats = await studioRequest<CloudChat[]>(`/studio/chats?${params}`);
         rows = chats.map(chat => {
@@ -68,7 +64,7 @@ export default function CreationArchive({ onResume }: Props) {
       setItems(previous => older ? [...new Map([...previous, ...rows].map(item => [item.id, item])).values()] : rows);
     } catch (failure) { if (version === requestVersion.current) setError(failure instanceof Error ? failure.message : "Unable to load history."); }
     finally { if (version === requestVersion.current) setLoading(false); }
-  }, [cloud, query, filter, period]);
+  }, [cloud, query]);
   useEffect(() => { const timer = setTimeout(() => void refresh(), 250); return () => { clearTimeout(timer); requestVersion.current++; }; }, [refresh]);
   useEffect(() => () => { openVersion.current++; }, []);
 
@@ -133,7 +129,7 @@ export default function CreationArchive({ onResume }: Props) {
       setHasMoreEvents(older.length === 50);
     });
   };
-  const visible = useMemo(() => cloud ? items : filterArchive(items, query, filter, period), [cloud, items, query, filter, period]);
+  const visible = useMemo(() => cloud ? items : filterArchive(items, query, "all", "all"), [cloud, items, query]);
   const groups = useMemo(() => {
     const map = new Map<string, CreationSummary[]>();
     visible.forEach(item => { const key = dateGroup(item.updatedAt); map.set(key, [...(map.get(key) || []), item]); });
@@ -158,7 +154,7 @@ export default function CreationArchive({ onResume }: Props) {
     {selected ? <>
       <Pressable accessibilityRole="button" disabled={busy} style={[button, { alignSelf: "flex-start" }]} onPress={() => { openVersion.current++; setSelected(null); setCreation(null); setMenu(null); setNotice(null); }}><Text style={text}>← Back to creations</Text></Pressable>
       <View style={[shared.card, { gap: 18 }]}>
-        <View style={[row, { justifyContent: "space-between" }]}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 28 }}>{selected.title}</Text><Text style={{ color: colors.textMuted, marginTop: 5 }}>{modeLabel(selected.mode)} · {new Date(selected.updatedAt).toLocaleDateString()}</Text></View>{creation && onResume && <Pressable accessibilityRole="button" disabled={busy} style={[button, shared.primaryButton]} onPress={() => onResume(creation)}><Text style={shared.buttonText}>Continue</Text></Pressable>}</View>
+        <View style={[row, { justifyContent: "space-between" }]}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 28 }}>{selected.title}</Text><Text style={{ color: colors.textMuted, marginTop: 5 }}>{modeLabel(selected.mode)} · {new Date(selected.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</Text></View>{creation && onResume && <Pressable accessibilityRole="button" disabled={busy} style={[button, shared.primaryButton]} onPress={() => onResume(creation)}><Text style={shared.buttonText}>Continue</Text></Pressable>}</View>
         {busy && <ActivityIndicator color={colors.primary} />}
         {creation && <>
           <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", aspectRatio: 1, backgroundColor: "white", borderRadius: 8, overflow: "hidden" }}><Image source={{ uri: creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl }} resizeMode="contain" style={{ width: "100%", height: "100%" }} /><AnatomyOverlay annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
@@ -182,13 +178,11 @@ export default function CreationArchive({ onResume }: Props) {
       </View>
     </> : <>
       <TextInput accessibilityLabel="Search creations" placeholder="Search your creations…" placeholderTextColor={colors.textDim} value={query} onChangeText={setQuery} maxLength={100} style={{ ...text, padding: 14, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface }} />
-      <View style={row}>{([['all','All'],['general','Images'],['anatomy','Anatomy'],['sketch','Drawings']] as const).map(([value,label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} style={[button, filter === value && { borderWidth: 1, borderColor: colors.text }]} onPress={() => setFilter(value)}><Text style={text}>{label}</Text></Pressable>)}</View>
-      <View style={row}><Text style={{ color: colors.textMuted }}>Show:</Text>{([['all','Any time'],['week','Last 7 days'],['month','Last 30 days']] as const).map(([value,label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: period === value }} style={[button, period === value && { borderWidth: 1, borderColor: colors.text }]} onPress={() => setPeriod(value)}><Text style={text}>{label}</Text></Pressable>)}</View>
       {loading && <View style={[shared.card, { gap: 12 }]}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Loading your creations…</Text><View style={{ height: 100, backgroundColor: colors.surfaceSoft, borderRadius: 8 }} /></View>}
-      {!loading && !visible.length && <View style={[shared.card, { paddingVertical: 40, alignItems: "center", gap: 10 }]}><Icon name="image" color={colors.primary} size={32} /><Text style={{ ...text, fontWeight: "600" }}>{query || filter !== "all" || period !== "all" ? "No matching creations" : "Your ideas belong here"}</Text><Text style={{ color: colors.textMuted, textAlign: "center" }}>{query || filter !== "all" || period !== "all" ? "Try a different search or filter." : "Create an image or drawing. Its conversation and versions will stay together."}</Text></View>}
+      {!loading && !visible.length && <View style={[shared.card, { paddingVertical: 40, alignItems: "center", gap: 10 }]}><Icon name="image" color={colors.primary} size={32} /><Text style={{ ...text, fontWeight: "600" }}>{query.trim() ? "No matching creations" : "Your ideas belong here"}</Text><Text style={{ color: colors.textMuted, textAlign: "center" }}>{query.trim() ? "Try a different search." : "Create an image or drawing. Its conversation and versions will stay together."}</Text></View>}
       {groups.map(([label, rows]) => <View key={label} style={{ gap: 12 }}><Text accessibilityRole="header" style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>{label}</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>{rows.map(item => <View key={item.id} style={[shared.card, { padding: 14, gap: 12, flexBasis: 280, flexGrow: 1, maxWidth: "100%" }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title}`} disabled={busy} onPress={() => void open(item)} style={{ borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceSoft }}>{item.imageUrl ? <Image source={{ uri: item.imageUrl }} resizeMode="contain" style={{ width: "100%", aspectRatio: 1.65 }} /> : <View style={{ aspectRatio: 1.65, alignItems: "center", justifyContent: "center" }}><Icon name={item.mode === "sketch" ? "pencil" : item.mode === "anatomy" ? "heart" : "image"} size={40} color={colors.textDim} /></View>}</Pressable>
-        <Text numberOfLines={2} style={{ ...text, fontWeight: "600", fontSize: 17 }}>{item.title}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{modeLabel(item.mode)} · {new Date(item.updatedAt).toLocaleDateString()}{item.hasThreeD ? " · 3D" : ""}</Text>
+        <Text numberOfLines={2} style={{ ...text, fontWeight: "600", fontSize: 17 }}>{item.title}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{modeLabel(item.mode)} · {new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}{item.hasThreeD ? " · 3D" : ""}</Text>
         <View style={row}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item)}><Text style={text}>Open</Text></Pressable>{onResume && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item, true)}><Text style={text}>Continue</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} accessibilityLabel={`More actions for ${item.title}`} accessibilityState={{ expanded: menu === item.id }} style={[button, { marginLeft: "auto" }]} onPress={() => setMenu(menu === item.id ? null : item.id)}><Text style={{ ...text, fontSize: 22 }}>⋯</Text></Pressable></View>
         {menu === item.id && <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => { setRenaming(item); setTitle(item.title); setMenu(null); }}><Text style={text}>Rename</Text></Pressable>{item.generationId && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item)}><Text style={text}>Download options</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => { setDeleting(item); setMenu(null); }}><Text style={{ color: colors.danger }}>Delete</Text></Pressable></View>}
       </View>)}</View></View>)}
