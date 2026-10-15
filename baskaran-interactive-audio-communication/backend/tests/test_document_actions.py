@@ -520,6 +520,8 @@ def test_native_audio_uses_scoped_language_and_existing_tts(env, monkeypatch, la
     from app.services import modal_client
     monkeypatch.setattr(service, "generate_audio_script", AsyncMock(return_value="Consistent records help comparisons."))
     monkeypatch.setattr(modal_client, "call_localizer", AsyncMock(return_value={"localized_text": native}))
+    if language == "sinhala":
+        monkeypatch.setattr(modal_client, "call_answer_generator", AsyncMock(return_value={"answer": native}))
     tts = AsyncMock(return_value=revision_wav())
     monkeypatch.setattr(modal_client, tts_name, tts)
     english = AsyncMock()
@@ -577,10 +579,10 @@ async def test_native_rewrite_uses_selected_model_language(env, monkeypatch):
 async def test_native_rewrite_retries_original_source_before_giving_up(env, monkeypatch):
     from app.services import modal_client
     monkeypatch.setattr(modal_client, "call_localizer", AsyncMock(return_value={"localized_text": "Cats බළලුන්."}))
-    rewrite = AsyncMock(side_effect=[{"answer": "Still English."}, {"answer": "බළලුන් නිදා ගනී."}])
+    rewrite = AsyncMock(side_effect=[{"answer": "Cats බළලුන්."}, {"answer": "Still English."}, {"answer": "බළලුන් නිදා ගනී."}])
     monkeypatch.setattr(modal_client, "call_answer_generator", rewrite)
     assert await service.localize_action_text("Cats sleep.", "sinhala") == "බළලුන් නිදා ගනී."
-    assert rewrite.await_count == 2
+    assert rewrite.await_count == 3
     assert rewrite.await_args.kwargs["context_chunks"] == ["Cats sleep."]
 
 
@@ -588,13 +590,13 @@ async def test_native_rewrite_retries_original_source_before_giving_up(env, monk
 async def test_localization_bounds_source_passages_and_keeps_all_words(env, monkeypatch):
     from app.services import modal_client
     source = " ".join(f"word{i}" for i in range(180))
-    localizer = AsyncMock(return_value={"localized_text": "බළලුන් නිදා ගනී."})
+    localizer = AsyncMock(return_value={"localized_text": "பூனைகள் தூங்குகின்றன."})
     monkeypatch.setattr(modal_client, "call_localizer", localizer)
-    translated = await service.localize_action_text(source, "sinhala")
+    translated = await service.localize_action_text(source, "tamil")
     passages = [call.args[0] for call in localizer.await_args_list]
     assert len(passages) > 1 and all(len(passage) <= 400 for passage in passages)
     assert " ".join(passages) == source
-    assert translated.split("\n\n") == ["බළලුන් නිදා ගනී."] * len(passages)
+    assert translated.split("\n\n") == ["பூனைகள் தூங்குகின்றன."] * len(passages)
 
 
 @pytest.mark.asyncio
@@ -607,13 +609,27 @@ async def test_native_rewrite_recovers_stubborn_passage_in_smaller_source_pieces
     async def answer(query, language, **kwargs):
         passage = kwargs['context_chunks'][0]
         calls.append(passage)
-        return {'answer': native if len(passage) <= 160 else 'Still English.'}
+        return {'answer': native if query.startswith('Translate this short source passage') else 'Still English.'}
     monkeypatch.setattr(modal_client, "call_answer_generator", answer)
     translated = await service.localize_action_text(source, "sinhala")
-    assert calls[:2] == [source.strip(), source.strip()]
-    assert len(calls) > 2 and all(len(piece) <= 160 for piece in calls[2:])
-    assert " ".join(calls[2:]) == source.strip()
-    assert translated == " ".join([native] * len(calls[2:]))
+    assert len(calls[:3]) == 3 and calls[1] == 'Still English.'
+    assert calls[0] == calls[2] == source.strip()
+    assert len(calls) > 3 and all(len(piece) <= 160 for piece in calls[3:])
+    assert " ".join(calls[3:]) == source.strip()
+    assert translated == " ".join([native] * len(calls[3:]))
+
+
+@pytest.mark.asyncio
+async def test_sinhala_revision_bypasses_unavailable_general_localizer(env, monkeypatch):
+    from app.services import modal_client
+    localizer = AsyncMock(side_effect=RuntimeError('Unavailable'))
+    monkeypatch.setattr(modal_client, "call_localizer", localizer)
+    generator = AsyncMock(return_value={'answer': 'බළලුන් නිදා ගනී.'})
+    monkeypatch.setattr(modal_client, "call_answer_generator", generator)
+    assert await service.localize_action_text('Cats sleep.', 'sinhala') == 'බළලුන් නිදා ගනී.'
+    localizer.assert_not_awaited()
+    assert generator.await_args.args[1] == 'sinhala'
+    assert generator.await_args.kwargs['context_chunks'] == ['Cats sleep.']
 
 
 @pytest.mark.asyncio
