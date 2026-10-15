@@ -50,6 +50,17 @@ class DeleteRequest(BaseModel):
     confirmed: bool = False
 
 
+class InterpretRequest(BaseModel):
+    command: str = Field(min_length=1, max_length=500)
+    language: Literal["english", "tamil", "sinhala"] = "english"
+
+
+@router.post("/interpret")
+def interpret_command(body: InterpretRequest, user_id: Annotated[str, Depends(owner)]):
+    from app.services.action_commands import interpret
+    return interpret(body.command, body.language)
+
+
 class ToolRequest(BaseModel):
     action_id: str = Field(min_length=20, max_length=100)
 
@@ -70,7 +81,8 @@ async def start_action(body: ActionRequest, tasks: BackgroundTasks, user_id: Ann
     language = options.get("language", body.language)
     intent = service.classify(body.command)
     if not intent:
-        raise HTTPException(422, "Command not recognized. Use one of the displayed command examples for your language.")
+        from app.services.action_commands import interpret
+        raise HTTPException(422, interpret(body.command, body.language)["message"])
     mode = "single" if options.get("style") == "one_minute" else body.revision_mode
     if options.get("scope") == "section":
         mode = "sectioned"

@@ -2,7 +2,8 @@
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, SecretStr, field_validator
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +45,12 @@ class Settings(BaseSettings):
 
     # Final ASR, RAG, localization, and transcript-correction services.
     modal_whisper_url: str = ""
+    stt_provider: Literal["modal", "groq"] = "modal"
+    groq_api_key: SecretStr = SecretStr("")
+    groq_stt_model: Literal["whisper-large-v3-turbo", "whisper-large-v3"] = "whisper-large-v3-turbo"
+    groq_stt_requests_per_minute: int = Field(default=10, ge=1, le=20)
+    groq_stt_requests_per_day: int = Field(default=100, ge=1, le=100)
+    groq_stt_quota_path: str = ""
     modal_indic_stt_url: str = ""
     modal_sinhala_asr_url: str = ""
     modal_transcript_corrector_url: str = ""

@@ -915,3 +915,47 @@ async def test_verified_work_does_not_wait_for_agent_final_prose(env, monkeypatc
     finally:
         acknowledgement.set()
         assert ticket not in service._gateway_tasks
+
+@pytest.mark.parametrize('text,expected', [
+ ('create a audio review in tamil', {'intent':'audio_revision','language':'tamil'}),
+ ('Make Tamil audio', {'intent':'audio_revision','language':'tamil'}),
+ ('Generate a Sinhala audio summary', {'intent':'audio_revision','language':'sinhala'}),
+ ('Create a one-minute audio revision in Tamil', {'intent':'audio_revision','language':'tamil','style':'one_minute','target_duration':60}),
+ ('Make detailed English audio', {'intent':'audio_revision','language':'english','style':'detailed'}),
+ ('Make audio for this section only in Tamil', {'intent':'audio_revision','language':'tamil','scope':'section'}),
+ ('Make flash cards in Tamil', {'intent':'flashcards','language':'tamil'}),
+ ('Create a summary in Tamil and save it', {'intent':'summarize_and_save','language':'tamil'}),
+ ('Save summary', {'intent':'save'}),
+ ('Do not create Tamil audio', None),
+ ('What is audio review in Tamil?', None),
+ ('Make audio in Tamil and English', None),
+ ('Create Tamil audio and email it', None),
+ ('Create Tamil audio then delete it', None),
+ ('Make a one-minute detailed audio revision', None),
+])
+def test_natural_commands_are_bounded(text, expected):
+    from app.services.action_commands import parse_generation
+    assert parse_generation(text) == expected
+
+
+def test_preview_is_side_effect_free_and_matches_execution(env, monkeypatch):
+    _, doc, session, app = env
+    run = AsyncMock()
+    monkeypatch.setattr(service, 'run_action', run)
+    with TestClient(app) as client:
+        preview = client.post('/api/v1/actions/interpret', json={'command':'Make one-minute audio in Tamil','language':'english'})
+        assert preview.status_code == 200
+        assert preview.json()['status'] == 'ready'
+        assert preview.json()['language'] == 'tamil'
+        assert 'one minute' in preview.json()['message']
+        run.assert_not_called()
+        response = client.post('/api/v1/actions', json={'command':'Make one-minute audio in Tamil','document_id':doc,'session_id':session,'revision_mode':'sectioned'})
+        assert response.status_code == 202
+        ticket = store.get(response.json()['action_id'])
+        assert (ticket['language'],ticket['target_duration'],ticket['revision_mode']) == ('tamil',60,'single')
+        unclear=client.post('/api/v1/actions/interpret',json={'command':'Make audio in Tamil and English'})
+        assert unclear.json()['status'] == 'clarify'
+        assert 'Choose one output language' in unclear.json()['message']
+        refused=client.post('/api/v1/actions',json={'command':'Make audio in Tamil and English','document_id':doc,'session_id':session})
+        assert refused.status_code == 422
+        assert run.await_count == 1

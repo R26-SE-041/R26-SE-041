@@ -11,7 +11,7 @@ POST /api/v1/voice/query  (Phase 2 — skeleton)
 
 import time
 import asyncio
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -43,13 +43,17 @@ class TTSRequest(BaseModel):
 
 class PrepareRequest(BaseModel):
     language: Language = Language.ENGLISH
+    purpose: Literal['answer', 'command'] = 'answer'
 
 
 @router.post('/prepare', status_code=202)
 async def prepare_voice(request: PrepareRequest,
                         current_user: Annotated[dict, Depends(get_current_user)] = None):
     from app.services.model_warmup import start
-    start(request.language.value)
+    if request.purpose == 'command':
+        start(request.language.value, transcription_only=True)
+    else:
+        start(request.language.value)
     return {'preparing': True}
 
 

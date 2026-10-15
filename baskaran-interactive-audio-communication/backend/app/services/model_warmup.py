@@ -18,7 +18,7 @@ def manifests():
     return [json.loads(p.read_text(encoding='utf-8')) for p in folder.glob('*.json')]
 
 
-def start(language, *, voice=True, audio=True):
+def start(language, *, voice=True, audio=True, transcription_only=False):
     settings = get_settings()
     keys = ['MODAL_BASE_GEMMA_URL']
     if voice:
@@ -30,6 +30,11 @@ def start(language, *, voice=True, audio=True):
     # Sinhala question audio requires later approval. Flashcards have no audio.
     if audio and not (voice and language == 'sinhala'):
         keys.append({'english':'MODAL_ENGLISH_KOKORO_TTS_URL','tamil':'MODAL_INDIC_PARLER_MIXED_TTS_URL','sinhala':'MODAL_SINHALA_VITS_TTS_URL'}[language])
+    asr_key = {'english':'MODAL_WHISPER_URL','tamil':'MODAL_INDIC_STT_URL','sinhala':'MODAL_SINHALA_ASR_URL'}[language]
+    if transcription_only:
+        keys = [asr_key]
+    if getattr(settings, 'stt_provider', 'modal') == 'groq':
+        keys = [key for key in keys if key != asr_key]
     for key in keys:
         endpoint = getattr(settings, key.lower(), '')
         for manifest in manifests():

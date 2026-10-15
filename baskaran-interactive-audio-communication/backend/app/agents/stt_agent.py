@@ -11,6 +11,7 @@ Single Responsibility: this node ONLY handles speech-to-text.
 
 from app.services.modal_client import call_whisper
 from app.core.logging import get_logger
+from app.core.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,11 @@ async def stt_node(state: dict) -> dict:
 
     logger.info("STT node: processing %d bytes, language=%s", len(audio_bytes), language)
 
-    result = await call_whisper(audio_bytes, filename, language)
+    if get_settings().stt_provider == "groq":
+        from app.services.groq_stt import transcribe
+        result = await transcribe(audio_bytes, filename, language)
+    else:
+        result = await call_whisper(audio_bytes, filename, language)
 
     return {
         **state,

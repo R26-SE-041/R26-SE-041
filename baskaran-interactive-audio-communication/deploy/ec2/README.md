@@ -134,3 +134,29 @@ remote checks.
 Latency changes and measured limits are recorded in [LATENCY_OPTIMIZATION.md](../../LATENCY_OPTIMIZATION.md).
 Deploy Modal source changes separately; the EC2 workflow only deploys the backend
 and OpenClaw configuration. Keep GPU minimum containers at zero when conserving credits.
+
+## Natural study commands and optional fast transcription
+
+Study tools accepts common variations such as `Make Tamil audio`, `Create a audio
+review in Tamil`, `Make flashcards`, and `Create a one-minute audio revision in Tamil`.
+The command preview is deterministic and makes no AI calls. It uses the same parser
+as execution; uncertain or conflicting requests require clarification. Nothing runs
+until the user chooses Run action. Recorded study commands transcribe automatically
+after Stop; questions retain their recording review step. Failed transcription keeps
+the recording available for retry.
+
+Groq integration is opt-in: configure a server-side `GROQ_API_KEY`, then set
+`STT_PROVIDER=groq` in `/etc/voicelearn/backend.env` and recreate the backend service.
+Without a key, retain `STT_PROVIDER=modal`; a missing Groq key does not trigger fallback.
+Never use an EXPO_PUBLIC variable for a private API key. The Groq key must belong to a
+free-plan account to use its free allocation; our app cannot enforce the provider's
+account billing plan. Limits depend on that account and can change.
+
+The integration accepts recordings up to 60 seconds, reserves quota before HTTP,
+and persists a shared budget of at most 10 requests/minute, 100 requests/rolling day,
+and 6,000 billed audio seconds/rolling day in the backend data directory. Upstream
+quota, auth, timeout, and network errors are shown without automatic retries or paid
+provider fallback. These caps are conservative application limits, not a guarantee
+of free provider billing. Existing revision generation and speech synthesis retain
+their existing provider costs. Compare real recordings before claiming lower latency
+or improved Tamil/Sinhala recognition. An API key is required for real Groq tests.
