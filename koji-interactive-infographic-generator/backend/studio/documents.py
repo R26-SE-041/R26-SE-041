@@ -7,6 +7,7 @@ import os
 import re
 from io import BytesIO
 from functools import lru_cache
+from threading import Lock
 from uuid import uuid4
 
 from psycopg2.extras import Json, RealDictCursor, execute_values
@@ -17,6 +18,7 @@ MAX_DOCUMENTS = 10
 MAX_PAGES = 300
 MAX_CHUNKS = 2000
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+_embedding_lock = Lock()
 
 
 def filename_for_upload(value: str) -> str:
@@ -62,7 +64,10 @@ def extract_chunks(data: bytes):
 
 def embed_texts(texts: list[str]):
     # Fixed model/dimension for this index; changing the shared model cannot corrupt it.
-    return _model().encode(texts, batch_size=32, normalize_embeddings=True).tolist()
+    # Worker slots can wait on GPUs concurrently, but keep CPU model loading and
+    # encoding bounded on the small API host (including the first cached load).
+    with _embedding_lock:
+        return _model().encode(texts, batch_size=32, normalize_embeddings=True).tolist()
 
 
 @lru_cache(maxsize=1)

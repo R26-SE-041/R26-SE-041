@@ -128,6 +128,87 @@ test('network failures provide an actionable cloud connection error',async()=>{
  const client=loadModule('studioClient.ts',{fetch:async()=>{throw new TypeError('Failed to fetch');}});
  await assert.rejects(client.studioRequest('/studio/jobs'),/cloud workspace.*retry/);
 });
+
+const userToken = (owner, version = 1) => 'header.' + Buffer.from(JSON.stringify({ sub: owner, version })).toString('base64url') + '.signature';
+test('cloud requests resolve the latest session and retry one auth rejection with the same request body', async () => {
+  const calls = [], refreshes = [];
+  const client = loadModule('studioClient.ts', { fetch: async (url, init) => {
+    calls.push({ url, init });
+    return { ok: calls.length > 1, status: calls.length === 1 ? 401 : 200, json: async () => ({ id: 'saved-job' }) };
+  } });
+  client.configureStudio(userToken('owner', 0), async force => {
+    refreshes.push(force); return userToken('owner', force ? 2 : 1);
+  });
+  const body = JSON.stringify({ request_id: 'original-request', kind: 'threed' });
+  await client.studioRequest('/studio/jobs', { method: 'POST', body });
+  assert.deepEqual(refreshes, [false, true]);
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer ' + userToken('owner', 1));
+  assert.equal(calls[1].init.headers.Authorization, 'Bearer ' + userToken('owner', 2));
+  assert.equal(calls[0].init.body, body);
+  assert.equal(calls[1].init.body, body);
+});
+
+test('a revoked session stops after one refresh instead of retrying indefinitely', async () => {
+  let calls = 0;
+  const client = loadModule('studioClient.ts', { fetch: async () => {
+    calls++; return { ok: false, status: 401, json: async () => ({ detail: 'Session expired' }) };
+  } });
+  client.configureStudio(userToken('owner'), async () => userToken('owner'));
+  await assert.rejects(client.studioRequest('/studio/jobs'), /Session expired/);
+  assert.equal(calls, 2);
+});
+
+test('an account switch during session refresh cannot send a request under another owner', async () => {
+  let finish, calls = 0;
+  const client = loadModule('studioClient.ts', { fetch: async () => { calls++; } });
+  client.configureStudio(userToken('first'), () => new Promise(resolve => { finish = resolve; }));
+  const result = client.studioRequest('/studio/jobs');
+  client.configureStudio(userToken('second'));
+  finish(userToken('first'));
+  await assert.rejects(result, /Account changed/);
+  assert.equal(calls, 0);
+});
+
+test('accepted job polling recovers from network and service outages without resubmitting the task', async () => {
+  const calls = [], progress = [];
+  const client = loadModule('studioClient.ts', {
+    setTimeout: callback => callback(),
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      if (calls.length === 1) throw new TypeError('Failed to fetch');
+      if (calls.length === 2) return { ok: false, status: 503, json: async () => ({ detail: 'Temporarily unavailable' }) };
+      return { ok: true, status: 200, json: async () => ({ status: 'completed', stage: 'completed', result: { history_id: 'saved-image' } }) };
+    },
+  });
+  const result = await client.waitJob('original-job', stage => progress.push(stage));
+  assert.equal(result.result.history_id, 'saved-image');
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(call => call.url.endsWith('/studio/jobs/original-job') && !call.init.method));
+  assert.match(progress[0], /saved task continues/);
+});
+
+test('session refresh is shared by concurrent requests and resumes normal session reads afterwards', async () => {
+  const { createSessionTokenProvider } = loadModule('sessionTokens.ts');
+  let finish, refreshes = 0, reads = 0;
+  const provider = createSessionTokenProvider({
+    getSession: async () => { reads++; return { data: { session: { access_token: 'latest' } }, error: null }; },
+    refreshSession: () => { refreshes++; return new Promise(resolve => { finish = resolve; }); },
+  });
+  const requests = [provider(true), provider(true), provider()];
+  finish({ data: { session: { access_token: 'renewed' } }, error: null });
+  assert.deepEqual(await Promise.all(requests), ['renewed', 'renewed', 'renewed']);
+  assert.equal(refreshes, 1);
+  assert.equal(await provider(), 'latest');
+  assert.equal(reads, 1);
+});
+
+test('refresh network outages are retryable and invalid refresh tokens require sign-in without leaking errors', async () => {
+  const { createSessionTokenProvider, SessionConnectionError } = loadModule('sessionTokens.ts');
+  const provider = error => createSessionTokenProvider({ getSession: async () => ({ data: { session: null }, error }) });
+  await assert.rejects(provider({ name: 'AuthRetryableFetchError', status: 0 })(), SessionConnectionError);
+  await assert.rejects(provider({ status: 400, message: 'private-refresh-token' })(), error =>
+    /sign in again/.test(error.message) && !error.message.includes('private-refresh-token'));
+});
 test('hosted web requests use the configured same-origin route and keep bearer auth',async()=>{
  const previous={...process.env};const calls=[];
  try{

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 import { authMessage, createAuthActions } from "./authActions";
+import { createSessionTokenProvider } from "./sessionTokens";
 
 const storageKey = "koji:studio-session:" + SUPABASE_URL;
 const recoveryKey = storageKey + ":recovery";
@@ -9,6 +10,7 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, 
   auth: { storageKey, persistSession: true, autoRefreshToken: true,
     detectSessionInUrl: typeof window !== "undefined" },
 }) : null;
+const getAccessToken = supabase ? createSessionTokenProvider(supabase.auth) : undefined;
 function readRecovery() {
   try { return typeof window !== "undefined" && (new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery" || window.sessionStorage.getItem(recoveryKey) === "true"); }
   catch { return false; }
@@ -65,6 +67,7 @@ export function useStudioSession(externalToken?: string) {
   }
   return {
     token: externalToken ?? (loading ? undefined : session?.access_token),
+    getAccessToken: externalToken ? undefined : getAccessToken,
     email: session?.user.email, name: session?.user.user_metadata?.full_name as string | undefined,
     loading, recovering, error, configured: Boolean(supabase),
     clearError: () => setError(null),

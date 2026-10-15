@@ -132,6 +132,16 @@ class RepositoryIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"lease lost"):
             self.repo.update_job(first,status="completed")
 
+    def test_active_jobs_remain_visible_when_newer_completed_jobs_fill_recent_activity(self):
+        active = self.repo.create_job(self.owner, self.payload(), {})
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute("""insert into koji_jobs(id,user_id,request_id,kind,status,payload,endpoints)
+                select gen_random_uuid(),%s,gen_random_uuid(),'generate','completed','{}','{}'
+                from generate_series(1,35)""", (self.owner,))
+        jobs = self.repo.list_jobs(self.owner)
+        self.assertEqual(len(jobs), 30)
+        self.assertEqual(jobs[0]["id"], active["id"])
+
     def test_late_automatic_labels_do_not_overwrite_manual_edits(self):
         generation=str(uuid4())
         self.repo.save_history(self.owner,generation,{"chatId":"chat"},self.owner+"/image.png")

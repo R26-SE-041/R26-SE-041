@@ -1,9 +1,10 @@
 """Run separately from the web API so browser/server restarts do not stop jobs."""
 from __future__ import annotations
 import logging
+import os
 import signal
 import threading
-import time
+from concurrent.futures import ThreadPoolExecutor
 from studio.repository import Repository
 from studio.pipeline import Pipeline
 from dotenv import load_dotenv
@@ -53,6 +54,33 @@ def process_job(repo, pipeline, job):
         stopped.set()
         heart.join(timeout=2)
 
+def run_worker(repo, pipeline, shutdown, concurrency=3):
+    # Each slot retains its own database lease. Waiting on a long Modal 3D
+    # call must not hold the entire queue.
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        pending = set()
+        while not shutdown.is_set():
+            for future in list(pending):
+                if future.done():
+                    pending.remove(future)
+                    try:
+                        future.result()
+                    except Exception:
+                        log.exception("Job execution failed")
+            if len(pending) >= concurrency:
+                shutdown.wait(.25)
+                continue
+            try:
+                job = repo.claim()
+                if job:
+                    pending.add(pool.submit(process_job, repo, pipeline, job))
+                else:
+                    shutdown.wait(2)
+            except Exception:
+                log.exception("Worker could not access queue")
+                shutdown.wait(5)
+
+
 def main():
     load_dotenv()
     logging.basicConfig(level=logging.INFO)
@@ -60,17 +88,10 @@ def main():
     signal.signal(signal.SIGTERM,lambda *_:shutdown.set())
     signal.signal(signal.SIGINT,lambda *_:shutdown.set())
     repo = Repository()
-    pipeline = Pipeline(repo=repo)
-    while not shutdown.is_set():
-        try:
-            job = repo.claim()
-            if job:
-                process_job(repo,pipeline,job)
-            else:
-                shutdown.wait(2)
-        except Exception:
-            log.exception("Worker could not access queue")
-            shutdown.wait(5)
+    concurrency = int(os.getenv("STUDIO_WORKER_CONCURRENCY", "3"))
+    if not 1 <= concurrency <= 8:
+        raise ValueError("STUDIO_WORKER_CONCURRENCY must be between 1 and 8")
+    run_worker(repo, Pipeline(repo=repo), shutdown, concurrency)
 
 if __name__ == "__main__":
     main()

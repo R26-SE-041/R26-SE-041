@@ -147,6 +147,35 @@ class RecoveryTests(unittest.TestCase):
             post.assert_not_called()
             self.assertIn("workspace-a.example/generate/result/original-handle",get.call_args.args[0])
 
+    def test_waiting_3d_does_not_block_drawing_and_labels_or_exceed_worker_slots(self):
+        import queue
+        import threading
+        from studio.worker import run_worker
+        jobs = queue.Queue()
+        for kind in ("threed", "sketch", "labels", "generate"):
+            jobs.put({**self.job(), "kind": kind})
+        repo, pipeline = Mock(), Mock()
+        repo.claim.side_effect = lambda: jobs.get_nowait() if not jobs.empty() else None
+        shutdown, release = threading.Event(), threading.Event()
+        started = queue.Queue()
+        def run(job):
+            started.put(job["kind"])
+            release.wait(5)
+            return {"history_id": "saved-result"}
+        pipeline.run.side_effect = run
+        worker = threading.Thread(target=run_worker, args=(repo, pipeline, shutdown, 3))
+        worker.start()
+        try:
+            self.assertEqual({started.get(timeout=2) for _ in range(3)}, {"threed", "sketch", "labels"})
+            self.assertEqual(repo.claim.call_count, 3)
+            self.assertEqual(jobs.qsize(), 1)
+        finally:
+            shutdown.set()
+            release.set()
+            worker.join(timeout=3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(repo.update_job.call_count, 3)
+
     def test_uncertain_synchronous_call_is_not_blindly_replayed(self):
         job=self.job();job["state"]={"inflight":"image-0"}
         pipeline=Pipeline(repo=Mock(),storage=Mock())
@@ -207,6 +236,12 @@ class ThreeDPollingTests(unittest.TestCase):
         with patch("studio.pipeline.time.time", return_value=100), patch("studio.pipeline.requests.get", side_effect=responses), patch("studio.pipeline.time.sleep"):
             self.pipeline.async_model(self.job, "threed", {})
         self.repo.update_job.assert_called_once_with(self.job, stage="synthesizing texture")
+
+    def test_pending_modal_call_does_not_claim_inference_has_started(self):
+        responses = [self.result(202), self.result(glb_base64="model")]
+        with patch("studio.pipeline.time.time", return_value=100), patch("studio.pipeline.requests.get", side_effect=responses), patch("studio.pipeline.time.sleep"):
+            self.pipeline.async_model(self.job, "threed", {})
+        self.repo.update_job.assert_called_once_with(self.job, stage="waiting for 3D service")
 
     def test_terminal_model_error_preserves_diagnostic_stage(self):
         response = self.result(500, error="3D conversion failed while synthesizing texture: out of memory")

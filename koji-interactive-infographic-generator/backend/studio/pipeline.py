@@ -101,8 +101,8 @@ class Pipeline:
                 if expired:
                     break
                 if service == "threed":
-                    stage = response.json().get("stage")
-                    if stage in {"preparing image", "generating shape", "simplifying mesh", "synthesizing texture", "exporting model"} and stage != last_stage:
+                    stage = response.json().get("stage") or "waiting for 3D service"
+                    if stage in {"waiting for 3D service", "preparing image", "generating shape", "simplifying mesh", "synthesizing texture", "exporting model"} and stage != last_stage:
                         self.repo.update_job(job,stage=stage)
                         last_stage = stage
                 time.sleep(3)

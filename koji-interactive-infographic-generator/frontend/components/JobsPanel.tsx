@@ -27,8 +27,14 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
     mounted.current = true; void refresh();
     const timer = setInterval(() => { if (typeof document === "undefined" || !document.hidden) void refresh(); }, 15000);
     const onOnline = () => void refresh();
-    if (typeof window !== "undefined") window.addEventListener("online", onOnline);
-    return () => { mounted.current = false; clearInterval(timer); if (typeof window !== "undefined") window.removeEventListener("online", onOnline); };
+    const onVisible = () => { if (!document.hidden) void refresh(); };
+    if (typeof window !== "undefined") { window.addEventListener("online", onOnline); window.addEventListener("focus", onOnline); }
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      mounted.current = false; clearInterval(timer);
+      if (typeof window !== "undefined") { window.removeEventListener("online", onOnline); window.removeEventListener("focus", onOnline); }
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
   const open = async (job: StudioJob) => {
     const id = job.result?.history_id || job.generation_id; if (!id) return;
@@ -42,8 +48,10 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
     catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to retry."); }
     finally { setBusy(false); }
   };
-  const running = jobs.filter(job => job.status === "queued" || job.status === "running").length;
-  const status = loading ? "Checking..." : error ? "Connection unavailable" : running ? running + " in progress" : jobs.length ? jobs.length + " recent" : "No recent activity";
+  const running = jobs.filter(job => job.status === "running").length;
+  const queued = jobs.filter(job => job.status === "queued").length;
+  const status = loading ? "Checking..." : error ? "Connection unavailable" : running || queued ?
+    [running && `${running} running`, queued && `${queued} queued`].filter(Boolean).join(" · ") : jobs.length ? jobs.length + " recent" : "No recent activity";
   return <View style={{ gap: 10, padding: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceSoft }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Toggle background activity" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)}
       style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 32 }}>
@@ -55,10 +63,11 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
     </Pressable>
     {error && <View style={{ gap: 8 }}><Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 13 }}>{error}</Text><Pressable accessibilityRole="button" accessibilityLabel="Retry cloud connection" onPress={() => void refresh()} style={{ alignSelf: "flex-start", minHeight: 36, justifyContent: "center" }}><Text style={{ color: colors.primaryBright, fontWeight: "600" }}>Retry connection</Text></Pressable></View>}
     {expanded && <>
-      <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>Creations continue in the background. Open completed results here or from History.</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>Accepted tasks continue on the server, even when you leave or close the browser. Queued tasks are waiting for a worker. Open completed results here or from History.</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Refresh task activity" onPress={() => void refresh()} style={{ alignSelf: "flex-start", minHeight: 36, justifyContent: "center" }}><Text style={{ color: colors.primaryBright }}>Refresh activity</Text></Pressable>
       {!loading && !error && !jobs.length && <Text style={{ color: colors.textDim, fontSize: 12 }}>Your next creation will appear here.</Text>}
       {jobs.slice(0, 10).map(job => <View key={job.id} style={{ gap: 5, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-        <Text style={{ color: colors.text, fontSize: 13 }}>{job.kind} · {job.stage}</Text>
+        <Text style={{ color: colors.text, fontSize: 13 }}>{job.kind} · {job.status === "queued" ? "Queued — waiting for a worker" : job.stage}</Text>
         {job.error && <Text style={{ color: colors.danger }}>{job.error}</Text>}
         {job.status === "completed" && !job.result?.history_id && !job.generation_id && <Text style={{ color: colors.textMuted }}>Enhanced prompt saved in History.</Text>}
         {job.status === "completed" && (job.result?.history_id || job.generation_id) && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void open(job)} style={{ minHeight: 36, justifyContent: "center" }}><Text style={{ color: colors.primaryBright }}>Open result</Text></Pressable>}

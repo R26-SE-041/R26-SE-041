@@ -280,7 +280,7 @@ interface AppProps { accessToken?: string; studioSession?: ReturnType<typeof use
 
 export default function App({ accessToken }: AppProps) {
   const session = useStudioSession(accessToken);
-  configureStudio(session.token);
+  configureStudio(session.token, session.getAccessToken);
   useEffect(() => {
     if (typeof window !== "undefined" && session.token && !session.recovering && !session.loading) {
       if (["/signin", "/signup", "/auth/callback", "/forgot-password", "/verify-email", "/reset-password"].includes(window.location.pathname)) window.history.replaceState({}, "", "/");

@@ -57,7 +57,8 @@ class Repository:
 
     def list_jobs(self, user_id):
         with connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("select * from koji_jobs where user_id=%s order by created_at desc limit 30", (user_id,))
+            cur.execute("""select * from koji_jobs where user_id=%s
+                order by (status in ('queued','running')) desc,created_at desc limit 30""", (user_id,))
             return [dict(row) for row in cur.fetchall()]
 
     def create_job(self, user_id, payload, endpoints):
@@ -88,7 +89,7 @@ class Repository:
                     return dict(active)
             cur.execute("select count(*) from koji_jobs where user_id=%s and status in ('queued','running')",(user_id,))
             if cur.fetchone()["count"] >= int(os.getenv("STUDIO_MAX_ACTIVE_JOBS","3")):
-                raise OverflowError("Finish an active job before starting another")
+                raise OverflowError("Your task limit is reached. Open Activity to view queued and running tasks; existing tasks continue in the background.")
             job_id = str(uuid4())
             cur.execute("""insert into koji_jobs(id,user_id,request_id,kind,generation_id,payload,endpoints)
                 values(%s,%s,%s,%s,%s,%s,%s) returning *""",(job_id,user_id,payload["request_id"],payload["kind"],payload.get("generation_id"),Json(payload),Json(endpoints)))
