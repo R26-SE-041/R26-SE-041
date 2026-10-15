@@ -148,6 +148,52 @@ class RecoveryTests(unittest.TestCase):
         process_job(repo,pipeline,job)
         repo.update_job.assert_called_with(job,status="failed",stage="failed",error="Sketch service unavailable")
 
+
+class ThreeDPollingTests(unittest.TestCase):
+    def setUp(self):
+        self.job = {"id": str(uuid4()), "state": {"call_id": "fc-original", "call_started": 0},
+                    "endpoints": {"threed": "https://gpu.example"}}
+        self.repo = Mock()
+        self.pipeline = Pipeline(repo=self.repo, storage=Mock())
+
+    def result(self, status=200, **payload):
+        response = Mock(status_code=status)
+        response.json.return_value = payload
+        return response
+
+    def test_a_running_60_minute_gpu_call_is_not_discarded_at_55_minutes(self):
+        result = self.result(glb_base64="model")
+        with patch("studio.pipeline.time.time", return_value=3601), patch("studio.pipeline.requests.get", return_value=result):
+            self.assertEqual(self.pipeline.async_model(self.job, "threed", {}), {"glb_base64": "model"})
+
+    def test_recovered_worker_retrieves_an_already_completed_result_after_deadline(self):
+        with patch("studio.pipeline.time.time", return_value=5000), patch("studio.pipeline.requests.get", return_value=self.result(glb_base64="model")), patch("studio.pipeline.requests.post") as post:
+            self.assertEqual(self.pipeline.async_model(self.job, "threed", {})["glb_base64"], "model")
+            post.assert_not_called()
+
+    def test_pending_job_eventually_fails_instead_of_polling_forever(self):
+        with patch("studio.pipeline.time.time", return_value=5000), patch("studio.pipeline.requests.get", return_value=self.result(202)), patch("studio.pipeline.time.sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "processing deadline"):
+                self.pipeline.async_model(self.job, "threed", {})
+            sleep.assert_not_called()
+
+    def test_transient_poll_failure_does_not_discard_the_gpu_job(self):
+        import requests
+        with patch("studio.pipeline.time.time", return_value=100), patch("studio.pipeline.requests.get", side_effect=[requests.Timeout(), self.result(glb_base64="model")]), patch("studio.pipeline.time.sleep"):
+            self.assertEqual(self.pipeline.async_model(self.job, "threed", {})["glb_base64"], "model")
+
+    def test_stage_changes_are_persisted_without_repeating_the_same_update(self):
+        responses = [self.result(202, stage="synthesizing texture"), self.result(202, stage="synthesizing texture"), self.result(glb_base64="model")]
+        with patch("studio.pipeline.time.time", return_value=100), patch("studio.pipeline.requests.get", side_effect=responses), patch("studio.pipeline.time.sleep"):
+            self.pipeline.async_model(self.job, "threed", {})
+        self.repo.update_job.assert_called_once_with(self.job, stage="synthesizing texture")
+
+    def test_terminal_model_error_preserves_diagnostic_stage(self):
+        response = self.result(500, error="3D conversion failed while synthesizing texture: out of memory")
+        with patch("studio.pipeline.time.time", return_value=100), patch("studio.pipeline.requests.get", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "synthesizing texture: out of memory"):
+                self.pipeline.async_model(self.job, "threed", {})
+
 if __name__ == "__main__":
     unittest.main()
 

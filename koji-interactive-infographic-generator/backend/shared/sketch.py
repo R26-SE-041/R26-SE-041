@@ -6,7 +6,19 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 CONTROL_MODEL = "xinsir/controlnet-scribble-sdxl-1.0"
-DEFAULT_PROMPT = "A clean detailed illustration of the subject in the sketch, coherent shapes, natural colors, plain white background, no text, no watermark"
+OUTPUT_RULES = (
+    "Finished full-color solid subject with natural material colors, clear surface detail, "
+    "soft diffuse lighting and dimensional shading. One centered subject on a plain white background, "
+    "entire silhouette visible with generous white margins, suitable for single-image 3D reconstruction. "
+    "Preserve the intended pose and viewpoint. No pencil strokes, line art, grayscale sketch, "
+    "text, labels, arrows, watermark, extra objects, heavy shadows or reflections."
+)
+DEFAULT_PROMPT = "A finished full-color rendering of the subject in the sketch. " + OUTPUT_RULES
+NEGATIVE_PROMPT = (
+    "pencil sketch, line drawing, line art, scribble, monochrome, grayscale, unfinished, "
+    "text, labels, arrows, watermark, blurry, low quality, distorted, duplicate subject, "
+    "cropped, out of frame, scenery, colored background, heavy cast shadow"
+)
 SIZE = 1024
 
 Coordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
@@ -54,4 +66,20 @@ def generation_prompt(instruction: str) -> str:
     subject = instruction.strip()
     if not subject:
         return DEFAULT_PROMPT
-    return subject + "\n\nFinal output: isolated subject on a plain white background, no text, no watermark."
+    return subject + "\n\nFinal output requirements: " + OUTPUT_RULES
+
+
+def render_generation_control(strokes: list[Stroke]):
+    """Fit the visible drawing inside safe margins without changing its pose."""
+    from PIL import Image, ImageOps
+
+    drawing = render_sketch(strokes)
+    bounds = ImageOps.invert(drawing).getbbox()
+    subject = drawing.crop(bounds)
+    available = round(SIZE * 0.82)
+    scale = min(available / subject.width, available / subject.height)
+    subject = subject.resize((max(1, round(subject.width * scale)), max(1, round(subject.height * scale))),
+                             Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (SIZE, SIZE), "white")
+    canvas.paste(subject, ((SIZE - subject.width) // 2, (SIZE - subject.height) // 2))
+    return ImageOps.invert(canvas)

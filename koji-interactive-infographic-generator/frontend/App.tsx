@@ -148,9 +148,8 @@ const IMAGE_POSITIVE: FeedbackReason[] = [
 ];
 
 const THREED_POLL_INTERVAL_MS = 3_000;
-// The Modal worker allows 60 minutes. Stop polling slightly earlier so the UI
-// can report a controlled timeout instead of surfacing a platform task kill.
-const THREED_MAX_WAIT_MS = 55 * 60 * 1_000;
+// Cover the GPU worker's 60-minute limit plus cold start/result retrieval.
+const THREED_MAX_WAIT_MS = 70 * 60 * 1_000;
 const THREED_ACTIVE_JOB_KEY = "eduvision:active-3d-conversion";
 const ESTIMATED_WARM_WINDOW_MS = 5 * 60 * 1_000;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -220,6 +219,11 @@ function friendlyPhase(phase: string, fallback: string): string {
     generating: "Creating your image…", evaluating: "Checking image quality…",
     labeling: "Finding and labeling structures…", analyzing: "Exploring your selected region…",
     converting: "Creating your 3D model…", saving: "Saving your creation…",
+    "preparing image": "Preparing your image for 3D…",
+    "generating shape": "Building your model’s shape…",
+    "simplifying mesh": "Preparing the mesh for texturing…",
+    "synthesizing texture": "Creating your model’s texture…",
+    "exporting model": "Exporting your 3D model…",
   };
   return phase.startsWith("retrying") ? "Refining the image after its quality check…" : labels[phase] || fallback;
 }
@@ -533,7 +537,9 @@ function Home({ accessToken, studioSession }: AppProps) {
         imageBase64: result.image,
         mode,
         speedMode,
-        ...(mode === "sketch" ? { sketchStrokes, sketchMetadata: result.sketchMetadata } : {}),
+        ...(mode === "sketch" ? { sketchStrokes, sketchStrength, sketchMetadata: result.sketchMetadata } : {}),
+        evaluationRetries: result.retryCount,
+        evaluationWarning: result.warning,
         chatId,
         version,
         enhancedPayload: result.payload,
@@ -563,7 +569,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       storeThreeDJob({ requestId: item.threeDJob.requestId, imageFingerprint: imageFingerprint(item.imageBase64), speedMode: item.speedMode });
     }
     setSketchStrokes(item.sketchStrokes ?? []); setSketchMetadata(item.sketchMetadata);
-    setSketchStrength(item.sketchStrength ?? item.sketchMetadata?.control_strength ?? 0.85);
+    setSketchStrength(item.sketchStrength ?? item.sketchMetadata?.requested_control_strength ?? item.sketchMetadata?.control_strength ?? 0.85);
     setSpeedMode(item.speedMode === "promax" ? "pro" : item.speedMode);
     setEnhancedPrompt(item.enhancedPrompt);
     setEnhancedPromptJson((item.enhancedPayload as EnhancedPromptPayload) ?? (item.mode === "anatomy" ? {
@@ -575,6 +581,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     setAnatomyAnnotations(item.anatomyAnnotations ?? []);
     setHistoryInteractions(item.interactions ?? []);
     setEvaluation(item.evaluation ? { clipScore: null, vlmScore: null, visualScore: item.evaluation.visualScore, pedagogicalScore: item.evaluation.pedagogicalScore, feedback: item.evaluation.feedback, anatomyHardFailures: [] } : null);
+    setEvaluationRetries(item.evaluationRetries ?? 0);
+    setEvaluationWarning(item.evaluationWarning ?? null);
     setGlbBase64(item.glbBase64 ?? null); setGlbSizeKb(item.glbSizeKb);
     setThreedStage(item.glbBase64 ? "done" : "idle");
     setCurrentHistoryId(item.imageBase64 ? item.id : null); currentChatId.current = item.chatId ?? item.id;
@@ -908,7 +916,8 @@ function Home({ accessToken, studioSession }: AppProps) {
       const data = await runTimed("image", async () => {
         if (cloudEnabled()) {
           const result = await cloudGenerate({kind:"sketch",prompt:prompt.trim(),mode:"sketch",sketch:{strokes:sketchStrokes,instruction:[prompt.trim(),feedback].filter(Boolean).join(". "),control_strength:sketchStrength}});
-          return {image_base64:result.image,prompt:result.prompt,generation_metadata:result.sketchMetadata};
+          return {image_base64:result.image,prompt:result.prompt,generation_metadata:result.sketchMetadata,
+            anatomy_spec:result.anatomy,quality_warning:result.warning,retry_count:result.retryCount};
         }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 600_000);
@@ -933,12 +942,13 @@ function Home({ accessToken, studioSession }: AppProps) {
           throw new Error("Sketch generation timed out. Please retry.");
         } finally { clearTimeout(timer); }
       });
-      const anatomy: AnatomySpec = { is_anatomy: false };
-      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: data.prompt, anatomy_spec: anatomy, route: "generic" };
-      setSketchMetadata(data.generation_metadata); setEnhancedPrompt(data.prompt); setEnhancedPromptJson(null);
-      setAnatomySpec(anatomy); setAnatomyAnnotations([]); setEvaluation(null); setEvaluationWarning(null);
+      const anatomy: AnatomySpec = data.anatomy_spec ?? { is_anatomy: false };
+      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: data.prompt, anatomy_spec: anatomy, route: anatomy.is_anatomy ? "anatomy" : "generic" };
+      setSketchMetadata(data.generation_metadata); setEnhancedPrompt(data.prompt); setEnhancedPromptJson(payload);
+      setAnatomySpec(anatomy); setAnatomyAnnotations([]); setEvaluation(null); setEvaluationWarning(data.quality_warning ?? null);
+      setEvaluationRetries(data.retry_count ?? 0);
       setImageBase64(data.image_base64); setImageOutputId(createOutputId("image"));
-      const historyId = await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: 0, warning: null, sketchMetadata: data.generation_metadata });
+      const historyId = await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: data.retry_count ?? 0, warning: data.quality_warning ?? null, sketchMetadata: data.generation_metadata });
       setStage("done");
       void runTimed("interactive", () => localizeAnatomy(data.image_base64, anatomy, true)).then(annotations =>
         historyId ? updateHistoryItem(historyId,{anatomyAnnotations:annotations}).catch(() => undefined) : undefined);
@@ -1120,6 +1130,7 @@ function Home({ accessToken, studioSession }: AppProps) {
   const handleCloud3D = async () => {
     if (!currentHistoryId || threedRequestInFlight.current) return;
     threedRequestInFlight.current = true; setThreedStage("converting"); setThreedError(null);
+    setJobPhase("queued");
     try {
       const job = await runTimed("threed", () => runJob({kind:"threed",generation_id:currentHistoryId,speed_mode:speedMode},setJobPhase));
       if (!job.result?.history_id) throw new Error("3D job returned no saved history");
@@ -1145,6 +1156,7 @@ function Home({ accessToken, studioSession }: AppProps) {
     const conversionStartedAt = Date.now();
     setActiveTimers((current) => ({ ...current, threed: conversionStartedAt }));
     setThreedStage("converting");
+    setJobPhase("queued");
     setThreedError(null);
     setGlbBase64(null);
     try {
@@ -1187,7 +1199,12 @@ function Home({ accessToken, studioSession }: AppProps) {
           await delay(THREED_POLL_INTERVAL_MS);
           continue;
         }
-        if (resultResponse.status === 202) continue;
+        if (resultResponse.status === 202) {
+          const { payload: progress } = await readApiResponse(resultResponse);
+          if (typeof progress.stage === "string") setJobPhase(progress.stage);
+          continue;
+        }
+        if ([408, 429, 502, 503, 504].includes(resultResponse.status)) continue;
         const { payload: data, raw: resultRaw } = await readApiResponse(resultResponse);
         if (!resultResponse.ok) {
           clearStoredThreeDJob();
@@ -1213,7 +1230,7 @@ function Home({ accessToken, studioSession }: AppProps) {
         }
         return;
       }
-      throw new Error("3D conversion timed out after 55 minutes");
+      throw new Error("3D conversion exceeded its processing deadline. Check the job status before retrying.");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "3D conversion failed";
       setThreedError(message);
@@ -1367,7 +1384,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   <Pressable key={option.label} accessibilityRole="button" accessibilityLabel={option.label + " drawing adherence"} aria-pressed={sketchStrength === option.value} accessibilityState={{ selected: sketchStrength === option.value, disabled: isLoading }} disabled={isLoading} onPress={() => setSketchStrength(option.value)} style={[styles.optionButton, sketchStrength === option.value && styles.optionButtonSelected, isLoading && shared.disabled]}>
                     <Text style={[styles.optionText, sketchStrength === option.value && styles.optionTextSelected]}>{sketchStrength === option.value ? "✓ " : ""}{option.label}</Text>
                   </Pressable>)}</View>
-                {sketchMetadata && <Text style={styles.hint}>SDXL + Xinsir Scribble · Seed {sketchMetadata.seed}</Text>}
+                {sketchMetadata && <Text style={styles.hint}>{sketchMetadata.subject ? `Detected: ${sketchMetadata.subject} · ` : ""}Seed {sketchMetadata.seed}</Text>}
               </>}
               <Text style={styles.promptLabel}>{workspace === "sketch" ? "Additional instruction (optional)" : workspace === "anatomy" ? "Human Anatomy Prompt" : "Your Prompt"}</Text>
               <TextInput
@@ -1388,7 +1405,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={styles.optionLabel}>Speed</Text><SpeedSelector options={SPEED_MODES} value={speedMode} disabled={isLoading} onChange={setSpeedMode} /></View>}
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
-                  {workspace === "sketch" ? "Your drawing guides the image directly. Leave the instruction empty to use the default illustration style." : workspace === "anatomy"
+                  {workspace === "sketch" ? "Create a finished colour image on a white background, ready for 3D conversion. Human anatomy receives extra structure checks. Add the subject or intended view if needed." : workspace === "anatomy"
                     ? "Choose an organ and view. Review the enhanced instruction before creating your image."
                     : "Describe your subject, audience and preferred visual style."}
                 </Text>
@@ -1524,11 +1541,11 @@ function Home({ accessToken, studioSession }: AppProps) {
                   {threedStage === "converting" && (
                     <View style={[shared.card, styles.loadingCard]}>
                       <ActivityIndicator color={colors.cyan} size="large" />
-                      <Text style={styles.loadingText}>Creating your model’s shape and texture…</Text>
+                      <Text style={styles.loadingText}>{friendlyPhase(jobPhase || "converting", "Creating your model’s shape and texture…")}</Text>
                       <View style={styles.stageRow}>
-                        <StagePill active label="Shape" />
-                        <StagePill label="Texture" />
-                        <StagePill label="GLB Export" />
+                        <StagePill active={jobPhase === "preparing image" || jobPhase === "generating shape"} label="Shape" />
+                        <StagePill active={jobPhase === "simplifying mesh" || jobPhase === "synthesizing texture"} label="Texture" />
+                        <StagePill active={jobPhase === "exporting model" || jobPhase === "saving"} label="GLB Export" />
                       </View>
                       <Text style={styles.gpuText}>GPU: {speedMode === "promax" ? "H100" : speedMode === "pro" ? "A100" : "A10G"}</Text>
                     </View>

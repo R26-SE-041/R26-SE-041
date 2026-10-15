@@ -7,6 +7,14 @@ export interface SketchStroke {
 }
 
 export interface SketchGenerationMetadata {
+  subject?: string;
+  requested_control_strength?: number;
+  control_guidance_end?: number;
+  vision_model?: string;
+  quality_status?: "passed" | "needs_review" | "unverified";
+  attempts?: number;
+  recognition?: Record<string, unknown>;
+  quality?: Record<string, unknown> | null;
   base_model: string;
   control_model: string;
   seed: number;
@@ -19,6 +27,10 @@ export interface SketchGenerationMetadata {
 
 
 export interface GenerationHistoryItem {
+  sketchStrength?: number;
+  enhancedPayload?: unknown;
+  evaluationRetries?: number;
+  evaluationWarning?: string | null;
   id: string;
   createdAt: string;
   prompt: string;

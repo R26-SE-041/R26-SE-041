@@ -93,6 +93,37 @@ test('a failed durable job surfaces its error instead of polling forever', async
   }
 });
 
+test('3D job polling covers the GPU runtime and cold start instead of stopping at 60 minutes', async () => {
+  let now = 0;
+  let polls = 0;
+  const stages = [];
+  const client = loadModule('studioClient.ts', {
+    Date: class extends Date { static now() { return now; } },
+    setTimeout: callback => { now += 61 * 60 * 1000; callback(); },
+    fetch: async () => ({ ok: true, json: async () => ++polls === 1 ?
+      { kind: 'threed', status: 'running', stage: 'synthesizing texture' } :
+      { kind: 'threed', status: 'completed', stage: 'completed', result: { history_id: 'model-one' } },
+    }),
+  });
+  const result = await client.waitJob('3d-job', stage => stages.push(stage));
+  assert.equal(result.result.history_id, 'model-one');
+  assert.deepEqual(stages, ['synthesizing texture', 'completed']);
+  assert.equal(polls, 2);
+});
+
+test('3D timeout allowance does not extend other model jobs', async () => {
+  let now = 0;
+  let polls = 0;
+  const client = loadModule('studioClient.ts', {
+    Date: class extends Date { static now() { return now; } },
+    setTimeout: callback => { now += 61 * 60 * 1000; callback(); },
+    fetch: async () => { polls++; return { ok: true, json: async () =>
+      ({ kind: 'generate', status: 'running', stage: 'generating' }) }; },
+  });
+  await assert.rejects(client.waitJob('image-job'), /still available in Jobs/);
+  assert.equal(polls, 1);
+});
+
 test('network failures provide an actionable cloud connection error',async()=>{
  const client=loadModule('studioClient.ts',{fetch:async()=>{throw new TypeError('Failed to fetch');}});
  await assert.rejects(client.studioRequest('/studio/jobs'),/cloud workspace.*retry/);

@@ -473,7 +473,10 @@ function Home({ accessToken, userId }: AppProps) {
         imageBase64: result.image,
         mode,
         speedMode,
-        ...(mode === "sketch" ? { sketchStrokes, sketchMetadata: result.sketchMetadata } : {}),
+        ...(mode === "sketch" ? { sketchStrokes, sketchStrength, sketchMetadata: result.sketchMetadata } : {}),
+        enhancedPayload: result.payload,
+        evaluationRetries: result.retryCount,
+        evaluationWarning: result.warning,
         chatId,
         version,
         anatomy: result.anatomy,
@@ -502,17 +505,19 @@ function Home({ accessToken, userId }: AppProps) {
       storeThreeDJob({ requestId: item.threeDJob.requestId, imageFingerprint: imageFingerprint(item.imageBase64), speedMode: item.speedMode }, userId);
     }
     setSketchStrokes(item.sketchStrokes ?? []); setSketchMetadata(item.sketchMetadata);
-    setSketchStrength(item.sketchMetadata?.control_strength ?? 0.85);
+    setSketchStrength(item.sketchStrength ?? item.sketchMetadata?.requested_control_strength ?? item.sketchMetadata?.control_strength ?? 0.85);
     setSpeedMode(item.speedMode);
     setEnhancedPrompt(item.enhancedPrompt);
-    setEnhancedPromptJson(item.mode === "anatomy" ? {
+    setEnhancedPromptJson((item.enhancedPayload as EnhancedPromptPayload) ?? (item.mode === "anatomy" ? {
       schema_version: "1.0", final_prompt: item.enhancedPrompt, anatomy_spec: restoredAnatomy,
       route: "anatomy", anatomy_mode: "verified",
-    } : null);
+    } : null));
     setImageBase64(item.imageBase64);
     setAnatomySpec(restoredAnatomy);
     setAnatomyAnnotations(item.anatomyAnnotations ?? []);
     setEvaluation(item.evaluation ? { clipScore: null, vlmScore: null, visualScore: item.evaluation.visualScore, pedagogicalScore: item.evaluation.pedagogicalScore, feedback: item.evaluation.feedback, anatomyHardFailures: [] } : null);
+    setEvaluationRetries(item.evaluationRetries ?? 0);
+    setEvaluationWarning(item.evaluationWarning ?? null);
     setGlbBase64(item.glbBase64 ?? null); setGlbSizeKb(item.glbSizeKb);
     setThreedStage(item.glbBase64 ? "done" : "idle");
     setCurrentHistoryId(item.id); currentChatId.current = item.chatId ?? item.id;
@@ -825,12 +830,13 @@ function Home({ accessToken, userId }: AppProps) {
           throw new Error("Sketch generation timed out. Please retry.");
         } finally { clearTimeout(timer); }
       });
-      const anatomy: AnatomySpec = { is_anatomy: false };
-      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: data.prompt, anatomy_spec: anatomy, route: "generic" };
-      setSketchMetadata(data.generation_metadata); setEnhancedPrompt(data.prompt); setEnhancedPromptJson(null);
-      setAnatomySpec(anatomy); setAnatomyAnnotations([]); setEvaluation(null); setEvaluationWarning(null);
+      const anatomy: AnatomySpec = data.anatomy_spec ?? { is_anatomy: false };
+      const payload: EnhancedPromptPayload = { schema_version: "1.0", final_prompt: data.prompt, anatomy_spec: anatomy, route: anatomy.is_anatomy ? "anatomy" : "generic" };
+      setSketchMetadata(data.generation_metadata); setEnhancedPrompt(data.prompt); setEnhancedPromptJson(payload);
+      setAnatomySpec(anatomy); setAnatomyAnnotations([]); setEvaluation(null); setEvaluationWarning(data.quality_warning ?? null);
+      setEvaluationRetries(data.retry_count ?? 0);
       setImageBase64(data.image_base64); setImageOutputId(createOutputId("image"));
-      await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: 0, warning: null, sketchMetadata: data.generation_metadata });
+      await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: data.retry_count ?? 0, warning: data.quality_warning ?? null, sketchMetadata: data.generation_metadata });
       setStage("done");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sketch generation failed");
@@ -1276,7 +1282,7 @@ function Home({ accessToken, userId }: AppProps) {
                   <Pressable key={option.label} disabled={isLoading} onPress={() => setSketchStrength(option.value)} style={styles.ghostButton}>
                     <Text style={styles.ghostText}>{sketchStrength === option.value ? "✓ " : ""}{option.label}</Text>
                   </Pressable>)}</View>
-                {sketchMetadata && <Text style={styles.hint}>SDXL + Xinsir Scribble · Seed {sketchMetadata.seed}</Text>}
+                {sketchMetadata && <Text style={styles.hint}>{sketchMetadata.subject ? `Detected: ${sketchMetadata.subject} · ` : ""}Seed {sketchMetadata.seed}</Text>}
               </>}
               <Text style={shared.label}>{workspace === "sketch" ? "Additional instruction (optional)" : workspace === "anatomy" ? "Human Anatomy Prompt" : "Your Prompt"}</Text>
               <TextInput
@@ -1295,7 +1301,7 @@ function Home({ accessToken, userId }: AppProps) {
               />
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
-                  {workspace === "sketch" ? "Your drawing guides the image directly. Leave the instruction empty to use the default illustration style." : workspace === "anatomy"
+                  {workspace === "sketch" ? "Create a finished colour image on a white background, ready for 3D conversion. Human anatomy receives extra structure checks. Add the subject or intended view if needed." : workspace === "anatomy"
                     ? "Anatomy mode enforces a human-anatomy route and validates the requested organ and view."
                     : "Raw mode sends your prompt directly to the base FLUX model without enhancement, memory, evaluation, or retries."}
                 </Text>

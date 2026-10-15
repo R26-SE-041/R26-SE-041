@@ -9,6 +9,6 @@ for directory in ("studio", "shared", "agents"):
         raise SystemExit(1)
 subprocess.run([sys.executable,"-m","pytest",
     "tests/test_studio.py","tests/test_studio_auth.py","tests/test_vercel_routing.py","tests/test_studio_conversations.py","tests/test_studio_repository.py","tests/test_sketch.py",
-    "tests/test_image_policies.py","tests/test_auto_labeling.py","tests/test_label_placement.py","tests/test_pdf_sources.py",
-    "tests/test_modal_accounts.py","tests/test_modal_remote.py"],
+    "tests/test_sketch_pipeline.py","tests/test_sketch_agent.py","tests/test_image_policies.py","tests/test_auto_labeling.py","tests/test_label_placement.py","tests/test_pdf_sources.py",
+    "tests/test_modal_accounts.py","tests/test_modal_remote.py","tests/test_threed_agent.py"],
     cwd=ROOT / "backend",check=True)

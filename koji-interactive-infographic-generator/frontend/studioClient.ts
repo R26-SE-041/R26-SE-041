@@ -32,8 +32,10 @@ export function requestId(): string {
 }
 export async function waitJob(id: string, onProgress?: (stage: string) => void): Promise<StudioJob> {
   const started = Date.now();
-  while (Date.now()-started < 60*60*1000) {
+  let maxWaitMs = 60*60*1000;
+  while (Date.now()-started < maxWaitMs) {
     const job = await studioRequest<StudioJob>("/studio/jobs/"+encodeURIComponent(id));
+    if (job.kind === "threed") maxWaitMs = 75*60*1000;
     onProgress?.(job.stage);
     if (job.status === "completed") return job;
     if (job.status === "failed") throw new Error(job.error || "Job failed. Retry from Jobs.");

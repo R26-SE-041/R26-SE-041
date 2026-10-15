@@ -79,19 +79,40 @@ class Pipeline:
             if not handle:
                 raise RuntimeError("Model service returned no job ID")
             self.checkpoint(job,call_id=handle,call_started=time.time())
-        max_wait = 55*60 if service == "threed" else 10*60
+        # A 3D Modal call can run for 60 minutes, plus container initialization.
+        # The previous 55-minute deadline discarded a still-running GPU job.
+        max_wait = 70*60 if service == "threed" else 10*60
         route = "/convert/result/" if service == "threed" else "/generate/result/"
-        while time.time() - job["state"]["call_started"] < max_wait:
-            response = requests.get(job["endpoints"][service]+route+handle,timeout=(10,90))
-            if response.status_code == 202:
+        last_stage = None
+        while True:
+            # Poll once even on recovery after the deadline: a finished result
+            # must be saved rather than thrown away because the worker restarted.
+            expired = time.time() - job["state"]["call_started"] >= max_wait
+            try:
+                response = requests.get(job["endpoints"][service]+route+handle,timeout=(10,90))
+                if response.status_code in {408,429,502,503,504}:
+                    response.raise_for_status()
+            except requests.RequestException:
+                if expired:
+                    raise RuntimeError("Could not retrieve the model result before the deadline.") from None
                 time.sleep(3)
                 continue
-            response.raise_for_status()
+            if response.status_code == 202:
+                if expired:
+                    break
+                if service == "threed":
+                    stage = response.json().get("stage")
+                    if stage in {"preparing image", "generating shape", "simplifying mesh", "synthesizing texture", "exporting model"} and stage != last_stage:
+                        self.repo.update_job(job,stage=stage)
+                        last_stage = stage
+                time.sleep(3)
+                continue
             data = response.json()
             if data.get("error"):
                 raise RuntimeError(str(data["error"])[:500])
+            response.raise_for_status()
             return data
-        raise RuntimeError("Model generation timed out. Retry from history.")
+        raise RuntimeError("3D conversion exceeded its processing deadline. Check the GPU logs before retrying." if service == "threed" else "Model generation timed out. Retry from history.")
 
     def run(self,job):
         kind = job["kind"]
@@ -133,6 +154,12 @@ class Pipeline:
             image = output.get("image_base64")
             final_prompt = output.get("prompt") or final_prompt
             metadata = output.get("generation_metadata")
+            anatomy = output.get("anatomy_spec") or {"is_anatomy": False}
+            warning = output.get("quality_warning")
+            retries = output.get("retry_count", 0)
+            payload = {"schema_version": "1.0", "final_prompt": final_prompt,
+                       "anatomy_spec": anatomy, "route": "anatomy" if anatomy.get("is_anatomy") else "generic",
+                       "anatomy_mode": "general" if anatomy.get("is_anatomy") else None}
         else:
             best = None
             feedback = p.get("feedback")
