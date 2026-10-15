@@ -34,6 +34,30 @@ for name,digest in manifest['files'].items():
 print('Tested CPU backend artifact verified')
 PY
 mkdir -p "$root/deploy-environments" "$root/deploy-backups"
+# Keep two previous releases and the active environment under the deployment lock.
+# Only generated release directories with the expected contents are eligible.
+python3 - "$root" <<'PY'
+from pathlib import Path
+import re, shutil, sys
+root = Path(sys.argv[1]).resolve()
+backups, environments = root / 'deploy-backups', root / 'deploy-environments'
+managed = re.compile(r'[a-f0-9]{40}\.[A-Za-z0-9]{8}')
+def generated(path, parent):
+    return (path.is_dir() and not path.is_symlink() and path.resolve().parent == parent
+            and managed.fullmatch(path.name))
+releases = sorted((path for path in backups.iterdir() if generated(path, backups)
+                   and {item.name for item in path.iterdir()} <= {'studio', 'shared', '.venv', 'release.json'}
+                   and (path / 'release.json').is_file()), key=lambda path: path.stat().st_mtime, reverse=True)
+for path in releases[2:]:
+    shutil.rmtree(path)
+    print('Removed old release backup:', path.name)
+protected = {(root / 'backend/.venv').resolve()}
+protected.update((path / '.venv').resolve() for path in backups.iterdir() if (path / '.venv').exists())
+for path in environments.iterdir():
+    if generated(path, environments) and path.resolve() not in protected:
+        shutil.rmtree(path)
+        print('Removed unused release environment:', path.name)
+PY
 # Keep virtual environments at stable absolute paths across activation.
 environment="$(mktemp -d "$root/deploy-environments/$sha.XXXXXXXX")"
 python3 -m venv "$environment"

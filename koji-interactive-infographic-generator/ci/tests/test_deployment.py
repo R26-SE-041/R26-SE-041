@@ -255,6 +255,22 @@ class ActivationTests(unittest.TestCase):
             (backend / "shared/safety.py").write_text("old shared code")
             (backend / ".env").write_text("PRIVATE=preserve")
             (backend / "release.json").write_text('{"commit":"previous"}')
+            # Repeated releases must not exhaust the host's disk. Retain the two
+            # latest rollback environments and never prune an unmanaged folder.
+            environments = root / "deploy-environments"
+            environments.mkdir()
+            backups = root / "deploy-backups"
+            backups.mkdir()
+            for index in range(4):
+                name = str(index) * 40 + ".abcdefgh"
+                old_environment = environments / name
+                old_environment.mkdir()
+                old_backup = backups / name
+                old_backup.mkdir()
+                (old_backup / "release.json").write_text('{}')
+                (old_backup / ".venv").symlink_to(old_environment, target_is_directory=True)
+                os.utime(old_backup, (index + 1, index + 1))
+            (environments / "operator-managed").mkdir()
 
             def executable(file, content):
                 file.write_text("#!/usr/bin/env bash\n" + content)
@@ -292,6 +308,11 @@ class ActivationTests(unittest.TestCase):
                                          "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
                                     capture_output=True, text=True, timeout=15)
             self.assertEqual((backend / ".env").read_text(), "PRIVATE=preserve")
+            for index in range(4):
+                name = str(index) * 40 + ".abcdefgh"
+                self.assertEqual((environments / name).exists(), index >= 2)
+                self.assertEqual((backups / name).exists(), index >= 2)
+            self.assertTrue((environments / "operator-managed").is_dir())
             if fail_health:
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertEqual((backend / "studio/main.py").read_text(), "old API")
@@ -304,8 +325,9 @@ class ActivationTests(unittest.TestCase):
                 self.assertEqual((backend / "studio/main.py").read_text(), "new API")
                 self.assertTrue((backend / ".venv").is_symlink())
                 self.assertEqual(json.loads((backend / "release.json").read_text())["commit"], commit)
-                backups = list((root / "deploy-backups").iterdir())
-                self.assertEqual((backups[0] / "studio/main.py").read_text(), "old API")
+                release_backups = [path for path in backups.iterdir() if (path / "studio/main.py").is_file()]
+                self.assertEqual(len(release_backups), 1)
+                self.assertEqual((release_backups[0] / "studio/main.py").read_text(), "old API")
 
     def test_success_preserves_env_and_retains_previous_release(self):
         self.exercise_activation(False)

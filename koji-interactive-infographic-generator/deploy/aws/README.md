@@ -77,6 +77,12 @@ Install `deploy_service.py` and `activate.sh` in `/home/ubuntu/koji/deploy-contr
 
 The activation script is installed by an administrator. Changes to `activate.sh` or the receiver require updating those installed control files over pinned SSH. Routine application changes are fully automatic. Receiver/activation logs remain on EC2, outside public responses. A dedicated production environment branch policy restricts release credentials to `main` and approved release tags.
 
+Before building an environment, activation retains the two newest generated
+rollback backups and removes older generated backups and unreferenced generated
+environments under the deployment lock. The active environment and environments
+referenced by remaining backups are preserved. Operator-managed directories and
+application data are outside this cleanup.
+
 The existing Ubuntu deployment administrator can restart the two Koji services. No pull-request code runs on EC2; public-repository tests use GitHub-hosted runners. Keep the production token only in encrypted GitHub secrets and the private server environment. Never put it in repository variables or browser builds.
 
 ## Validation
