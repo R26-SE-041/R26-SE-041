@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from 'axios'
 import type { AskResponse, ChunkReference, DocumentItem, HistoryItem, Language, QueryResponse, TranscribeResponse } from '@/types'
 import { createClient } from './supabase'
 
-import { API_URL as BASE_URL, requireBackend } from '@/lib/config'
+import { API_URL as BASE_URL, AUTH_REQUIRED, requireBackend } from '@/lib/config'
 // A RAG request includes: retrieval (BGE embed + rerank now 120s), plus Gemma A100 cold-start
 // (up to 480s server-side). Keep the browser deadline above the full server budget.
 const RAG_REQUEST_TIMEOUT_MS = 600_000
@@ -25,19 +25,57 @@ function createApiClient(): AxiosInstance {
       let message: string
       if (error.code === 'ECONNABORTED') {
         const url: string = error.config?.url ?? ''
-        message = url.includes('/ask') || url.includes('/query')
+        message = url.includes('/ask-jobs')
+          ? 'Could not check your answer status. Your question is kept. Use Retry Answer to resume the same request.'
+          : url.includes('/ask') || url.includes('/query')
           ? 'The search timed out. The AI service may be warming up; please try again shortly.'
           : 'The upload timed out while indexing. Please retry.'
+      } else if (error.code === 'ERR_NETWORK' && !error.response) {
+        message = 'The connection to the server was interrupted. Your question is kept. Check your connection, then retry.'
       } else {
         message = error.response?.data?.detail ?? error.message ?? 'The request failed.'
       }
-      return Promise.reject(new Error(message))
+      return Promise.reject(Object.assign(new Error(message), { status: error.response?.status }))
     },
   )
   return instance
 }
 
 const api = createApiClient()
+
+// Keep only temporary request IDs in memory. A retry resumes the same job;
+// questions/history remain persisted through the existing cloud history flow.
+const pendingAnswers = new Map<string, { requestId: string; jobId?: string; expires: number }>()
+async function pollAnswer(payload: Record<string, unknown>): Promise<AskResponse> {
+  const { data } = await createClient().auth.getSession()
+  const key = JSON.stringify([data.session?.user?.id, payload])
+  for (const [id, value] of pendingAnswers) if (value.expires < Date.now()) pendingAnswers.delete(id)
+  let pending = pendingAnswers.get(key)
+  if (!pending) {
+    if (pendingAnswers.size >= 20) throw new Error('Too many pending questions. Please wait before asking again.')
+    pending = { requestId: crypto.randomUUID(), expires: Date.now() + 15 * 60_000 }
+    pendingAnswers.set(key, pending)
+  }
+  try {
+    if (!pending.jobId) {
+      const started = await api.post<{job_id:string}>('/api/v1/documents/ask-jobs', payload,
+        { headers: { 'Idempotency-Key': pending.requestId }, timeout: 15_000 })
+      pending.jobId = started.data.job_id
+    }
+    const deadline = Date.now() + RAG_REQUEST_TIMEOUT_MS
+    while (Date.now() < deadline) {
+      const { data: job } = await api.get<{status:string;result?:AskResponse;error?:string}>(
+        `/api/v1/documents/ask-jobs/${encodeURIComponent(pending.jobId)}`, { timeout: 15_000 })
+      if (job.status === 'complete' && job.result) { pendingAnswers.delete(key); return job.result }
+      if (job.status === 'failed') { pendingAnswers.delete(key); throw new Error(job.error || 'Answer preparation failed. Please retry.') }
+      await new Promise(resolve => setTimeout(resolve, 1500))
+    }
+    throw new Error('Your answer is still being prepared. Use Retry Answer to check the same request.')
+  } catch (error) {
+    if ([400, 404, 409, 422].includes((error as {status?:number}).status ?? 0)) pendingAnswers.delete(key)
+    throw error
+  }
+}
 
 export async function prepareVoice(language: Language): Promise<void> {
   await api.post('/api/v1/voice/prepare', { language }, { timeout: 10_000 })
@@ -88,13 +126,15 @@ export async function askDocument(
   detectedLanguage?: string,
   documentGrounded = true,
 ): Promise<AskResponse> {
-  const { data } = await api.post<AskResponse>('/api/v1/documents/ask', {
+  const payload = {
     transcript,
     language,
     corrected_transcript: correctedTranscript ?? null,
     detected_language: detectedLanguage ?? language,
     document_grounded: documentGrounded,
-  }, { timeout: RAG_REQUEST_TIMEOUT_MS })
+  }
+  if (AUTH_REQUIRED) return pollAnswer(payload)
+  const { data } = await api.post<AskResponse>('/api/v1/documents/ask', payload, { timeout: RAG_REQUEST_TIMEOUT_MS })
   return data
 }
 
