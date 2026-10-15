@@ -56,6 +56,7 @@ def _generator(monkeypatch, outputs):
     class Processor:
         tokenizer = SimpleNamespace(eos_token_id=0)
         def apply_chat_template(self, *args, **kwargs):
+            self.messages = args[0]
             return Inputs(input_ids=Tokens([[0]]))
         def decode(self, tokens, **kwargs):
             return outputs[tokens[0]]
@@ -88,6 +89,10 @@ def test_generator_healthy_answer_uses_only_one_model_call(monkeypatch):
     instance, payload, calls, _ = _generator(monkeypatch, ["බල්ලන් වෘකයන්ගෙන් පරිණාමය විය."])
     instance._generate(payload, document_only=True)
     assert len(calls) == 1
+    prompt = instance.processor.messages[0]["content"]
+    assert "natural, simple Sinhala" in prompt
+    assert "mechanically transliterating" in prompt
+    assert "Use ONLY" in prompt
 
 
 def test_generator_never_returns_corrupt_text_after_bounded_retry(monkeypatch):

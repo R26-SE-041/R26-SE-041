@@ -44,7 +44,12 @@ class AnswerRequest(BaseModel):
 def _messages(payload: AnswerRequest, *, document_only: bool) -> list[dict[str, str]]:
     language_note = {
         "tamil": "Answer entirely in Tamil Unicode script. Transliterate technical terms into Tamil; do not use Latin letters.",
-        "sinhala": "Answer entirely in Sinhala Unicode script. Transliterate technical terms into Sinhala; do not use Latin letters.",
+        "sinhala": (
+            "Answer in natural, simple Sinhala Unicode script. Use short sentences and "
+            "familiar everyday words. Explain technical concepts simply rather than "
+            "inventing Sinhala words or mechanically transliterating English. "
+            "Do not introduce names or facts that are absent from the evidence."
+        ),
     }.get(payload.language.lower(), "Answer clearly and completely in English.")
     policy = payload.tutor_instructions.strip()
     memory = payload.memento or {}
