@@ -36,7 +36,9 @@ async def extract_text(image_bytes: bytes) -> str:
 
     return response.json().get("text", "")
 
-async def extract_lines(image_bytes: bytes) -> list:
+
+async def extract_result(image_bytes: bytes) -> dict:
+    """Return the complete OneClick OCR result from the Modal endpoint."""
     url = settings.trocr_lines_modal_url
     if not url:
         raise ValueError("TROCR_LINES_MODAL_URL is not set.")
@@ -47,4 +49,9 @@ async def extract_lines(image_bytes: bytes) -> list:
         response = await client.post(url, json=payload)
         response.raise_for_status()
 
-    return response.json().get("lines", [])
+    return response.json()
+
+
+async def extract_lines(image_bytes: bytes) -> list:
+    """Compatibility wrapper returning only detected lines."""
+    return (await extract_result(image_bytes)).get("lines", [])

@@ -1,426 +1,365 @@
-"""
-Sinhala Handwritten OCR — Modal Serverless Function
+"""Sinhala paragraph OCR service using the final OneClick inference pipeline.
 
-Model: sarmisarmitha/trocr-sinhala-handwritten-ocr
-  - VisionEncoderDecoderModel fine-tuned for Sinhala handwritten notes (v3)
-  - Fine-tuned from eshangj/TrOCR-Sinhala-finetuned
-  - ~315M params (F32), Apache-2.0, open-source
-  - Files: config.json, model.safetensors, processor_config.json,
-           tokenizer.json, tokenizer_config.json
-  - Language tag: si (Sinhala)
+Primary model files are read from a persistent Modal Volume. The secondary
+model used by the notebook is cached in the container image. Both models are
+loaded once per container and are used for inference only.
 
-Loader strategy: use ViTImageProcessor (reads processor_config.json) +
-AutoTokenizer to avoid compatibility issues with AutoProcessor.
+Upload the complete primary model folder before deployment:
+  modal volume create sinhala-trocr-models
+  modal volume put sinhala-trocr-models ./sinhala_trocr_extra_data_v1 /sinhala_trocr_extra_data_v1
 
-Warm state: 10 mins (scaledown_window=600)
-
-Deploy:
+Deploy without changing the live service until ready:
   modal deploy modal_functions/trocr_app.py
-
---- KEY FIXES vs previous version ---
-
-1. PREPROCESSING  (was: h=15 NLM + aggressive sharpening)
-   - Reduced NLM denoising h=15→7 to preserve thin diacritical marks
-   - Removed Gaussian blur + unsharp mask (they smear ් al-lakuna etc.)
-   - Reduced CLAHE clipLimit=3.0→2.0
-   - Model receives the lightly-enhanced image without grayscale conversion
-     (keeps colour contrast between ink and paper)
-
-2. MODEL INPUT ASPECT RATIO  (was: direct Resize(384,384))
-   - Added pad_to_square_and_resize(): pads short axis with white before
-     resizing so wide line crops are not squashed to square (which distorted
-     every character beyond recognition)
-
-3. LINE SEGMENTATION  (was: kernel_width=img_w//25, iterations=2)
-   - Tighter horizontal kernel: img_w//40 (was img_w//25)
-   - Single dilation pass (was 2) — prevents bridging adjacent lines
-   - Overlap-merge step: bounding boxes whose Y ranges overlap within 8px
-     are merged into one, preventing the same line being split at gaps
-   - Crops taken from the *preprocessed colour image* (not the binary mask)
-
-4. CONFIDENCE SCORING  (was: logits.max() — always near-0 log-prob)
-   - Now extracts log-prob of the *actually chosen token* at each step
-   - Gives a real per-line confidence in [0,1] range
-   - Sequence confidence = exp(mean_log_prob_of_chosen_tokens)
 """
 
 import io
+import json
+import threading
+from pathlib import Path
+
 import modal
 
-HF_MODEL = "sarmisarmitha/trocr-sinhala-handwritten-ocr"
-HF_SUBFOLDER = "02_final_model"
+
+PRIMARY_VOLUME_NAME = "sinhala-trocr-models"
+PRIMARY_VOLUME_ROOT = "/models"
+PRIMARY_MODEL_DIR = f"{PRIMARY_VOLUME_ROOT}/sinhala_trocr_extra_data_v1"
+SECONDARY_MODEL_ID = "eshangj/TrOCR-Sinhala-finetuned"
 HF_CACHE = "/hf_cache"
+
+primary_volume = modal.Volume.from_name(PRIMARY_VOLUME_NAME, create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "torch==2.3.1",
-        "torchvision==0.18.1",
-        "transformers==4.57.6",
+        "torch==2.6.0",
+        "torchvision==0.21.0",
+        "transformers==5.18.0",
         "pillow==10.3.0",
         "sentencepiece==0.2.0",
         "accelerate==0.30.1",
         "opencv-python-headless==4.10.0.84",
         "fastapi[standard]",
     )
-    .env({"HF_HOME": HF_CACHE, "TRANSFORMERS_OFFLINE": "0"})
+    .env({"HF_HOME": HF_CACHE})
     .run_commands(
-        "python -c 'import os; os.environ[\"HF_HOME\"] = \"/hf_cache\"; from huggingface_hub import snapshot_download; "
-        f"snapshot_download(repo_id=\"{HF_MODEL}\", allow_patterns=[\"{HF_SUBFOLDER}/*\"]); "
-        "print(\"Download complete\")'",
-        gpu="T4"
-    )
-    .run_commands(
-        "python -c \"import base64; exec(base64.b64decode('aW1wb3J0IGpzb24sIG9zLCBzaHV0aWwKZGVmIGZkKGQpOgogICAgaWYgaXNpbnN0YW5jZShkLCBkaWN0KToKICAgICAgICBpZiBkLmdldCgnZWFybHlfc3RvcHBpbmcnKSBpcyBOb25lIGFuZCAnZWFybHlfc3RvcHBpbmcnIGluIGQ6IGRbJ2Vhcmx5X3N0b3BwaW5nJ10gPSBGYWxzZQogICAgICAgIFtmZCh2KSBmb3IgdiBpbiBkLnZhbHVlcygpXQogICAgZWxpZiBpc2luc3RhbmNlKGQsIGxpc3QpOiBbZmQoaSkgZm9yIGkgaW4gZF0KZm9yIGMgaW4gWycvaGZfY2FjaGUnLCAnL3Jvb3QvLmNhY2hlL2h1Z2dpbmdmYWNlJ106CiAgICBmb3IgciwgXywgZnMgaW4gb3Mud2FsayhjKToKICAgICAgICBmb3IgZiBpbiBmczoKICAgICAgICAgICAgaWYgZiA9PSAncHJvY2Vzc29yX2NvbmZpZy5qc29uJzoKICAgICAgICAgICAgICAgIHAgPSBvcy5wYXRoLmpvaW4ociwgZikKICAgICAgICAgICAgICAgIGRlc3QgPSBvcy5wYXRoLmpvaW4ociwgJ3ByZXByb2Nlc3Nvcl9jb25maWcuanNvbicpCiAgICAgICAgICAgICAgICBpZiBub3Qgb3MucGF0aC5leGlzdHMoZGVzdCk6CiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICBkID0ganNvbi5sb2FkKG9wZW4ocCkpCiAgICAgICAgICAgICAgICAgICAgICAgIGlmICdpbWFnZV9wcm9jZXNzb3InIGluIGQ6CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBvcGVuKGRlc3QsICd3Jykud3JpdGUoanNvbi5kdW1wcyhkWydpbWFnZV9wcm9jZXNzb3InXSkpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBwcmludCgnZXh0cmFjdGVkIGltYWdlX3Byb2Nlc3NvciB0bycsIGRlc3QpCiAgICAgICAgICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBzaHV0aWwuY29weShwLCBkZXN0KQogICAgICAgICAgICAgICAgICAgIGV4Y2VwdDogcGFzcwogICAgICAgICAgICBpZiBmLmVuZHN3aXRoKCcuanNvbicpOgogICAgICAgICAgICAgICAgcCA9IG9zLnBhdGguam9pbihyLCBmKQogICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgIGQgPSBqc29uLmxvYWQob3BlbihwKSkKICAgICAgICAgICAgICAgICAgICBmZChkKQogICAgICAgICAgICAgICAgICAgIG9wZW4ocCwgJ3cnKS53cml0ZShqc29uLmR1bXBzKGQpKQogICAgICAgICAgICAgICAgICAgIHByaW50KCdwYXRjaGVkJywgcCkKICAgICAgICAgICAgICAgIGV4Y2VwdDogcGFzcw==').decode('utf-8'))\""
-    )
-    .run_commands(
-        "python -c 'import os; os.environ[\"HF_HOME\"] = \"/hf_cache\"; from transformers import ViTImageProcessor, AutoTokenizer, VisionEncoderDecoderModel; "
-        f"ViTImageProcessor.from_pretrained(\"{HF_MODEL}\", subfolder=\"{HF_SUBFOLDER}\", local_files_only=True); "
-        f"AutoTokenizer.from_pretrained(\"{HF_MODEL}\", subfolder=\"{HF_SUBFOLDER}\", local_files_only=True); "
-        f"VisionEncoderDecoderModel.from_pretrained(\"{HF_MODEL}\", subfolder=\"{HF_SUBFOLDER}\", local_files_only=True); "
-        "print(\"Sinhala TrOCR model cached successfully\")'"
+        "python -c \"from huggingface_hub import snapshot_download; "
+        f"snapshot_download(repo_id='{SECONDARY_MODEL_ID}'); "
+        "print('Secondary TrOCR model cached')\""
     )
 )
 
-app = modal.App("sinhala-trocr-ocr-service", image=image)  # App name unchanged for endpoint URL stability
+app = modal.App("sinhala-trocr-ocr-service", image=image)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-
-
-def _light_preprocess(cv_img):
-    from PIL import Image
-    import cv2
-    
-    # The image is already enhanced by SRCNN (shadow removal + super resolution).
-    # We just need to ensure it's in the correct format for the segmentation/OCR pipeline.
-    # The OCR model expects RGB.
-    img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(img_rgb)
-
-
-def _segment_lines_legacy(cv_img_bgr, preprocessed_pil):
-    """
-    Segment a full-page handwritten image into per-line crops.
-
-    Strategy:
-      1. Binarise with Otsu on grayscale
-      2. Dilate horizontally with a NARROW kernel (img_w//40) to bridge
-         letter gaps within a line without bridging the gap between lines.
-         Use only 1 dilation pass (the old code used 2, which could bridge
-         adjacent lines).
-      3. Find external contours → bounding boxes
-      4. Filter noise (too-small boxes)
-      5. Merge boxes that overlap vertically within 8px (handles the case
-         where one line was split into two contours at a word gap)
-      6. Sort by Y (top-to-bottom reading order)
-      7. Return crops from the *preprocessed colour image* (not binary mask)
-    """
+def component_groups(image, tolerance):
+    """Detect connected handwriting bodies exactly as in OneClick."""
     import cv2
     import numpy as np
-    from PIL import Image
 
-    # Use the preprocessed colour image for cropping (better quality than raw)
-    cv_preprocessed = cv2.cvtColor(np.array(preprocessed_pil), cv2.COLOR_RGB2BGR)
-    img_h, img_w = cv_preprocessed.shape[:2]
+    gray = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2GRAY)
+    height, width = gray.shape
+    background = cv2.GaussianBlur(gray, (0, 0), max(5, min(height, width) * 0.05))
+    flattened = cv2.divide(gray, background, scale=255)
+    _, mask = cv2.threshold(
+        flattened, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    candidates = []
+    for index in range(1, count):
+        x, y, component_width, component_height, area = map(int, stats[index])
+        if (
+            area >= 15
+            and component_height >= 5
+            and component_width / max(1, component_height) < 15
+            and component_height < height * 0.5
+            and x > 0
+            and y > 0
+            and x + component_width < width
+            and y + component_height < height
+        ):
+            candidates.append(index)
+    if not candidates:
+        raise ValueError("No text bodies detected. Crop the paragraph area.")
 
-    # Binarise for contour detection
-    gray = cv2.cvtColor(cv_preprocessed, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    # Narrow horizontal kernel — bridges letter/word gaps within a line
-    # but not the gap between adjacent lines (old code used img_w//25 which was too wide)
-    kernel_w = max(20, img_w // 40)
-    kernel_h = max(3, img_h // 200)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_w, kernel_h))
-    dilated = cv2.dilate(thresh, kernel, iterations=1)  # 1 pass (old: 2 passes)
-
-    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    img_area = img_w * img_h
-    raw_boxes = []
-    for c in contours:
-        x, y, w, h = cv2.boundingRect(c)
-        # Filter: must be wide enough and tall enough to be a text line,
-        # and not so large that it covers most of the page (noise guard)
-        if (w > max(30, img_w * 0.05)
-                and h > max(15, img_h * 0.015)
-                and (w * h) < img_area * 0.95):
-            raw_boxes.append((x, y, x + w, y + h))
-
-    if not raw_boxes:
-        # A blank/non-text page must not be sent to the generative decoder;
-        # TrOCR will otherwise invent a plausible-looking character sequence.
-        return []
-
-    # --- Overlap-merge: join boxes whose Y ranges overlap within 8px ---
-    # Sorted by top-Y for the merge sweep
-    raw_boxes.sort(key=lambda b: b[1])
-    merged = [list(raw_boxes[0])]
-    for x1, y1, x2, y2 in raw_boxes[1:]:
-        prev = merged[-1]
-        # If this box's top (y1) is within 8px of the previous box's bottom (prev[3])
-        if y1 <= prev[3] + 8:
-            # Merge: expand the previous box to encompass this one
-            prev[0] = min(prev[0], x1)
-            prev[1] = min(prev[1], y1)
-            prev[2] = max(prev[2], x2)
-            prev[3] = max(prev[3], y2)
+    heights = np.array([stats[index, 3] for index in candidates])
+    weights = np.array([stats[index, 4] for index in candidates])
+    order = np.argsort(heights)
+    median_index = np.searchsorted(np.cumsum(weights[order]), weights.sum() / 2)
+    typical = float(heights[order[median_index]])
+    bodies = [index for index in candidates if stats[index, 3] >= 0.65 * typical]
+    groups = []
+    for index in sorted(bodies, key=lambda key: stats[key, 1] + stats[key, 3] / 2):
+        center = float(stats[index, 1] + stats[index, 3] / 2)
+        if groups and abs(
+            center
+            - np.median([stats[item, 1] + stats[item, 3] / 2 for item in groups[-1]])
+        ) <= float(tolerance) * typical:
+            groups[-1].append(index)
         else:
-            merged.append([x1, y1, x2, y2])
+            groups.append([index])
 
-    # Sort final boxes top-to-bottom (reading order)
-    merged.sort(key=lambda b: b[1])
-
-    # Crop with padding from the preprocessed colour image
-    crops = []
-    for x1, y1, x2, y2 in merged:
-        h = y2 - y1
-        pad_y = max(8, int(h * 0.12))
-        pad_x = max(4, int((x2 - x1) * 0.02))
-        cy1 = max(0, y1 - pad_y)
-        cy2 = min(img_h, y2 + pad_y)
-        cx1 = max(0, x1 - pad_x)
-        cx2 = min(img_w, x2 + pad_x)
-        crop_bgr = cv_preprocessed[cy1:cy2, cx1:cx2]
-        crops.append(Image.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)))
-
-    return crops
+    groups = [
+        group
+        for group in groups
+        if len(group) >= 3
+        or (
+            max(stats[index, 0] + stats[index, 2] for index in group)
+            - min(stats[index, 0] for index in group)
+            >= 3 * typical
+            and sum(stats[index, 4] for index in group) >= typical * typical * 0.8
+        )
+    ]
+    return mask, labels, stats, groups, typical
 
 
-def _segment_lines(cv_img_bgr, preprocessed_pil):
-    """Return one crop per physical text line on a ruled page."""
+def straighten_text(image, tolerance):
+    """Apply the notebook's conservative page deskewing."""
     import cv2
     import numpy as np
     from PIL import Image
 
-    cv_preprocessed = cv2.cvtColor(np.array(preprocessed_pil), cv2.COLOR_RGB2BGR)
-    img_h, img_w = cv_preprocessed.shape[:2]
+    _, _, stats, groups, typical = component_groups(image, tolerance)
+    slopes = []
+    for group in groups:
+        centers = [
+            (stats[index, 0] + stats[index, 2] / 2, stats[index, 1] + stats[index, 3] / 2)
+            for index in group
+        ]
+        span = max(x for x, _ in centers) - min(x for x, _ in centers)
+        for position, (x, y) in enumerate(centers):
+            for next_x, next_y in centers[position + 1 :]:
+                if abs(next_x - x) > max(3 * typical, span * 0.4):
+                    slopes.append((next_y - y) / (next_x - x))
+    angle = float(np.degrees(np.arctan(np.median(slopes)))) if slopes else 0.0
+    if not 0.5 <= abs(angle) <= 8:
+        return image
 
-    gray = cv2.cvtColor(cv_preprocessed, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(
-        gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    width, height = image.size
+    matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1)
+    cosine, sine = abs(matrix[0, 0]), abs(matrix[0, 1])
+    new_width = int(np.ceil(height * sine + width * cosine))
+    new_height = int(np.ceil(height * cosine + width * sine))
+    matrix[0, 2] += new_width / 2 - width / 2
+    matrix[1, 2] += new_height / 2 - height / 2
+    fill = tuple(int(value) for value in np.median(np.asarray(image).reshape(-1, 3), axis=0))
+    rotated = cv2.warpAffine(
+        np.asarray(image),
+        matrix,
+        (new_width, new_height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=fill,
     )
+    return Image.fromarray(rotated)
 
-    # Remove notebook/table rules. Otherwise the contours of one physical text
-    # line can be decoded as several crops, producing repeated false words.
-    horizontal_kernel = cv2.getStructuringElement(
-        cv2.MORPH_RECT, (max(40, img_w // 4), 1)
-    )
-    vertical_kernel = cv2.getStructuringElement(
-        cv2.MORPH_RECT, (1, max(30, img_h // 3))
-    )
-    horizontal_rules = cv2.morphologyEx(
-        thresh, cv2.MORPH_OPEN, horizontal_kernel
-    )
-    vertical_rules = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vertical_kernel)
-    rules = cv2.bitwise_or(horizontal_rules, vertical_rules)
-    text_mask = cv2.bitwise_and(thresh, cv2.bitwise_not(rules))
 
-    text_mask = cv2.morphologyEx(
-        text_mask,
-        cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
-    )
-    row_ink = np.count_nonzero(text_mask, axis=1)
-    active_rows = np.flatnonzero(row_ink >= max(3, int(img_w * 0.002)))
-    if active_rows.size == 0:
-        return []
+def detect_lines(image, gap=0.65, padding=8):
+    """Return OneClick line crops and top-to-bottom bounding boxes."""
+    import numpy as np
 
-    # Horizontal ink projection groups separated words on the same baseline.
-    join_gap = max(4, int(img_h * 0.035))
-    bands = []
-    start = previous = int(active_rows[0])
-    for row in active_rows[1:]:
-        row = int(row)
-        if row - previous > join_gap:
-            bands.append((start, previous + 1))
-            start = row
-        previous = row
-    bands.append((start, previous + 1))
+    if min(image.size) < 16:
+        raise ValueError("Image too small.")
+    image = straighten_text(image, gap)
+    mask, _, stats, groups, _ = component_groups(image, gap)
+    width, height = image.size
+    ranges = [
+        (
+            int(min(stats[index, 1] for index in group)),
+            int(max(stats[index, 1] + stats[index, 3] for index in group)),
+        )
+        for group in groups
+    ]
+    ranges.sort()
+    if not ranges:
+        raise ValueError("No complete text lines detected. Crop to the text area.")
 
-    crops = []
-    min_band_height = max(6, int(img_h * 0.025))
-    for y1, y2 in bands:
-        if y2 - y1 < min_band_height:
+    crops, boxes = [], []
+    for index, (top, bottom) in enumerate(ranges):
+        low = 0 if index == 0 else (ranges[index - 1][1] + top) // 2
+        high = height if index == len(ranges) - 1 else (bottom + ranges[index + 1][0]) // 2
+        y0 = max(low, top - int(padding))
+        y1 = min(high, bottom + int(padding))
+        columns = np.flatnonzero(np.any(mask[top:bottom] > 0, axis=0))
+        x0 = max(0, int(columns[0]) - int(padding)) if len(columns) else 0
+        x1 = min(width, int(columns[-1]) + int(padding) + 1) if len(columns) else width
+        if x1 <= x0 or y1 <= y0:
             continue
-
-        band_mask = text_mask[y1:y2, :]
-        active_cols = np.flatnonzero(np.count_nonzero(band_mask, axis=0))
-        if active_cols.size == 0:
-            continue
-        x1, x2 = int(active_cols[0]), int(active_cols[-1]) + 1
-        if x2 - x1 < max(30, int(img_w * 0.05)):
-            continue
-
-        line_height = y2 - y1
-        pad_y = max(8, int(line_height * 0.12))
-        pad_x = max(4, int((x2 - x1) * 0.02))
-        cy1, cy2 = max(0, y1 - pad_y), min(img_h, y2 + pad_y)
-        cx1, cx2 = max(0, x1 - pad_x), min(img_w, x2 + pad_x)
-        crop_bgr = cv_preprocessed[cy1:cy2, cx1:cx2]
-        crops.append(Image.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)))
-
-    return crops
+        crops.append(image.crop((x0, y0, x1, y1)))
+        boxes.append((x0, y0, x1, y1))
+    return crops, boxes
 
 
-def _compute_confidence(outputs, generated_ids, line_idx: int) -> float:
-    """
-    Compute a real per-line confidence score from beam-search outputs.
-
-    OLD (broken): took logits.max() at each step — this is always near 0
-    log-prob regardless of actual prediction difficulty, making all lines
-    look high-confidence.
-
-    NEW: extracts the log-prob of the *actually chosen token* at each
-    decoding step. The per-line confidence is exp(mean_log_prob_chosen),
-    giving a value in (0, 1] that reflects true model certainty.
-    """
-    import math
-    import torch
-    import torch.nn.functional as F
-
-    if not outputs.scores:
-        return 0.0
-
-    # Beam-search scores are already aligned one-to-one with the returned
-    # sequences. Indexing outputs.scores directly is incorrect because that
-    # tensor is laid out as batch_size * num_beams.
-    if getattr(outputs, "sequences_scores", None) is not None:
-        return max(0.0, min(1.0, math.exp(outputs.sequences_scores[line_idx].item())))
-
-    seq = generated_ids[line_idx]  # shape: (seq_len,)
-    log_probs = []
-
-    for step_idx, step_logits in enumerate(outputs.scores):
-        # step_logits shape: (batch, vocab_size)
-        token_pos = step_idx + 1  # generated_ids[0] is decoder_start_token
-        if token_pos >= seq.shape[0]:
-            break
-        chosen_token_id = seq[token_pos].item()
-        lp = F.log_softmax(step_logits[line_idx], dim=-1)[chosen_token_id].item()
-        log_probs.append(lp)
-
-    if not log_probs:
-        return 0.0
-
-    avg_log_prob = sum(log_probs) / len(log_probs)
-    return max(0.0, min(1.0, math.exp(avg_log_prob)))
+def _validate_primary_model():
+    model_dir = Path(PRIMARY_MODEL_DIR)
+    required = ["config.json"]
+    missing = [name for name in required if not (model_dir / name).is_file()]
+    weight_files = [
+        model_dir / "model.safetensors",
+        model_dir / "model.safetensors.index.json",
+        model_dir / "pytorch_model.bin",
+    ]
+    if not any(path.is_file() for path in weight_files):
+        missing.append("model.safetensors (or equivalent model weights)")
+    if missing:
+        raise FileNotFoundError(
+            f"Primary model folder {PRIMARY_MODEL_DIR} is incomplete; missing: "
+            + ", ".join(missing)
+        )
 
 
-def _contains_sinhala(text: str) -> bool:
-    """Return True only when the prediction contains Sinhala Unicode text."""
-    return any("\u0d80" <= char <= "\u0dff" for char in text)
+def _load_ocr(source, local_only):
+    from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+    processor = TrOCRProcessor.from_pretrained(source, local_files_only=local_only)
+    model, info = VisionEncoderDecoderModel.from_pretrained(
+        source, local_files_only=local_only, output_loading_info=True
+    )
+    issues = {
+        key: info.get(key, [])
+        for key in ["missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs"]
+    }
+    print(f"[OneClick OCR] Loading diagnostics for {source}:")
+    print(json.dumps(issues, ensure_ascii=False, indent=2, default=str))
+    if any(issues.values()):
+        raise RuntimeError(f"Model loading reported weight/key issues for {source}")
+    return processor, model
 
 
-# ---------------------------------------------------------------------------
-# Modal class
-# ---------------------------------------------------------------------------
-
-@app.cls(gpu="T4", scaledown_window=300)  # scales to 0 after 5 mins idle
+@app.cls(
+    gpu="T4",
+    scaledown_window=300,
+    timeout=600,
+    volumes={PRIMARY_VOLUME_ROOT: primary_volume},
+)
 class SinhalaTrOCRExtractor:
     @modal.enter()
-    def load_model(self):
+    def load_models(self):
         import torch
-        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _validate_primary_model()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_lock = threading.RLock()
 
-        # Match the working Colab inference cell exactly: load the combined
-        # TrOCRProcessor saved beside the fine-tuned model.
-        self.processor = TrOCRProcessor.from_pretrained(
-            HF_MODEL, subfolder=HF_SUBFOLDER, local_files_only=True
+        self.primary_processor, self.primary_model = _load_ocr(PRIMARY_MODEL_DIR, True)
+        self.secondary_processor, self.secondary_model = _load_ocr(
+            SECONDARY_MODEL_ID, True
         )
-        self.model = VisionEncoderDecoderModel.from_pretrained(
-            HF_MODEL, subfolder=HF_SUBFOLDER, local_files_only=True
-        ).to(self.device)
+        self.primary_model.to(self.device).eval()
+        self.secondary_model.to(self.device).eval()
 
-        # Match the explicit settings used before the Colab model was saved.
-        self.model.config.vocab_size = self.model.config.decoder.vocab_size
-        self.model.generation_config.max_length = 128
-        self.model.generation_config.early_stopping = True
-        self.model.generation_config.no_repeat_ngram_size = 0
-        self.model.generation_config.num_beams = 4
-        self.model.generation_config.do_sample = False
+        print(f"[OneClick OCR] Primary model: {PRIMARY_MODEL_DIR}")
+        print(f"[OneClick OCR] Secondary model: {SECONDARY_MODEL_ID}")
+        print("[OneClick OCR] Pipeline: deskew -> line detection -> dual recognition -> primary CLL selection -> paragraph")
+        print(f"[OneClick OCR] Device: {self.device}; request concurrency: 1")
 
-        self.model.eval()
-        print(f"[Sinhala TrOCR v3 — fixed (using ViTImageProcessor)] Model loaded on {self.device}")
+    def _ocr_batch(self, crops, processor, model):
+        import torch
+
+        texts = []
+        batch_size = 4 if self.device == "cuda" else 1
+        for start in range(0, len(crops), batch_size):
+            inputs = processor(images=crops[start : start + batch_size], return_tensors="pt")
+            with torch.inference_mode():
+                generated = model.generate(
+                    inputs.pixel_values.to(self.device),
+                    max_length=128,
+                    num_beams=4,
+                    do_sample=False,
+                )
+            texts.extend(
+                text.strip()
+                for text in processor.batch_decode(generated, skip_special_tokens=True)
+            )
+        return texts
+
+    def _score_candidates(self, crops, texts):
+        import torch
+        import torch.nn.functional as functional
+
+        values = []
+        batch_size = 4 if self.device == "cuda" else 1
+        for start in range(0, len(texts), batch_size):
+            batch_text = texts[start : start + batch_size]
+            batch_crops = crops[start : start + len(batch_text)]
+            pixels = self.primary_processor(
+                images=batch_crops, return_tensors="pt"
+            ).pixel_values.to(self.device)
+            tokens = self.primary_processor.tokenizer(
+                batch_text,
+                padding=True,
+                truncation=True,
+                max_length=128,
+                return_tensors="pt",
+            )
+            labels = tokens.input_ids.to(self.device)
+            valid = tokens.attention_mask.to(self.device).bool()
+            labels = labels.masked_fill(~valid, -100)
+            with torch.inference_mode():
+                logits = self.primary_model(pixel_values=pixels, labels=labels).logits
+                losses = functional.cross_entropy(
+                    logits.transpose(1, 2), labels, reduction="none", ignore_index=-100
+                )
+                scores = -(losses.sum(dim=1) / valid.sum(dim=1).clamp_min(1))
+            values.extend(scores.float().cpu().tolist())
+        return values
+
+    def _extract(self, request):
+        import base64
+
+        from PIL import Image, ImageOps
+
+        encoded = request.get("image_b64")
+        if not encoded:
+            raise ValueError("image_b64 is required")
+        image = ImageOps.exif_transpose(
+            Image.open(io.BytesIO(base64.b64decode(encoded)))
+        ).convert("RGB")
+        crops, boxes = detect_lines(image)
+
+        with self.model_lock:
+            primary_texts = self._ocr_batch(
+                crops, self.primary_processor, self.primary_model
+            )
+            secondary_texts = self._ocr_batch(
+                crops, self.secondary_processor, self.secondary_model
+            )
+            final_texts = list(primary_texts)
+            candidate_crops, candidate_texts, differing_lines = [], [], []
+            for index, (primary, secondary) in enumerate(
+                zip(primary_texts, secondary_texts)
+            ):
+                if not primary and secondary:
+                    final_texts[index] = secondary
+                elif primary and secondary and primary != secondary:
+                    differing_lines.append(index)
+                    candidate_crops.extend([crops[index], crops[index]])
+                    candidate_texts.extend([primary, secondary])
+            if differing_lines:
+                scores = self._score_candidates(candidate_crops, candidate_texts)
+                for score_index, line_index in enumerate(differing_lines):
+                    if scores[2 * score_index + 1] > scores[2 * score_index]:
+                        final_texts[line_index] = secondary_texts[line_index]
+
+        final_texts = [text if text.strip() else "[unclear]" for text in final_texts]
+        lines = []
+        for crop, box, text in zip(crops, boxes, final_texts):
+            buffer = io.BytesIO()
+            crop.save(buffer, format="JPEG", quality=90)
+            lines.append(
+                {
+                    "text": text,
+                    "crop_b64": base64.b64encode(buffer.getvalue()).decode("utf-8"),
+                    "confidence": None,
+                    "box": list(box),
+                }
+            )
+        paragraph = " ".join(final_texts)
+        return {"text": paragraph, "paragraph": paragraph, "lines": lines}
 
     @modal.fastapi_endpoint(method="POST")
     def extract_lines(self, request: dict) -> dict:
-        """
-        Accepts JSON: {"image_b64": "<base64-encoded image>"}
-        Returns JSON: {"lines": [{"text": "...", "crop_b64": "...", "confidence": 0.72}]}
+        return self._extract(request)
 
-        The confidence score is now a real per-line value (exp of mean log-prob
-        of chosen tokens), not the spurious near-zero value from the old code.
-        """
-        import base64
-        import numpy as np
-        import cv2
-        import torch
-        from PIL import Image
-
-        # --- Decode input ---
-        image_bytes = base64.b64decode(request["image_b64"])
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        cv_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        # --- Preprocess ---
-        preprocessed_pil = _light_preprocess(cv_img)
-
-        # Colab sends the entire uploaded image through the processor once. Do
-        # not introduce app-only word/line segmentation here.
-        page_image = preprocessed_pil.convert("RGB")
-        pixel_values = self.processor(
-            images=page_image,
-            return_tensors="pt"
-        ).pixel_values.to(self.device)
-
-        # --- Generate with beam search ---
-        with torch.no_grad():
-            outputs = self.model.generate(
-                pixel_values,
-                max_length=128,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-
-        generated_ids = outputs.sequences
-
-        # --- Decode tokens ---
-        texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-        # --- Compute real per-line confidence scores ---
-        confidences = [
-            _compute_confidence(outputs, generated_ids, i)
-            for i in range(len(texts))
-        ]
-
-        # --- Build the existing API response around the single page result ---
-        result_lines = []
-        for img, text, conf in zip([page_image], texts, confidences):
-            clean_text = text.strip()
-
-            # This endpoint is specifically for Sinhala handwriting. Reject
-            # standalone digits, Latin fragments, punctuation, and other noise
-            # hallucinated from blank or non-text crops. Digits that occur in a
-            # real Sinhala sentence remain because that line contains Sinhala.
-            if not _contains_sinhala(clean_text):
-                print(f"[TrOCR] Rejected non-Sinhala prediction: {clean_text!r}")
-                continue
-
-            buffered = io.BytesIO()
-            img.save(buffered, format="JPEG", quality=90)
-            img_b64 = base64.b64encode(buffered.getvalue()).decode()
-            result_lines.append({
-                "text": clean_text,
-                "crop_b64": img_b64,
-                "confidence": round(conf, 4),
-            })
-
-        return {"lines": result_lines}
+    @modal.fastapi_endpoint(method="POST")
+    def extract_text(self, request: dict) -> dict:
+        return self._extract(request)
