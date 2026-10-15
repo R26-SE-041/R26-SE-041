@@ -14,7 +14,7 @@ BioLearnX combines four learning experiences. Specialized agents process learnin
 | --- | --- | --- |
 | Interactive visualizations | Prompt and sketch generation, anatomy diagrams, region analysis, editable labels, history, and optional 3D conversion | [Visualization](koji-interactive-infographic-generator/README.md) |
 | Multilingual audio review | Voice questions about lecture material, retrieval-based answers, speech synthesis, and document-to-audio revision | [Audio review](baskaran-interactive-audio-communication/README.md) |
-| Adaptive assessment | Document-grounded quizzes, answer evaluation, difficulty adaptation, analytics, and topic recommendations | [Assessment](nishy-adaptive-quiz-recommender/README.md) |
+| Adaptive assessment and resource recommendation | Document-grounded quizzes, answer evaluation, difficulty adaptation, analytics, weak-topic notes, and learning resources | [Assessment](nishy-adaptive-quiz-recommender/README.md) |
 | Intelligent note generation | Handwritten-image enhancement, Sinhala OCR, and Tamil/English translation | [Image-to-notes](sarmitha-image-text-extractor-study-gen/) |
 
 ## Architecture
@@ -93,7 +93,7 @@ Visualization [evaluation tools](koji-interactive-infographic-generator/backend/
 | --- | --- | --- |
 | Kojithan P. Y — Team Leader | IT22264220 | Interactive visualizations |
 | Baskaran V | IT22172600 | Multilingual audio review |
-| Nishara T | IT22223876 | Adaptive assessment |
+| Nishara T | IT22223876 | Adaptive assessment and resource recommendation |
 | Sarmitha S | IT22637482 | Intelligent note generation |
 
 ## Contributing and license

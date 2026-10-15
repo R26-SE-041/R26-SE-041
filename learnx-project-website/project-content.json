@@ -45,7 +45,7 @@
     {
       "slug": "it22223876-nishara-component-report",
       "title": "Nishara T — Individual Component Report",
-      "description": "Adaptive assessment · IT22223876",
+      "description": "Adaptive assessment and resource recommendation · IT22223876",
       "category": "Individual component report"
     },
     {
@@ -82,7 +82,7 @@
       "name": "Nishara T",
       "id": "IT22223876",
       "role": "Team Member",
-      "component": "Adaptive assessment",
+      "component": "Adaptive assessment and resource recommendation",
       "image": "nishara",
       "email": "it22223876@my.sliit.lk"
     },
@@ -109,7 +109,6 @@
       "email": "malithi.n@sliit.lk"
     }
   ],
-  "milestoneDatesAndMarks": "Not provided; omitted per user instruction",
   "websiteStack": [
     "HTML",
     "CSS"

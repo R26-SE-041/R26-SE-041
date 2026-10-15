@@ -1,9 +1,13 @@
-# Website.pdf criteria
+# Research website review
 
-All seven sections are implemented: Home; Domain with six required research topics; Milestones with dropdown selection and assessment descriptions; Documents; Presentations; About us; Contact us.
+All seven main sections are implemented: Home, Domain, Milestones, Documents, Presentations, About us and Contact us. Domain includes the literature survey, research gap, research problem, objectives, methodology, four research components and technologies.
 
-The library includes all nine supplied PDFs, including four individual component reports. Documents can be viewed in the browser; original files are preserved. Team and supervisor names/photos come from PP2 page 2. Contact email/phone and an email template are included.
+Each research component has an owner, workflow, learning output, evaluation focus and source link. All four model tables are visible. SDXL Base 1.0 and Xinsir Scribble ControlNet are listed separately and their combined sketch pipeline is explained. Nishara’s component includes adaptive assessment and resource recommendation throughout the website and project metadata.
 
-Milestone dates and allocated marks are omitted by explicit user instruction despite being listed in Website.pdf. No charter, checklist or final reports have been claimed as available. Final presentation provision remains. Course-web submission is separate from Vercel hosting.
+The library retains all nine PDFs, including four individual component reports, with View and Download links. Team and supervisor names and portraits follow PP2 page 2. Contact email, phone and an email enquiry link are included. Team and supervisor contact details use natural content height without fixed text spacers.
 
-Validation: 27 public files, 125 local references, 0 broken references; 16667671 bytes, below 20 MB. Four newly supplied reports were verified byte-for-byte against their originals. Desktop/mobile layout and PDF readers were checked in Chrome.
+Milestone dates follow the previously supplied RP Team 2026 Regular Batch timeline: five assessment date blocks and 13 deadline entries. Allocated marks are omitted. Final presentation and final assessment materials remain marked as pending.
+
+Content was compared with the current manuscript and component source. Audio synthesis reflects Indic Parler-TTS routing; note recovery reflects original-image dual-checkpoint OCR, with Qwen/SinhaLM services identified as experimental. Research citations and model references link to primary papers, model cards or component source. Component evaluation is distinguished from future cross-component learner-outcome research.
+
+Validation on 15 October 2026: 27 public files (10 HTML pages and nine PDFs) returned HTTP 200 and matched local bytes; 142 local references resolved; HTML nesting and IDs passed checks. Edge browser checks at 360, 390, 600, 768, 1024 and 1440 CSS pixels found no horizontal page overflow. Desktop team contacts and mobile component layouts were visually reviewed.
