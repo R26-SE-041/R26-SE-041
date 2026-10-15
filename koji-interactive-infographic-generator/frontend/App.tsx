@@ -1550,7 +1550,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                       <Text style={styles.gpuText}>GPU: {speedMode === "promax" ? "H100" : speedMode === "pro" ? "A100" : "A10G"}</Text>
                     </View>
                   )}
-                  {threedError && <ErrorBanner title="3D conversion failed" message={threedError} />}
+                  {threedError && <ErrorBanner title="3D conversion needs attention" message={threedError} />}
                   {threedStage === "done" && glbBase64 && <ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} />}
                   {threedStage === "done" && threedOutputId && <FeedbackControls key={threedOutputId} agentName="threed-agent"
                     apiUrl={BACKEND_HEALTH_URL} accessToken={accessToken} sessionId={sessionId} outputId={threedOutputId}
