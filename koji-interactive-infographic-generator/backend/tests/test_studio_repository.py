@@ -256,6 +256,12 @@ class RepositoryIntegrationTests(unittest.TestCase):
         job=self.repo.get_job(self.owner,str(row["job_id"]))
         self.assertEqual(job["status"],"queued")
         self.assertNotIn("chat_id",job["payload"])
+        job=self.repo.claim()
+        vector=[1.0]+[0.0]*383
+        documents.finish(job,[{"page":1,"content":"Heart walls", "embedding":vector}],1,0)
+        self.repo.update_job(job,status="completed")
+        with patch("studio.documents.embed_texts",return_value=[vector]):
+            self.assertEqual(str(documents.retrieve(self.owner,[identifier],"Heart walls")[0]["document_id"]),identifier)
 
     def test_recycle_bin_preserves_versions_assets_and_conversation_until_restored(self):
         generation = str(uuid4())
@@ -287,12 +293,6 @@ class RepositoryIntegrationTests(unittest.TestCase):
             self.repo.delete_chat(self.owner,"keep",remove)
         remove.assert_not_called()
         self.assertIsNotNone(self.repo.get_chat(self.owner,"keep"))
-        job=self.repo.claim()
-        vector=[1.0]+[0.0]*383
-        documents.finish(job,[{"page":1,"content":"Heart walls", "embedding":vector}],1,0)
-        self.repo.update_job(job,status="completed")
-        with patch("studio.documents.embed_texts",return_value=[vector]):
-            self.assertEqual(str(documents.retrieve(self.owner,[identifier],"Heart walls")[0]["document_id"]),identifier)
 
     def test_pdf_completion_is_fenced_and_removal_waits_for_active_questions(self):
         from studio.documents import Documents

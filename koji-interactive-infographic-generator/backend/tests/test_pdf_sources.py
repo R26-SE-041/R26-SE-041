@@ -71,10 +71,23 @@ class ExtractionTests(TestCase):
         self.assertEqual(sources[0]["excerpt"],"Evidence text.")
 
     def test_missing_or_invented_citations_are_not_presented_as_sourced_answers(self):
-        sources=[{"number":1}]
-        self.assertEqual(checked_pdf_answer("High pressure [1].",sources),"High pressure [1].")
+        sources=[{"number":1,"filename":"Notes.pdf","page":7}]
+        self.assertEqual(checked_pdf_answer("High pressure [1].",sources),"High pressure [1].\n\nSources:\n[1] Notes.pdf · PDF page 7")
         for answer in ("Uncited explanation.","Invented reference [42]."):
             self.assertIn("valid references",checked_pdf_answer(answer,sources))
+
+    def test_source_footer_uses_only_cited_metadata_and_replaces_model_bibliography(self):
+        sources=[{"number":1,"filename":"Biology.pdf","page":9},
+                 {"number":2,"filename":"Unused.pdf","page":3}]
+        answer=checked_pdf_answer("It pumps blood [1].\n\nSources:\n[1] Invented website",sources)
+        self.assertIn("[1] Biology.pdf · PDF page 9",answer)
+        self.assertNotIn("Unused.pdf",answer)
+        self.assertNotIn("Invented",answer)
+        self.assertEqual(checked_pdf_answer(answer,sources),answer)
+
+    def test_bibliography_only_does_not_count_as_citing_the_answer(self):
+        self.assertIn("valid references",checked_pdf_answer("Uncited answer.\n\nSources:\n[1] Notes.pdf",[
+            {"number":1,"filename":"Notes.pdf","page":7}]))
 
 
 class PdfApiTests(TestCase):
@@ -167,6 +180,7 @@ class PdfPipelineTests(TestCase):
             saved=self.repo.append_interaction.call_args.args[2]
             self.assertEqual(saved["documentIds"],[self.doc]); self.assertEqual(saved["grounding"],"pdf")
             self.assertEqual(saved["sources"][0]["page"],9)
+            self.assertIn("Sources:\n[1] Notes.pdf · PDF page 9",saved["answer"])
 
     def test_no_evidence_abstains_without_a_general_knowledge_answer(self):
         with patch("studio.documents.Documents") as documents:

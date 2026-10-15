@@ -236,16 +236,17 @@ def hybrid_retrieve(
         return []
     content_col, source_col = _HYBRID_TABLES[table]
     candidate_limit = max(n * 4, 20)
+    page_col = "page_num" if table == "knowledge_chunks" else "null::integer"
     sql = f"""
         WITH vector_results AS (
-            SELECT id, {content_col} AS content, {source_col} AS source,
+            SELECT id, {content_col} AS content, {source_col} AS source, {page_col} AS page,
                    ROW_NUMBER() OVER (ORDER BY prompt_embedding <=> %s::vector) AS vec_rank
             FROM {table}
             ORDER BY prompt_embedding <=> %s::vector
             LIMIT %s
         ),
         fts_results AS (
-            SELECT id, {content_col} AS content, {source_col} AS source,
+            SELECT id, {content_col} AS content, {source_col} AS source, {page_col} AS page,
                    ROW_NUMBER() OVER (
                        ORDER BY ts_rank(fts, websearch_to_tsquery('english', %s)) DESC
                    ) AS fts_rank
@@ -257,11 +258,12 @@ def hybrid_retrieve(
             SELECT COALESCE(v.id, f.id) AS id,
                    COALESCE(v.content, f.content) AS content,
                    COALESCE(v.source, f.source) AS source,
+                   COALESCE(v.page, f.page) AS page,
                    COALESCE(1.0 / (%s + v.vec_rank), 0) +
                    COALESCE(1.0 / (%s + f.fts_rank), 0) AS rrf_score
             FROM vector_results v FULL OUTER JOIN fts_results f ON v.id = f.id
         )
-        SELECT id::text, content, source, rrf_score
+        SELECT id::text, content, source, page, rrf_score
         FROM combined ORDER BY rrf_score DESC LIMIT %s
     """
     if table == "knowledge_chunks":

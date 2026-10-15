@@ -7,6 +7,7 @@ import re
 from functools import lru_cache
 from typing import Any
 from urllib.parse import quote
+from pathlib import PurePosixPath
 
 
 @lru_cache(maxsize=1)
@@ -60,8 +61,37 @@ def jina_scrape(topic: str, timeout: int = 15) -> str:
     if os.getenv("ENABLE_WEB_FALLBACK", "false").lower() not in {"1", "true", "yes"}:
         return ""
     import requests
-    target = f"https://en.wikipedia.org/wiki/{quote(topic.replace(' ', '_'))}"
+    target = wikipedia_url(topic)
     response = requests.get(f"https://r.jina.ai/{target}", timeout=timeout)
     response.raise_for_status()
     return response.text
+
+
+def wikipedia_url(topic: str) -> str:
+    return f"https://en.wikipedia.org/wiki/{quote(topic.replace(' ', '_'))}"
+
+
+def rag_evidence(chunks: list[dict[str, Any]], max_chars: int = 1200):
+    """Number only named references whose text actually enters the model context."""
+    from shared.citations import source_label
+
+    sources = []
+    passages = []
+    remaining = max_chars
+    usable = [chunk for chunk in chunks if str(chunk.get("source") or "").strip() and str(chunk.get("content") or "").strip()]
+    share = max_chars // max(1, len(usable))
+    for chunk in usable:
+        raw = " ".join(str(chunk["source"]).split())
+        title = raw if raw.startswith(("https://", "http://")) else PurePosixPath(raw.replace("\\", "/")).name
+        source = {"number": len(sources)+1, "title": title, "page": chunk.get("page")}
+        header = f"[{source['number']}] {source_label(source)}\n"
+        allowance = min(share, remaining) - len(header) - 2
+        if allowance < 40:
+            continue
+        excerpt = str(chunk["content"]).strip()[:allowance]
+        source["excerpt"] = excerpt
+        passages.append(header + excerpt)
+        sources.append(source)
+        remaining -= len(header) + len(excerpt) + 2
+    return "\n\n".join(passages), sources
 

@@ -272,6 +272,8 @@ class Pipeline:
                 raise RuntimeError("Analysis returned no answer")
             if grounding == "pdf":
                 answer = checked_pdf_answer(answer,sources)
+                from shared.citations import cited_sources
+                sources = cited_sources(answer,sources) or sources
             if not self.repo.heartbeat(job):
                 raise RuntimeError("Worker lease lost")
             self.repo.append_interaction(str(job["user_id"]),str(p["generation_id"]),

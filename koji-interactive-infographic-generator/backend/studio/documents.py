@@ -247,9 +247,7 @@ def evidence_context(chunks):
 
 def checked_pdf_answer(answer, sources):
     """Do not present an answer as sourced if references are missing or invented."""
-    cited = {int(value) for value in re.findall(r"\[(\d+)\]", answer or "")}
-    available = {source["number"] for source in sources}
-    if not cited or not cited <= available:
-        return ("I could not produce an answer with valid references to the selected PDFs. "
-                "Review the retrieved passages below, try a more specific question, or choose another PDF.")
-    return answer
+    from shared.citations import sourced_answer
+    return sourced_answer(answer, sources,
+        "I could not produce an answer with valid references to the selected PDFs. "
+        "Review the retrieved passages below, try a more specific question, or choose another PDF.")
