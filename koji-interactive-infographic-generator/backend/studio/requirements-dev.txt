@@ -1,5 +1,2 @@
 -r requirements.txt
-httpx>=0.28,<1
-pytest>=8,<10
-PyYAML>=6,<7
-ruff>=0.9,<1
+-r requirements-test.txt

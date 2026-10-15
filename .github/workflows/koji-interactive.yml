@@ -26,17 +26,18 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: koji-ci-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       frontend: ${{ steps.plan.outputs.frontend }}
       backend: ${{ steps.plan.outputs.backend }}
       models: ${{ steps.plan.outputs.models }}
+      frontend_tests: ${{ steps.plan.outputs.frontend_tests }}
+      backend_tests: ${{ steps.plan.outputs.backend_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,10 +51,17 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           DEPLOY_TARGET: ${{ inputs.target || 'all' }}
+          FORCE_MODEL_DEPLOY: ${{ inputs.deploy_models }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: python koji-interactive-infographic-generator/ci/changes.py
 
-  frontend:
+  frontend_checks:
+    needs: changes
+    if: needs.changes.outputs.frontend_tests == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: koji-frontend-checks-${{ github.ref }}
+      cancel-in-progress: true
     defaults:
       run:
         working-directory: koji-interactive-infographic-generator/frontend
@@ -73,14 +81,32 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm run build:web -- --max-workers 2
+        if: needs.changes.outputs.frontend == 'true'
       - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.frontend == 'true'
         with:
           name: koji-web
           path: koji-interactive-infographic-generator/frontend/dist
           if-no-files-found: error
 
-  backend:
+  # Keep the existing receiver/branch-protection status name. This cheap gate
+  # succeeds only when frontend checks passed or the plan did not require them.
+  frontend:
+    needs: [changes, frontend_checks]
+    if: >-
+      always() && needs.changes.result == 'success' &&
+      (needs.changes.outputs.frontend_tests != 'true' || needs.frontend_checks.result == 'success')
     runs-on: ubuntu-latest
+    steps:
+      - run: echo "Frontend checks passed or were not required for this change."
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend_tests == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: koji-backend-checks-${{ github.ref }}
+      cancel-in-progress: true
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -103,8 +129,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install -r studio/requirements-dev.txt
+          cache: pip
+          cache-dependency-path: |
+            koji-interactive-infographic-generator/backend/studio/requirements-core.txt
+            koji-interactive-infographic-generator/backend/studio/requirements-test.txt
+      - run: python -m pip install -r studio/requirements-test.txt
       - run: python ../ci/check.py
       - name: Test deployment routing and artifact boundaries
         run: |
@@ -112,8 +141,10 @@ jobs:
           for script in ../deploy/aws/*.sh; do bash -n "$script"; done
           python -m unittest discover -s ../ci/tests -p 'test_*.py'
       - name: Package tested CPU API and worker
+        if: needs.changes.outputs.backend == 'true'
         run: python ../ci/package_backend.py ../release/backend.tar.gz
       - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.backend == 'true'
         with:
           name: koji-backend
           path: koji-interactive-infographic-generator/release/backend.tar.gz
@@ -121,7 +152,8 @@ jobs:
 
   deploy_backend:
     if: >-
-      always() && needs.frontend.result == 'success' && needs.backend.result == 'success' &&
+      always() && needs.changes.result == 'success' && needs.backend.result == 'success' &&
+      (needs.changes.outputs.frontend_tests != 'true' || needs.frontend.result == 'success') &&
       (needs.deploy_models.result == 'success' || needs.deploy_models.result == 'skipped') &&
       needs.changes.outputs.backend == 'true' &&
       vars.KOJI_EC2_DEPLOY_ENABLED == 'true' &&
@@ -162,7 +194,8 @@ jobs:
   deploy_frontend:
     if: >-
       always() && needs.changes.result == 'success' &&
-      needs.frontend.result == 'success' && needs.backend.result == 'success' &&
+      needs.frontend.result == 'success' &&
+      (needs.changes.outputs.backend_tests != 'true' || needs.backend.result == 'success') &&
       (needs.deploy_models.result == 'success' || needs.deploy_models.result == 'skipped') &&
       (needs.deploy_backend.result == 'success' || needs.deploy_backend.result == 'skipped') &&
       (needs.changes.outputs.backend != 'true' || needs.deploy_backend.result == 'success') &&
@@ -220,6 +253,8 @@ jobs:
 
   deploy_models:
     if: >-
+      always() && needs.changes.result == 'success' && needs.backend.result == 'success' &&
+      (needs.changes.outputs.frontend_tests != 'true' || needs.frontend.result == 'success') &&
       vars.KOJI_DEPLOY_ENABLED != 'false' &&
       github.event_name != 'pull_request' && github.ref == 'refs/heads/main' &&
       ((needs.changes.outputs.models == 'true' && vars.KOJI_MODEL_DEPLOY_ENABLED == 'true') || inputs.deploy_models)
@@ -241,5 +276,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: koji-interactive-infographic-generator/ci/deploy_models.py
       - run: pip install modal
       - run: python koji-interactive-infographic-generator/ci/deploy_models.py

@@ -9,6 +9,8 @@ import tarfile
 import tempfile
 import unittest
 import shlex
+import re
+import yaml
 from unittest.mock import patch
 
 CI = Path(__file__).resolve().parents[1]
@@ -27,6 +29,71 @@ deploy = module("deploy_ec2")
 
 
 class DeploymentRoutingTests(unittest.TestCase):
+    def test_main_push_keeps_changes_from_cancelled_or_failed_earlier_pushes(self):
+        with patch.dict(os.environ,{"GITHUB_EVENT_NAME":"push","GITHUB_REF":"refs/heads/main",
+                "GITHUB_SHA":"current","BEFORE_SHA":"immediate-parent","GITHUB_OUTPUT":""},clear=True), \
+                patch.object(changes,"successful_push_base",return_value="last-success"), \
+                patch.object(changes.subprocess,"check_output",return_value=
+                    changes.PREFIX+"backend/studio/main.py\n"+changes.PREFIX+"frontend/App.tsx\n") as diff, \
+                patch("sys.stdout",new_callable=io.StringIO) as output:
+            changes.main()
+        self.assertIn("backend=true",output.getvalue())
+        self.assertIn("frontend=true",output.getvalue())
+        self.assertEqual(diff.call_args.args[0],["git","diff","--name-only","last-success","current"])
+
+    def test_baseline_outage_falls_back_to_full_checks(self):
+        with patch.dict(os.environ,{"GITHUB_EVENT_NAME":"push","GITHUB_REF":"refs/heads/main",
+                "GITHUB_SHA":"current","BEFORE_SHA":"parent","GITHUB_OUTPUT":""},clear=True), \
+                patch.object(changes,"successful_push_base",return_value=None), \
+                patch("sys.stdout",new_callable=io.StringIO) as output:
+            changes.main()
+        self.assertIn("frontend_tests=true",output.getvalue())
+        self.assertIn("backend_tests=true",output.getvalue())
+
+    def test_successful_baseline_is_a_valid_ancestor_and_api_failure_is_safe(self):
+        head,base = "b"*40,"a"*40
+        payload = json.dumps({"workflow_runs":[{"head_sha":head},{"head_sha":"invalid"},{"head_sha":base}]}).encode()
+        with patch.dict(os.environ,{"GITHUB_REPOSITORY":"owner/repo","GITHUB_TOKEN":"test-token"},clear=True), \
+                patch.object(changes,"urlopen",return_value=io.BytesIO(payload)) as request, \
+                patch.object(changes.subprocess,"run") as ancestor:
+            ancestor.return_value.returncode = 0
+            self.assertEqual(changes.successful_push_base(head),base)
+            self.assertIn("status=success",request.call_args.args[0].full_url)
+            ancestor.assert_called_once_with(["git","merge-base","--is-ancestor",base,head],capture_output=True,check=False)
+        with patch.dict(os.environ,{"GITHUB_REPOSITORY":"owner/repo","GITHUB_TOKEN":"test-token"},clear=True), \
+                patch.object(changes,"urlopen",side_effect=OSError("unavailable")), \
+                patch("sys.stdout",new_callable=io.StringIO):
+            self.assertIsNone(changes.successful_push_base(head))
+
+    def test_checks_follow_changed_components_and_model_changes_require_backend_checks(self):
+        scenarios = [
+            (["frontend/App.tsx"], {"frontend_tests":True,"backend_tests":False}),
+            (["backend/studio/main.py"], {"frontend_tests":False,"backend_tests":True}),
+            (["backend/agents/sketch-agent/modal_app.py"], {"frontend_tests":False,"backend_tests":True}),
+            (["README.md"], {"frontend_tests":False,"backend_tests":False}),
+        ]
+        for paths, expected in scenarios:
+            paths = [changes.PREFIX + path for path in paths]
+            with self.subTest(paths=paths):
+                self.assertEqual(changes.test_targets(paths, changes.classify(paths)),expected)
+
+    def test_test_only_edits_run_checks_without_publishing(self):
+        for path, target in (("frontend/tests/history.test.cjs","frontend_tests"),
+                             ("backend/tests/test_studio.py","backend_tests")):
+            paths = [changes.PREFIX + path]
+            release = changes.classify(paths)
+            self.assertFalse(any(release.values()))
+            self.assertTrue(changes.test_targets(paths,release)[target])
+
+    def test_manual_frontend_release_can_also_validate_explicit_model_deployment(self):
+        with patch.dict(os.environ,{"GITHUB_EVENT_NAME":"workflow_dispatch","GITHUB_SHA":"commit",
+                "DEPLOY_TARGET":"frontend","FORCE_MODEL_DEPLOY":"true","GITHUB_OUTPUT":""},clear=True), \
+                patch("sys.stdout",new_callable=io.StringIO) as output:
+            changes.main()
+        plan = dict(line.split("=") for line in output.getvalue().splitlines())
+        self.assertEqual(plan,{"frontend":"true","backend":"false","models":"true",
+                               "frontend_tests":"true","backend_tests":"true"})
+
     def test_other_components_and_root_docs_do_not_deploy_koji(self):
         result = changes.classify([
             "baskaran-interactive-audio-communication/backend/app/main.py",
@@ -61,13 +128,81 @@ class DeploymentRoutingTests(unittest.TestCase):
                          {"frontend": True, "backend": True, "models": False})
 
 
+class WorkflowEfficiencyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.safe_load((CI.parents[1] / ".github/workflows/koji-interactive.yml").read_text())
+
+    def permitted(self, job, *, frontend=False, backend=False, models=False, results=None):
+        plan = {"frontend":frontend,"backend":backend,"models":models,
+                "frontend_tests":frontend,"backend_tests":backend or models}
+        values = {f"needs.changes.outputs.{key}":str(value).lower() for key,value in plan.items()}
+        outcomes = {"changes":"success","frontend":"success",
+                    "frontend_checks":"success" if frontend else "skipped",
+                    "backend":"success" if backend or models else "skipped",
+                    "deploy_models":"skipped","deploy_backend":"success" if backend else "skipped"}
+        outcomes.update(results or {})
+        values.update({f"needs.{key}.result":value for key,value in outcomes.items()})
+        values.update({"github.ref":"refs/heads/main","github.event_name":"push",
+                       "vars.KOJI_EC2_DEPLOY_ENABLED":"true","vars.KOJI_DEPLOY_ENABLED":"true",
+                       "vars.KOJI_MODEL_DEPLOY_ENABLED":"true","inputs.deploy_models":False})
+        expression = self.workflow["jobs"][job]["if"]
+        expression = re.sub(r"needs\.\w+\.(?:outputs\.\w+|result)|github\.\w+|vars\.\w+|inputs\.\w+",
+                            lambda match:repr(values[match.group()]),expression)
+        return eval(expression.replace("&&"," and ").replace("||"," or "),
+                    {"__builtins__":{}},{"always":lambda:True,"startsWith":lambda value,prefix:value.startswith(prefix)})
+
+    def test_single_component_deployments_allow_unneeded_checks_to_be_skipped(self):
+        self.assertTrue(self.permitted("frontend",backend=True))
+        self.assertFalse(self.permitted("frontend",frontend=True,results={"frontend_checks":"failure"}))
+        self.assertTrue(self.permitted("deploy_frontend",frontend=True))
+        self.assertFalse(self.permitted("deploy_backend",frontend=True))
+        self.assertTrue(self.permitted("deploy_backend",backend=True))
+        self.assertFalse(self.permitted("deploy_frontend",backend=True))
+        self.assertTrue(self.permitted("deploy_models",models=True))
+
+    def test_failed_or_cancelled_required_checks_block_deployment(self):
+        for outcome in ("failure","cancelled","skipped"):
+            for job in ("deploy_frontend","deploy_backend","deploy_models"):
+                with self.subTest(outcome=outcome,job=job):
+                    self.assertFalse(self.permitted(job,frontend=True,backend=True,models=True,
+                                                   results={"backend":outcome}))
+        self.assertFalse(self.permitted("deploy_frontend",frontend=True,backend=True,
+                                       results={"deploy_backend":"failure"}))
+
+    def test_new_push_cancels_checks_without_interrupting_production_deployments(self):
+        self.assertNotIn("concurrency",self.workflow)
+        jobs = self.workflow["jobs"]
+        for job,output in (("frontend_checks","frontend_tests"),("backend","backend_tests")):
+            self.assertEqual(jobs[job]["needs"],"changes")
+            self.assertEqual(jobs[job]["if"],f"needs.changes.outputs.{output} == 'true'")
+            self.assertIs(jobs[job]["concurrency"]["cancel-in-progress"],True)
+        for job in ("deploy_frontend","deploy_backend","deploy_models"):
+            self.assertIs(jobs[job]["concurrency"]["cancel-in-progress"],False)
+
+    def test_ci_caches_lightweight_dependencies_and_does_not_install_torch(self):
+        steps = self.workflow["jobs"]["backend"]["steps"]
+        setup = next(step for step in steps if step.get("uses","").startswith("actions/setup-python@"))
+        self.assertEqual(setup["with"]["cache"],"pip")
+        self.assertIn("requirements-core.txt",setup["with"]["cache-dependency-path"])
+        self.assertIn("requirements-test.txt",setup["with"]["cache-dependency-path"])
+        installs = [step["run"] for step in steps if "pip install" in step.get("run","")]
+        self.assertEqual(installs,["python -m pip install -r studio/requirements-test.txt"])
+        core = (CI.parent/"backend/studio/requirements-core.txt").read_text()
+        tests = (CI.parent/"backend/studio/requirements-test.txt").read_text()
+        self.assertNotIn("torch",core+tests)
+        self.assertNotIn("sentence-transformers",core+tests)
+        self.assertIn("sentence-transformers",(CI.parent/"backend/studio/requirements.txt").read_text())
+
+
 class ReleaseArtifactTests(unittest.TestCase):
     def test_package_contains_only_tracked_cpu_code_with_matching_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             component = root / "koji-interactive-infographic-generator"
             files = {
-                "backend/studio/requirements.txt": "requests\n",
+                "backend/studio/requirements.txt": "-r requirements-core.txt\nsentence-transformers\n",
+                "backend/studio/requirements-core.txt": "requests\n",
                 "backend/studio/main.py": "# CPU API\n",
                 "backend/shared/safety.py": "# Shared code\n",
                 "backend/agents/image-agent/model.py": "# GPU service\n",
@@ -88,7 +223,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             deploy.validate_release(archive, commit)
             with tarfile.open(archive) as bundle:
                 self.assertEqual(set(bundle.getnames()), {
-                    "studio/requirements.txt", "studio/main.py", "shared/safety.py", "release.json",
+                    "studio/requirements.txt", "studio/requirements-core.txt", "studio/main.py", "shared/safety.py", "release.json",
                 })
             with self.assertRaisesRegex(ValueError, "tested commit"):
                 deploy.validate_release(archive, "0" * 40)

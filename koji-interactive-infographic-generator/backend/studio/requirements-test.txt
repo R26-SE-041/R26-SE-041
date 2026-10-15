@@ -1,0 +1,7 @@
+# CPU orchestration tests mock model calls and embedding inference.
+-r requirements-core.txt
+httpx>=0.28,<1
+pytest>=8,<10
+PyYAML>=6,<7
+ruff>=0.9,<1
+numpy>=1.26,<3
