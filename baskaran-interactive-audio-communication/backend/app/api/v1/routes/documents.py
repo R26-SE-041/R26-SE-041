@@ -20,7 +20,7 @@ import uuid
 from typing import Annotated
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 
 from app.core.security import get_current_user
 from app.services.modal_client import call_answer_generator, call_transcript_corrector, call_localizer
@@ -610,3 +610,20 @@ async def ask_question(
     )
     logger.info("[LATENCY] RAG TOTAL = %.3fs", time.perf_counter() - rag_started)
     return response
+
+
+@router.post('/ask-jobs', status_code=202)
+async def start_answer_job(body: AskRequest,
+    request_id: Annotated[uuid.UUID, Header(alias='Idempotency-Key')],
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None):
+    from app.services.question_jobs import question_jobs
+    owner = current_user['sub'] if current_user else 'guest'
+    return question_jobs.start(owner, request_id, body.model_dump(mode='json'),
+                               lambda: ask_question(body, current_user))
+
+
+@router.get('/ask-jobs/{job_id}')
+async def answer_job_status(job_id: uuid.UUID,
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None):
+    from app.services.question_jobs import question_jobs
+    return question_jobs.read(current_user['sub'] if current_user else 'guest', str(job_id))
