@@ -91,7 +91,7 @@ Visualization [evaluation tools](koji-interactive-infographic-generator/backend/
 
 | Member | Student ID | Responsibility |
 | --- | --- | --- |
-| Kojithan P. Y — Group Leader | IT22264220 | Interactive visualizations |
+| Kojithan P. Y — Team Leader | IT22264220 | Interactive visualizations |
 | Baskaran V | IT22172600 | Multilingual audio review |
 | Nishara T | IT22223876 | Adaptive assessment |
 | Sarmitha S | IT22637482 | Intelligent note generation |
