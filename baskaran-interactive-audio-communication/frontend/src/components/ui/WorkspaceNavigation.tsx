@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 
 export const workspaceSections = [
   { id: 'study-documents', title: 'Documents', detail: 'Your uploaded files', path: 'M6 3h8l4 4v14H6z M14 3v5h5 M9 12h6 M9 16h6' },
@@ -14,39 +14,22 @@ export function workspaceSectionFromHash(): WorkspaceSection {
 }
 
 export function WorkspaceNavigation({ active, onSelect }: { active: WorkspaceSection; onSelect: (section: WorkspaceSection) => void }) {
-  const [open, setOpen] = useState(false)
-  const navigation = useRef<HTMLElement>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
-  const current = workspaceSections.find(section => section.id === active) || workspaceSections[0]
+  const media = '(max-width: 900px), (hover: none) and (pointer: coarse)'
+  const [mobile, setMobile] = useState(() => window.matchMedia(media).matches)
   useEffect(() => {
-    if (!open) return
-    const dismiss = (event: PointerEvent) => {
-      if (!navigation.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', dismiss)
-    return () => document.removeEventListener('pointerdown', dismiss)
-  }, [open])
-  function select(section: WorkspaceSection) {
-    onSelect(section)
-    setOpen(false)
-    if (window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches) trigger.current?.focus({ preventScroll: true })
-  }
-  return <nav ref={navigation} aria-label="Workspace navigation" className="vl-workspace-nav" data-open={open}
-    onKeyDown={event => {
-      if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); trigger.current?.focus() }
-    }}>
+    const query = window.matchMedia(media)
+    const update = () => setMobile(query.matches)
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  const shortTitles = ['Docs', 'Ask', 'Tools', 'Saved', 'History']
+  return <nav aria-label="Workspace navigation" className="vl-workspace-nav"
+    style={{ '--workspace-index': workspaceSections.findIndex(section => section.id === active) } as CSSProperties}>
     <p>Your workspace</p>
-    <button ref={trigger} type="button" className="vl-workspace-switch" aria-expanded={open} aria-controls="workspace-sections"
-      aria-label={`Change workspace section. Current: ${current.title}`} onClick={() => setOpen(value => !value)}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={current.path} /></svg>
-      <span><small>Workspace</small><strong>{current.title}</strong></span>
-      <span className="vl-workspace-change" aria-hidden="true">Change</span>
-      <svg className="vl-workspace-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-    </button>
-    <div id="workspace-sections" role="tablist" aria-label="Study workspace" aria-orientation="vertical">
+    <div id="workspace-sections" role="tablist" aria-label="Study workspace" aria-orientation={mobile ? 'horizontal' : 'vertical'}>
     {workspaceSections.map((section, index) => <button key={section.id} type="button" role="tab"
       id={`tab-${section.id}`} aria-controls={`panel-${section.id}`} aria-selected={active === section.id}
-      tabIndex={active === section.id ? 0 : -1} onClick={() => select(section.id)}
+      aria-label={section.title} tabIndex={active === section.id ? 0 : -1} onClick={() => onSelect(section.id)}
       onKeyDown={event => {
         const offset = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
         if (!offset && event.key !== 'Home' && event.key !== 'End') return
@@ -56,7 +39,7 @@ export function WorkspaceNavigation({ active, onSelect }: { active: WorkspaceSec
         document.getElementById(`tab-${workspaceSections[next].id}`)?.focus()
       }}>
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={section.path} /></svg>
-      <span><span className="vl-nav-title">{section.title}</span><span className="vl-nav-detail" aria-hidden="true">{section.detail}</span></span>
+      <span><span className="vl-nav-title vl-nav-title-full">{section.title}</span><span className="vl-nav-title vl-nav-title-short" aria-hidden="true">{shortTitles[index]}</span><span className="vl-nav-detail" aria-hidden="true">{section.detail}</span></span>
     </button>)}
     </div>
   </nav>

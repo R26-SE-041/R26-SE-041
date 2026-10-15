@@ -7,6 +7,7 @@ test('editorial workspace navigation and theme remain usable on desktop and mobi
   await page.goto('/study-assistant')
   const navigation=page.getByRole('navigation',{name:'Workspace navigation'})
   await expect(navigation).toBeVisible()
+  await expect(navigation.locator('.vl-nav-title-short').first()).toBeHidden()
   await navigation.getByRole('tab',{name:'History',exact:true}).click()
   await expect(page.locator('#study-history')).toBeInViewport()
   await navigation.getByRole('tab',{name:'Documents',exact:true}).click()
@@ -15,12 +16,12 @@ test('editorial workspace navigation and theme remain usable on desktop and mobi
   await page.evaluate(()=>window.scrollTo(0,0))
   await page.screenshot({path:'.workspace-runtime/editorial-workspace.png'})
   await page.setViewportSize({width:390,height:844})
+  await expect(navigation.locator('.vl-nav-title-full').first()).toBeHidden()
+  await expect(navigation.locator('.vl-nav-title-short').first()).toBeVisible()
   await page.evaluate(()=>window.scrollTo(0,0))
-  await page.getByRole('button',{name:/^Change workspace section/}).click()
   for (const name of ['Documents','Ask a question','Study tools','Saved library','History']) {
     await expect(navigation.getByRole('tab',{name,exact:true})).toBeInViewport()
   }
-  await page.keyboard.press('Escape')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
   await page.screenshot({path:'.workspace-runtime/editorial-mobile.png'})
   await page.emulateMedia({reducedMotion:'reduce'})
