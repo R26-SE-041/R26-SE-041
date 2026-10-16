@@ -1,4 +1,8 @@
-import { cloudEnabled, configureStudio, studioOwner, runJob, waitJob, getCloudHistory, modelRequest, appendChatEvent } from "./studioClient";
+import { cloudEnabled, configureStudio, studioOwner, studioRequest, runJob, waitJob, getCloudHistory, modelRequest, appendChatEvent } from "./studioClient";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
+import { PROCESS_LABELS, ProcessKey, ProcessOutcome, formatDuration } from "./processing";
+import { THREED_IMAGE_TYPES, validateThreeDImage } from "./threeDSource";
 import { useStudioSession } from "./studioAuth";
 import StudioSessionPanel from "./components/StudioSessionPanel";
 import AuthScreen from "./components/AuthScreen";
@@ -8,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -48,9 +53,9 @@ type Stage = "idle" | "enhancing" | "preview" | "generating" | "done";
 type GenerationWorkspace = "general" | "anatomy" | "sketch" | "history";
 export type SpeedMode = "normal" | "pro" | "promax";
 type ThreeDStage = "idle" | "converting" | "done";
+interface UploadedThreeDImage { base64: string; uri: string; name: string; id: string; historyId?: string }
 type Health = "ok" | "error" | "checking";
 type AgentKey = "prompt" | "image" | "eval" | "interactive" | "threed";
-type ProcessKey = AgentKey;
 export interface AnatomySpec {
   is_anatomy: boolean;
   organ?: string;
@@ -228,14 +233,6 @@ function friendlyPhase(phase: string, fallback: string): string {
   return phase.startsWith("retrying") ? "Refining the image after its quality check…" : labels[phase] || fallback;
 }
 
-function formatDuration(milliseconds: number): string {
-  if (milliseconds < 1_000) return `${Math.max(1, Math.round(milliseconds))} ms`;
-  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`;
-  const minutes = Math.floor(milliseconds / 60_000);
-  const seconds = Math.round((milliseconds % 60_000) / 1_000);
-  return `${minutes} min ${seconds} s`;
-}
-
 function formatRemaining(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1_000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -326,6 +323,8 @@ function Home({ accessToken, studioSession }: AppProps) {
   const [glbSizeKb, setGlbSizeKb] = useState<number>();
   const threedOutputId = useMemo(() => glbBase64 ? createOutputId("threed") : null, [glbBase64]);
   const [threedError, setThreedError] = useState<string | null>(null);
+  const [uploadedThreeD, setUploadedThreeD] = useState<UploadedThreeDImage | null>(null);
+  const [pickingThreeD, setPickingThreeD] = useState(false);
   const [promptHealth, setPromptHealth] = useState<Health>("checking");
   const [imageHealth, setImageHealth] = useState<Health>("checking");
   const [interactiveHealth, setInteractiveHealth] = useState<Health>("checking");
@@ -335,6 +334,7 @@ function Home({ accessToken, studioSession }: AppProps) {
   const [now, setNow] = useState(Date.now());
   const [warmUntil, setWarmUntil] = useState<Record<AgentKey, number>>({ prompt: 0, image: 0, eval: 0, interactive: 0, threed: 0 });
   const [timings, setTimings] = useState<Partial<Record<ProcessKey, number>>>({});
+  const [outcomes, setOutcomes] = useState<Partial<Record<ProcessKey, ProcessOutcome>>>({});
   const [activeTimers, setActiveTimers] = useState<Partial<Record<ProcessKey, number>>>({});
   const [sessionId] = useState(() => createOutputId("session"));
   const [promptOutputId, setPromptOutputId] = useState<string | null>(null);
@@ -356,6 +356,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     anatomySpec: AnatomySpec; anatomyAnnotations: AnatomyAnnotation[]; evaluation: EvaluationResult | null;
     evaluationRetries: number; evaluationWarning: string | null; glbBase64: string | null;
     glbSizeKb?: number; threedStage: ThreeDStage; historyId: string | null; chatId: string | null;
+    uploadedThreeD: UploadedThreeDImage | null;
+    timings: Partial<Record<ProcessKey, number>>; outcomes: Partial<Record<ProcessKey, ProcessOutcome>>;
   }>>>({});
 
   useEffect(() => { setStartedAt(stage === "enhancing" || stage === "generating" ? Date.now() : null); }, [stage]);
@@ -425,7 +427,12 @@ function Home({ accessToken, studioSession }: AppProps) {
     const startedAt = Date.now();
     setActiveTimers((current) => ({ ...current, [process]: startedAt }));
     try {
-      return await operation();
+      const result = await operation();
+      setOutcomes((current) => ({ ...current, [process]: "completed" }));
+      return result;
+    } catch (error) {
+      setOutcomes((current) => ({ ...current, [process]: "failed" }));
+      throw error;
     } finally {
       setTimings((current) => ({ ...current, [process]: Date.now() - startedAt }));
       setActiveTimers((current) => {
@@ -467,7 +474,9 @@ function Home({ accessToken, studioSession }: AppProps) {
     setGlbBase64(null);
     setGlbSizeKb(undefined);
     setThreedError(null);
+    setUploadedThreeD(null);
     setTimings({});
+    setOutcomes({});
     setActiveTimers({});
     setPromptOutputId(null);
     setImageOutputId(null);
@@ -492,7 +501,7 @@ function Home({ accessToken, studioSession }: AppProps) {
         historyInteractions, sketchStrokes, sketchStrength, sketchMetadata,
         prompt, stage, speedMode, enhancedPrompt, enhancedPromptJson, imageBase64, anatomySpec,
         anatomyAnnotations, evaluation, evaluationRetries, evaluationWarning, glbBase64, glbSizeKb,
-        threedStage, historyId: currentHistoryId, chatId: currentChatId.current,
+        threedStage, historyId: currentHistoryId, chatId: currentChatId.current, uploadedThreeD, timings, outcomes,
       };
     }
     if (next !== "history") {
@@ -507,6 +516,7 @@ function Home({ accessToken, studioSession }: AppProps) {
         setAnatomyAnnotations(saved.anatomyAnnotations); setEvaluation(saved.evaluation);
         setEvaluationRetries(saved.evaluationRetries); setEvaluationWarning(saved.evaluationWarning);
         setGlbBase64(saved.glbBase64); setGlbSizeKb(saved.glbSizeKb); setThreedStage(saved.threedStage);
+        setUploadedThreeD(saved.uploadedThreeD); setTimings(saved.timings); setOutcomes(saved.outcomes);
         setCurrentHistoryId(saved.historyId); currentChatId.current = saved.chatId;
       } else {
         setPrompt(""); setSketchStrokes([]); setSketchStrength(0.85); setSketchMetadata(undefined);
@@ -859,6 +869,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     const priorAnnotations = visibleImage.current === image ? anatomyAnnotations : [];
     setLocalizationError(null);
     if (!allowGeneric && (!anatomy.is_anatomy || !anatomy.organ)) return [];
+    const labelingStartedAt = Date.now();
+    setActiveTimers(current => ({ ...current, labels: labelingStartedAt }));
     setLabelBusy(true);
     try {
       let data: Record<string, any>;
@@ -900,11 +912,17 @@ function Home({ accessToken, studioSession }: AppProps) {
         .filter((item: AnatomyAnnotation | null): item is AnatomyAnnotation => item !== null);
       if (visibleImage.current === image) setAnatomyAnnotations(annotations);
       markWarm("interactive");
+      setOutcomes(current => ({ ...current, labels: "completed" }));
       return annotations;
     } catch (caught) {
+      setOutcomes(current => ({ ...current, labels: "failed" }));
       if (visibleImage.current === image) setLocalizationError(caught instanceof Error ? caught.message : "Automatic labeling failed");
       return priorAnnotations;
-    } finally { setLabelBusy(false); }
+    } finally {
+      setLabelBusy(false);
+      setTimings(current => ({ ...current, labels: Date.now() - labelingStartedAt }));
+      setActiveTimers(current => { const next = { ...current }; delete next.labels; return next; });
+    }
   };
 
   const generateSketch = async (feedback = "") => {
@@ -950,7 +968,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       setImageBase64(data.image_base64); setImageOutputId(createOutputId("image"));
       const historyId = await archiveResult({ image: data.image_base64, prompt: data.prompt, anatomy, payload, evaluation: null, retryCount: data.retry_count ?? 0, warning: data.quality_warning ?? null, sketchMetadata: data.generation_metadata });
       setStage("done");
-      void runTimed("interactive", () => localizeAnatomy(data.image_base64, anatomy, true)).then(annotations =>
+      void localizeAnatomy(data.image_base64, anatomy, true).then(annotations =>
         historyId ? updateHistoryItem(historyId,{anatomyAnnotations:annotations}).catch(() => undefined) : undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sketch generation failed");
@@ -1039,7 +1057,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       setImageOutputId(createOutputId("image"));
       setStage("done");
       const historyId = await archiveResult(result);
-      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
+      void localizeAnatomy(result.image, result.anatomy).then((annotations) =>
         historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
       );
     } catch (caught) {
@@ -1118,7 +1136,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       setImageOutputId(createOutputId("image"));
       setStage("done");
       const historyId = await archiveResult(result);
-      void runTimed("interactive", () => localizeAnatomy(result.image, result.anatomy)).then((annotations) =>
+      void localizeAnatomy(result.image, result.anatomy).then((annotations) =>
         historyId && annotations.length ? updateHistoryItem(historyId, { anatomyAnnotations: annotations }).catch(() => undefined) : undefined,
       );
     } catch (caught) {
@@ -1127,27 +1145,65 @@ function Home({ accessToken, studioSession }: AppProps) {
     }
   };
 
+  const pickThreeDImage = async () => {
+    if (isLoading || pickingThreeD || threedRequestInFlight.current) return;
+    setPickingThreeD(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: THREED_IMAGE_TYPES, multiple: false, copyToCacheDirectory: true, base64: true });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      validateThreeDImage(asset.size ?? asset.file?.size, asset.mimeType, asset.name);
+      const encoded = Platform.OS === "web" ? asset.base64 || asset.uri : await new File(asset.uri).base64();
+      if (Platform.OS === "web" && asset.uri.startsWith("blob:")) URL.revokeObjectURL(asset.uri);
+      const base64 = encoded.replace(/^data:[^,]*,/, "");
+      if (!base64 || base64.startsWith("blob:") || base64.startsWith("file:")) throw new Error("Could not read this image. Please choose it again.");
+      // Decode before accepting the source so corrupt images cannot start a GPU job.
+      const uri = `data:${asset.mimeType || "image/png"};base64,${base64}`;
+      await new Promise<void>((resolve, reject) => Image.getSize(uri, () => resolve(), () => reject(new Error("This image could not be opened. Choose another image."))));
+      setUploadedThreeD({ base64, uri, name: asset.name, id: createOutputId("upload") });
+      setThreedStage("idle"); setGlbBase64(null); setGlbSizeKb(undefined); setThreedError(null);
+    } catch (error) {
+      setThreedError(error instanceof Error ? error.message : "Could not open this image.");
+    } finally { setPickingThreeD(false); }
+  };
+
   const handleCloud3D = async () => {
-    if (!currentHistoryId || threedRequestInFlight.current) return;
+    if ((!currentHistoryId && !uploadedThreeD) || threedRequestInFlight.current) return;
     threedRequestInFlight.current = true; setThreedStage("converting"); setThreedError(null);
+    setGlbBase64(null); setGlbSizeKb(undefined);
     setJobPhase("queued");
     try {
-      const job = await runTimed("threed", () => runJob({kind:"threed",generation_id:currentHistoryId,speed_mode:speedMode},setJobPhase));
-      if (!job.result?.history_id) throw new Error("3D job returned no saved history");
-      const item = await getCloudHistory(job.result.history_id);
-      if (!item.glbBase64) throw new Error("3D job returned no model");
-      setGlbBase64(item.glbBase64); setGlbSizeKb(item.glbSizeKb); setThreedStage("done");
-      await saveHistoryItem(item);
+      await runTimed("threed", async () => {
+        let sourceId = uploadedThreeD?.historyId ?? currentHistoryId;
+        if (uploadedThreeD && !uploadedThreeD.historyId) {
+          setJobPhase("preparing image");
+          const imported = await studioRequest<{ id: string }>("/studio/import", { method: "POST", body: JSON.stringify({
+            legacy_id: uploadedThreeD.id, created_at: new Date().toISOString(), image_base64: uploadedThreeD.base64,
+            metadata: { prompt: `3D model from ${uploadedThreeD.name}`, enhancedPrompt: `Uploaded image: ${uploadedThreeD.name}`, mode: "general", speedMode },
+          }) });
+          sourceId = imported.id;
+          setUploadedThreeD(current => current ? { ...current, historyId: imported.id } : current);
+        }
+        const job = await runJob({kind:"threed",generation_id:sourceId,speed_mode:speedMode},setJobPhase);
+        if (!job.result?.history_id) throw new Error("3D job returned no saved history");
+        const item = await getCloudHistory(job.result.history_id);
+        if (!item.glbBase64) throw new Error("3D job returned no model");
+        setGlbBase64(item.glbBase64); setGlbSizeKb(item.glbSizeKb); setThreedStage("done");
+        await saveHistoryItem(item).catch(() => setThreedError("Model saved to your cloud history, but the local cache is unavailable."));
+        markWarm("threed");
+      });
     } catch(e) { setThreedError(e instanceof Error?e.message:"3D conversion failed"); setThreedStage("idle"); }
     finally { threedRequestInFlight.current = false; }
   };
 
   const handleConvertTo3D = async () => {
-    if (cloudEnabled() && currentHistoryId && /^[0-9a-f-]{36}$/i.test(currentHistoryId)) { await handleCloud3D(); return; }
-    if (!imageBase64 || threedStage === "converting" || threedRequestInFlight.current) return;
+    if (isLoading || pickingThreeD) return;
+    if (cloudEnabled() && (uploadedThreeD || (currentHistoryId && /^[0-9a-f-]{36}$/i.test(currentHistoryId)))) { await handleCloud3D(); return; }
+    const sourceImage = uploadedThreeD?.base64 ?? imageBase64;
+    if (!sourceImage || threedRequestInFlight.current) return;
     threedRequestInFlight.current = true;
-    const conversionHistoryId = currentHistoryId;
-    const fingerprint = imageFingerprint(imageBase64);
+    const conversionHistoryId = uploadedThreeD?.id ?? currentHistoryId;
+    const fingerprint = imageFingerprint(sourceImage);
     const storedJob = readStoredThreeDJob();
     const requestId = storedJob?.imageFingerprint === fingerprint && storedJob.speedMode === speedMode
       ? storedJob.requestId
@@ -1160,6 +1216,7 @@ function Home({ accessToken, studioSession }: AppProps) {
     setThreedError(null);
     setGlbBase64(null);
     try {
+      if (uploadedThreeD) await saveHistoryItem({ id: uploadedThreeD.id, createdAt: new Date().toISOString(), prompt: `3D model from ${uploadedThreeD.name}`, enhancedPrompt: `Uploaded image: ${uploadedThreeD.name}`, imageBase64: sourceImage, mode: "general", speedMode });
       if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "converting", requestId } });
       let response: Response;
       try {
@@ -1167,7 +1224,7 @@ function Home({ accessToken, studioSession }: AppProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            image_base64: imageBase64,
+            image_base64: sourceImage,
             request_id: requestId,
             speed_mode: speedMode,
             texture: true,
@@ -1223,6 +1280,7 @@ function Home({ accessToken, studioSession }: AppProps) {
         setGlbBase64(generatedGlb);
         setGlbSizeKb(generatedSizeKb);
         setThreedStage("done");
+        setOutcomes(current => ({ ...current, threed: "completed" }));
         clearStoredThreeDJob();
         markWarm("threed");
         if (conversionHistoryId) {
@@ -1233,6 +1291,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       throw new Error("3D conversion exceeded its processing deadline. Check the job status before retrying.");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "3D conversion failed";
+      setOutcomes(current => ({ ...current, threed: "failed" }));
       setThreedError(message);
       if (conversionHistoryId) await updateHistoryItem(conversionHistoryId, { threeDJob: { status: "failed", requestId, error: message } }).catch(() => undefined);
       setThreedStage("idle");
@@ -1434,7 +1493,7 @@ function Home({ accessToken, studioSession }: AppProps) {
             )}
 
             {(Object.keys(timings).length > 0 || Object.keys(activeTimers).length > 0) && (
-              <View style={{ gap: 10 }}><Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} onPress={() => setDetailsOpen(!detailsOpen)} style={styles.ghostButton}><Text style={styles.ghostText}>{detailsOpen ? "Hide generation details" : "Generation details"}</Text></Pressable>{detailsOpen && <PerformanceInsights activeTimers={activeTimers} now={now} timings={timings} />}</View>
+              <PerformanceInsights activeTimers={activeTimers} now={now} timings={timings} outcomes={outcomes} />
             )}
 
             {error && <View style={{ gap: 10 }}><ErrorBanner title="Unable to complete this request" message={error} /><ActionButton icon="refresh" label="Retry request" disabled={isLoading} onPress={handleSubmit} /></View>}
@@ -1522,26 +1581,41 @@ function Home({ accessToken, studioSession }: AppProps) {
                     if (visibleImage.current === imageBase64) setHistoryInteractions(current => [...current.filter(turn => turn.id !== interaction.id), interaction]);
                     if (currentHistoryId) void appendHistoryInteraction(currentHistoryId, interaction, cloudEnabled() && /^[0-9a-f-]{36}$/i.test(currentHistoryId)).catch(e=>setError("Interaction could not be saved: "+e.message));
                   }}
-                  onOperationComplete={(duration) => {
-                    setTimings((current) => ({ ...current, interactive: duration }));
+                  onOperationStart={(mode) => setActiveTimers(current => ({ ...current, [mode]: Date.now() }))}
+                  onOperationComplete={(duration, mode, outcome) => {
+                    setTimings((current) => ({ ...current, [mode]: duration }));
+                    setOutcomes(current => ({ ...current, [mode]: outcome }));
+                    setActiveTimers(current => { const next = { ...current }; delete next[mode]; return next; });
                     markWarm("interactive");
                   }}
                   speedMode={speedMode}
                   sessionId={sessionId}
                 />
-
+              </View>
+            )}
                 <View style={styles.threeDSection}>
-                  <SectionTitle icon="cube" title="Explore in 3D" subtitle="Turn your image into a textured model you can rotate and inspect." />
-                  {threedStage === "idle" && (
+                  <SectionTitle icon="cube" title="Explore in 3D" subtitle="Turn a generated image or an image from your device into a textured model." />
+                  {threedStage !== "converting" && (
                     <View style={styles.centeredBlock}>
-                      <ActionButton icon="cube" label="Convert to 3D" onPress={handleConvertTo3D} />
-                      <Text style={styles.hint}>{"Shape and texture generation can take several minutes."}</Text>
+                      <View style={styles.actionButtons}>
+                        <ActionButton icon="cube" label="Convert to 3D" disabled={isLoading || pickingThreeD || (!imageBase64 && !uploadedThreeD)} onPress={handleConvertTo3D} />
+                        <ActionButton icon="image" label={pickingThreeD ? "Opening image…" : "Upload image for 3D"} disabled={isLoading || pickingThreeD} onPress={pickThreeDImage} />
+                      </View>
+                      {uploadedThreeD && <View style={{ alignItems: "center", gap: 10, width: "100%" }}>
+                        <Image accessibilityLabel="Selected image for 3D generation" source={{ uri: uploadedThreeD.uri }} resizeMode="contain" style={{ width: "100%", maxWidth: 280, height: 200, borderRadius: 8 }} />
+                        <Text style={styles.hint}>Selected: {uploadedThreeD.name}</Text>
+                        <Pressable accessibilityRole="button" disabled={isLoading || pickingThreeD} onPress={() => { setUploadedThreeD(null); setThreedStage("idle"); setGlbBase64(null); setGlbSizeKb(undefined); setThreedError(null); }} style={styles.ghostButton}>
+                          <Text style={styles.ghostText}>{imageBase64 ? "Use generated image" : "Remove selected image"}</Text>
+                        </Pressable>
+                      </View>}
+                      <Text style={styles.hint}>PNG, JPEG or WebP, up to 10 MB. Shape and texture generation can take several minutes.</Text>
                     </View>
                   )}
                   {threedStage === "converting" && (
                     <View style={[shared.card, styles.loadingCard]}>
                       <ActivityIndicator color={colors.cyan} size="large" />
                       <Text style={styles.loadingText}>{friendlyPhase(jobPhase || "converting", "Creating your model’s shape and texture…")}</Text>
+                      {activeTimers.threed !== undefined && <Text style={styles.hint}>{formatDuration(now - activeTimers.threed)} elapsed</Text>}
                       <View style={styles.stageRow}>
                         <StagePill active={jobPhase === "preparing image" || jobPhase === "generating shape"} label="Shape" />
                         <StagePill active={jobPhase === "simplifying mesh" || jobPhase === "synthesizing texture"} label="Texture" />
@@ -1551,10 +1625,11 @@ function Home({ accessToken, studioSession }: AppProps) {
                     </View>
                   )}
                   {threedError && <ErrorBanner title="3D conversion needs attention" message={threedError} />}
+                  {threedStage !== "converting" && timings.threed !== undefined && <Text style={styles.hint}>3D generation · {outcomes.threed === "failed" ? "Attempt ended after" : "Completed in"} {formatDuration(timings.threed)}</Text>}
                   {threedStage === "done" && glbBase64 && <ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} />}
                   {threedStage === "done" && threedOutputId && <FeedbackControls key={threedOutputId} agentName="threed-agent"
                     apiUrl={BACKEND_HEALTH_URL} accessToken={accessToken} sessionId={sessionId} outputId={threedOutputId}
-                    inputContext={{ prompt: enhancedPrompt || prompt }} outputSnapshot={{ size_kb: glbSizeKb }} />}
+                    inputContext={{ prompt: uploadedThreeD ? `Uploaded image: ${uploadedThreeD.name}` : enhancedPrompt || prompt }} outputSnapshot={{ size_kb: glbSizeKb }} />}
 
                   {threedStage === "done" && (
                     <Pressable onPress={() => { setThreedStage("idle"); setGlbBase64(null); setThreedError(null); }} style={styles.ghostButton}>
@@ -1562,8 +1637,6 @@ function Home({ accessToken, studioSession }: AppProps) {
                     </Pressable>
                   )}
                 </View>
-              </View>
-            )}
 
             </>}
           </View>
@@ -1624,28 +1697,23 @@ function SectionTitle({ icon, title, subtitle }: { icon?: IconName; title: strin
   return <View style={styles.sectionTitle}>{icon && <Icon color={colors.primaryBright} name={icon} size={25} />}<Text style={styles.sectionHeading}>{title}</Text><Text style={styles.sectionSubtitle}>{subtitle}</Text></View>;
 }
 
-function PerformanceInsights({ activeTimers, now, timings }: { activeTimers: Partial<Record<ProcessKey, number>>; now: number; timings: Partial<Record<ProcessKey, number>> }) {
+function PerformanceInsights({ activeTimers, now, timings, outcomes }: { activeTimers: Partial<Record<ProcessKey, number>>; now: number; timings: Partial<Record<ProcessKey, number>>; outcomes: Partial<Record<ProcessKey, ProcessOutcome>> }) {
   const { colors } = useAppTheme();
   const styles = makeStyles(colors);
   const shared = makeSharedStyles(colors);
-  const items: Array<{ key: ProcessKey; label: string }> = [
-    { key: "prompt", label: "Prompt enhancement" },
-    { key: "image", label: "Image generation" },
-    { key: "eval", label: "Quality evaluation" },
-    { key: "interactive", label: "Interactive analysis" },
-    { key: "threed", label: "3D generation" },
-  ];
+  const items = (Object.keys(PROCESS_LABELS) as ProcessKey[]).filter(key => timings[key] !== undefined || activeTimers[key] !== undefined);
   return (
     <View style={[shared.card, styles.insightsCard]}>
-      <View style={styles.insightsHeader}><Icon color={colors.primaryBright} name="clock" size={18} /><Text style={styles.insightsTitle}>Processing insights</Text></View>
+      <View style={styles.insightsHeader}><Icon color={colors.primaryBright} name="clock" size={18} /><Text style={styles.insightsTitle}>Processing time</Text></View>
+      <Text style={styles.hint}>Latest attempt for each action, including queue and transfer time.</Text>
       <View style={styles.metricsGrid}>
-        {items.map((item) => {
-          const activeSince = activeTimers[item.key];
-          const elapsed = activeSince ? now - activeSince : timings[item.key];
+        {items.map((key) => {
+          const activeSince = activeTimers[key];
+          const elapsed = activeSince !== undefined ? now - activeSince : timings[key];
           return (
-            <View key={item.key} style={styles.metricItem}>
-              <Text style={styles.metricLabel}>{item.label}</Text>
-              <Text style={styles.metricValue}>{elapsed === undefined ? "Not run" : activeSince ? `${formatDuration(elapsed)} running` : formatDuration(elapsed)}</Text>
+            <View key={key} style={styles.metricItem}>
+              <Text style={styles.metricLabel}>{PROCESS_LABELS[key]}</Text>
+              <Text style={styles.metricValue}>{formatDuration(elapsed ?? 0)} · {activeSince !== undefined ? "Running" : outcomes[key] === "failed" ? "Failed attempt" : "Completed"}</Text>
             </View>
           );
         })}

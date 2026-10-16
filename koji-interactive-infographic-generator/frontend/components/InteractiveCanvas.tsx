@@ -1,4 +1,5 @@
 import { modelRequest, cloudEnabled, runJob, getCloudHistory } from "../studioClient";
+import { formatDuration } from "../processing";
 import type { GenerationInteraction } from "../historyStorage";
 import AnnotationEditor from "./AnnotationEditor";
 import PdfSourcesPanel from "./PdfSourcesPanel";
@@ -46,7 +47,8 @@ interface InteractiveCanvasProps {
   anatomyOrgan?: string;
   feedbackApiUrl: string;
   imageBase64: string;
-  onOperationComplete?: (durationMs: number) => void;
+  onOperationStart?: (mode: AnalysisMode) => void;
+  onOperationComplete?: (durationMs: number, mode: AnalysisMode, outcome: "completed" | "failed") => void;
   onInteractionComplete?: (interaction: GenerationInteraction) => void;
   speedMode?: SpeedMode;
   sessionId: string;
@@ -72,7 +74,7 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function InteractiveCanvas({ imageFeedback, chatId, generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
+export default function InteractiveCanvas({ imageFeedback, chatId, generationId, interactions = [], onAnnotationsChange, accessToken, anatomyAnnotations = [], anatomyOrgan, feedbackApiUrl, imageBase64, onInteractionComplete, onOperationStart, onOperationComplete, sessionId, speedMode = "pro" }: InteractiveCanvasProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shared = useMemo(() => makeSharedStyles(colors), [colors]);
@@ -87,6 +89,14 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
   const [highlightedImage, setHighlightedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysisDuration, setAnalysisDuration] = useState<number | null>(null);
+  const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(null);
+  const [analysisNow, setAnalysisNow] = useState(Date.now());
+  useEffect(() => {
+    if (analysisStartedAt === null) return;
+    setAnalysisNow(Date.now());
+    const timer = setInterval(() => setAnalysisNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [analysisStartedAt]);
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
   const [aspectRatio, setAspectRatio] = useState(1);
@@ -189,6 +199,9 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
   const runAnalysis = async (regenerationFeedback?: string) => {
     if (!currentSelection || isLoading || (analysisMode === "ask" && !customQuestion.trim())) return;
     const startedAt = Date.now();
+    setAnalysisStartedAt(startedAt);
+    let outcome: "completed" | "failed" = "failed";
+    onOperationStart?.(analysisMode);
     const turnId = createOutputId("question");
     const turnQuestion = analysisMode === "ask" ? customQuestion.trim() : analysisMode === "identify" ? "Identify selected object" : "Explain selected region";
     const selection = { ...currentSelection, coords: [...currentSelection.coords] };
@@ -267,12 +280,14 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
       setOutputId(createOutputId("interactive"));
       const duration = Date.now() - startedAt;
       setAnalysisDuration(duration);
-      onOperationComplete?.(duration);
+      outcome = "completed";
     } catch (caught) {
       if (activeImage.current !== imageBase64) return;
       setError(caught instanceof Error ? caught.message : "Analysis failed");
       setAnalysisDuration(Date.now() - startedAt);
     } finally {
+      setAnalysisStartedAt(null);
+      onOperationComplete?.(Date.now() - startedAt, analysisMode, outcome);
       if (activeImage.current === imageBase64) setIsLoading(false);
     }
   };
@@ -374,6 +389,8 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
         </View>
       )}
 
+      {isLoading && analysisStartedAt !== null && <Text style={styles.durationText}>{analysisMode === "ask" ? "Question answering" : analysisMode === "identify" ? "Object identification" : "Region explanation"} · {formatDuration(Math.max(0, analysisNow - analysisStartedAt))} elapsed</Text>}
+
       {!!interactions.length && <View style={[shared.card, { gap: 12 }]}>
         <Text style={styles.badge}>Conversation about this image</Text>
         {interactions.map(turn => <View key={turn.id} style={{ gap: 8, paddingVertical: 10 }}>
@@ -474,11 +491,3 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   durationText: { color: colors.textDim, fontSize: 11 },
 });
-
-function formatDuration(milliseconds: number): string {
-  if (milliseconds < 1_000) return `${Math.max(1, Math.round(milliseconds))} ms`;
-  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`;
-  const minutes = Math.floor(milliseconds / 60_000);
-  const seconds = Math.round((milliseconds % 60_000) / 1_000);
-  return `${minutes} min ${seconds} s`;
-}
