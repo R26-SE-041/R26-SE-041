@@ -3,12 +3,15 @@ import type { GenerationHistoryItem, HistoryMode } from "./historyStorage";
 export type ArchiveFilter = "all" | HistoryMode;
 export type ArchivePeriod = "all" | "week" | "month";
 export interface CreationSummary {
+  modelEvent?: string;
+  annotations?: GenerationHistoryItem["anatomyAnnotations"];
   deletedAt?: string | null;
   id: string;
   title: string;
   updatedAt: string;
   mode: HistoryMode;
   imageUrl?: string;
+  imageKey?: string;
   generationId?: string;
   versionCount: number;
   hasThreeD?: boolean;
@@ -31,7 +34,7 @@ export function localSummaries(items: GenerationHistoryItem[]): CreationSummary[
     const latest = versions[versions.length - 1];
     return { id, deletedAt: latest.deletedAt, title: latest.title || creationTitle(versions[0].prompt, latest.mode), updatedAt: latest.createdAt,
       mode: latest.mode, generationId: latest.id, imageUrl: latest.imageBase64 ? `data:image/png;base64,${latest.imageBase64}` : latest.imageUrl,
-      versionCount: versions.length, hasThreeD: versions.some(v => Boolean(v.glbBase64 || v.hasThreeD)), source: "local" as const, versions };
+      versionCount: versions.length, annotations: latest.anatomyAnnotations, hasThreeD: versions.some(v => Boolean(v.glbBase64 || v.glbUrl || v.hasThreeD)), source: "local" as const, versions };
   }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 export function filterArchive(items: CreationSummary[], query: string, mode: ArchiveFilter, period: ArchivePeriod, now = new Date()): CreationSummary[] {
@@ -48,3 +51,15 @@ export function dateGroup(value: string, now = new Date()): string {
   return date >= today ? "Today" : date >= yesterday ? "Yesterday" : "Earlier";
 }
 export const modeLabel = (mode: HistoryMode) => mode === "sketch" ? "Drawing" : mode === "anatomy" ? "Anatomy" : "Image";
+
+export function conversationEvents<T extends { kind: string; data: { prompt?: string } }>(events: T[]): T[] {
+  let lastPrompt: string | null = null;
+  return events.filter(event => {
+    if (!["prompt", "interaction", "error"].includes(event.kind)) return false;
+    if (event.kind !== "prompt") { lastPrompt = null; return true; }
+    const prompt = (event.data.prompt || "").replace(/\s+/g, " ").trim();
+    if (!prompt || prompt === lastPrompt) return false;
+    lastPrompt = prompt;
+    return true;
+  });
+}

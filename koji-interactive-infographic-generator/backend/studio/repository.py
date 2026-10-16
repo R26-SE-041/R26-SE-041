@@ -237,15 +237,17 @@ class Repository:
         with connection() as conn,conn.cursor() as cur:
             self._chat_event(cur,user_id,chat_id,event_id,kind,data,generation_id,created_at)
 
-    def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None,trashed=False):
+    def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None,trashed=False,category=""):
         pattern="%"+query+"%"
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""select c.*, latest.id as latest_generation_id,
+                latest.metadata->'anatomyAnnotations' as annotations,
                 coalesce(latest.thumbnail_path,latest.image_path) as preview_path,
                 coalesce(latest.metadata->>'mode',
                     (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
                      and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general') as mode,
-                latest.glb_path is not null as has_three_d,
+                exists(select 1 from koji_generations g where g.user_id=c.user_id
+                    and coalesce(g.metadata->>'chatId',g.id::text)=c.id and g.glb_path is not null) as has_three_d,
                 (select count(*) from koji_generations g where g.user_id=c.user_id
                  and coalesce(g.metadata->>'chatId',g.id::text)=c.id) as version_count,
                 (select count(*) from koji_chat_events e where e.user_id=c.user_id and e.chat_id=c.id) as event_count
@@ -256,13 +258,39 @@ class Repository:
                 ) latest on true where c.user_id=%s and (c.deleted_at is not null)=%s
                 and (%s::timestamptz is null or (c.updated_at,c.id)<(%s::timestamptz,%s))
                 and (%s::timestamptz is null or c.updated_at >= %s::timestamptz)
+                and (%s='' or case when coalesce(latest.metadata->>'mode',
+                    (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
+                     and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general')='sketch' then 'sketch' else 'images' end=%s)
                 and (%s='' or coalesce(latest.metadata->>'mode',
                     (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
                      and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general')=%s)
                 and (%s='' or c.title ilike %s or exists(select 1 from koji_chat_events e
                     where e.user_id=c.user_id and e.chat_id=c.id and
                     (e.data->>'prompt' ilike %s or e.data->>'question' ilike %s or e.data->>'answer' ilike %s)))
-                order by c.updated_at desc,c.id desc limit 50""",(user_id,trashed,before,before,before_id,since,since,mode,mode,query,pattern,pattern,pattern,pattern))
+                order by c.updated_at desc,c.id desc limit 50""",(user_id,trashed,before,before,before_id,since,since,category,category,mode,mode,query,pattern,pattern,pattern,pattern))
+            return [dict(row) for row in cur.fetchall()]
+
+    def list_models(self,user_id,before=None,before_id="",query="",trashed=False):
+        with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""with candidates as (
+                select g.id as generation_id,g.id::text as id,g.created_at,g.glb_path
+                from koji_generations g where g.user_id=%s and g.glb_path is not null
+                union all
+                select e.generation_id,e.id,e.created_at,e.data->>'glbPath'
+                from koji_chat_events e where e.user_id=%s and e.kind='threed'
+                    and e.generation_id is not null and e.data->>'glbPath' is not null
+            ), models as (
+                select distinct on (glb_path) * from candidates order by glb_path,created_at desc,id desc
+            ) select m.*,coalesce(g.metadata->>'chatId',g.id::text) as chat_id,
+                coalesce(c.title,g.metadata->>'prompt','3D model') as title,
+                g.metadata->>'mode' as mode,g.metadata->>'glbSizeKb' as size_kb
+                from models m join koji_generations g on g.id=m.generation_id and g.user_id=%s
+                left join koji_chats c on c.id=coalesce(g.metadata->>'chatId',g.id::text) and c.user_id=g.user_id
+                where (c.deleted_at is not null)=%s
+                and (%s::timestamptz is null or (m.created_at,m.id)<(%s::timestamptz,%s))
+                and (%s='' or coalesce(c.title,g.metadata->>'prompt','') ilike %s)
+                order by m.created_at desc,m.id desc limit 50""",
+                (user_id,user_id,user_id,trashed,before,before,before_id,query,'%'+query+'%'))
             return [dict(row) for row in cur.fetchall()]
 
     def get_chat(self,user_id,chat_id):

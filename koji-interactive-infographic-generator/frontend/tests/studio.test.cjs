@@ -28,6 +28,62 @@ const annotation = {
   label_x: .05, label_y: .2, verified: false, user_edited: true, confidence: 0,
 };
 
+test('cached history reuses binary images across metadata refreshes and separates accounts', async () => {
+  const buckets = new Map(), cache = new Map();
+  let metadataReads = 0, imageReads = 0;
+  const globals = {
+    Response, AbortSignal, URLSearchParams, btoa, location: { origin: 'https://studio.example' },
+    caches: { open: async name => {
+      if (!buckets.has(name)) buckets.set(name, new Map());
+      const entries = buckets.get(name);
+      return { match: async key => entries.get(typeof key === 'string' ? key : key.url)?.clone(),
+        put: async (key, value) => entries.set(key, value), keys: async () => [...entries.keys()].map(url => ({ url })),
+        delete: async key => entries.delete(typeof key === 'string' ? key : key.url) };
+    } },
+    fetch: async url => {
+      if (url.includes('/studio/history/')) {
+        metadataReads++;
+        return { ok: true, json: async () => ({ id: 'one', imageBase64: '', imageKey: 'immutable-image', imageUrl: 'https://asset.example/image?signature=' + metadataReads }) };
+      }
+      imageReads++;
+      return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+    },
+  };
+  const client = loadModule('studioClient.ts', globals, cache);
+  const activity = loadModule('historyActivity.ts', globals, cache);
+  const token = owner => 'header.' + Buffer.from(JSON.stringify({ sub: owner })).toString('base64url') + '.signature';
+  client.configureStudio(token('first-owner'));
+  const [first, second] = await Promise.all([client.getCloudHistory('one'), client.getCloudHistory('one')]);
+  assert.equal(first.imageBase64, 'AQID'); assert.equal(second, first);
+  assert.equal(metadataReads, 1); assert.equal(imageReads, 1);
+  activity.markHistoryChanged();
+  await client.getCloudHistory('one');
+  assert.equal(metadataReads, 2); assert.equal(imageReads, 1);
+  client.configureStudio(token('second-owner'));
+  await client.getCloudHistory('one');
+  assert.equal(imageReads, 2);
+});
+
+test('conversation removes duplicate generation prompts while retaining separate questions', () => {
+  const { conversationEvents } = loadModule('historyView.ts');
+  const events = [
+    { id: 'one', kind: 'prompt', data: { prompt: 'skull' } },
+    { id: 'enhance', kind: 'enhancement', data: {} },
+    { id: 'two', kind: 'prompt', data: { prompt: ' skull  ' } },
+    { id: 'answer', kind: 'interaction', data: { question: 'What is this?' } },
+    { id: 'three', kind: 'prompt', data: { prompt: 'skull' } },
+  ];
+  assert.deepEqual(Array.from(conversationEvents(events), event => event.id), ['one', 'answer', 'three']);
+});
+
+test('activity timing stops at completion and safely handles missing timestamps', () => {
+  const { jobElapsed } = loadModule('processing.ts');
+  const job = { created_at: '2026-10-16T10:00:00Z', updated_at: '2026-10-16T10:02:00Z', status: 'completed' };
+  assert.equal(jobElapsed(job, Date.parse('2026-10-16T11:00:00Z')), 120000);
+  assert.equal(jobElapsed({ ...job, status: 'running' }, Date.parse('2026-10-16T10:03:00Z')), 180000);
+  assert.equal(jobElapsed({ ...job, updated_at: undefined }, Date.now()), null);
+});
+
 test('history remains fresh across tab visits but expires or invalidates after changes', () => {
   const activity = loadModule('historyActivity.ts');
   const loaded = { key: 'creations', at: 1000, revision: activity.getHistoryRevision() };

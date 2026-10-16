@@ -1,4 +1,5 @@
-import { cloudEnabled, configureStudio, studioOwner, studioRequest, runJob, waitJob, getCloudHistory, modelRequest, appendChatEvent } from "./studioClient";
+import { cloudEnabled, configureStudio, studioOwner, studioRequest, runJob, waitJob, getCloudHistory, getCloudModel, modelRequest, appendChatEvent } from "./studioClient";
+import { markHistoryChanged } from "./historyActivity";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { PROCESS_LABELS, ProcessKey, ProcessOutcome, formatDuration } from "./processing";
@@ -229,6 +230,7 @@ function friendlyPhase(phase: string, fallback: string): string {
     "simplifying mesh": "Preparing the mesh for texturing…",
     "synthesizing texture": "Creating your model’s texture…",
     "exporting model": "Exporting your 3D model…",
+    "opening saved model": "Opening your completed 3D model…",
   };
   return phase.startsWith("retrying") ? "Refining the image after its quality check…" : labels[phase] || fallback;
 }
@@ -320,8 +322,10 @@ function Home({ accessToken, studioSession }: AppProps) {
   const [error, setError] = useState<string | null>(null);
   const [threedStage, setThreedStage] = useState<ThreeDStage>("idle");
   const [glbBase64, setGlbBase64] = useState<string | null>(null);
+  const [modelAsset, setModelAsset] = useState<{ modelUrl: string; modelKey: string } | null>(null);
+  const [savedThreeD, setSavedThreeD] = useState<{ id: string; sourceKey: string | null } | null>(null);
   const [glbSizeKb, setGlbSizeKb] = useState<number>();
-  const threedOutputId = useMemo(() => glbBase64 ? createOutputId("threed") : null, [glbBase64]);
+  const threedOutputId = useMemo(() => glbBase64 || modelAsset ? createOutputId("threed") : null, [glbBase64, modelAsset]);
   const [threedError, setThreedError] = useState<string | null>(null);
   const [uploadedThreeD, setUploadedThreeD] = useState<UploadedThreeDImage | null>(null);
   const [pickingThreeD, setPickingThreeD] = useState(false);
@@ -355,6 +359,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     enhancedPromptJson: EnhancedPromptPayload | null; imageBase64: string | null;
     anatomySpec: AnatomySpec; anatomyAnnotations: AnatomyAnnotation[]; evaluation: EvaluationResult | null;
     evaluationRetries: number; evaluationWarning: string | null; glbBase64: string | null;
+    modelAsset: { modelUrl: string; modelKey: string } | null;
+    savedThreeD: { id: string; sourceKey: string | null } | null;
     glbSizeKb?: number; threedStage: ThreeDStage; historyId: string | null; chatId: string | null;
     uploadedThreeD: UploadedThreeDImage | null;
     timings: Partial<Record<ProcessKey, number>>; outcomes: Partial<Record<ProcessKey, ProcessOutcome>>;
@@ -472,6 +478,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     setError(null);
     setThreedStage("idle");
     setGlbBase64(null);
+    setModelAsset(null);
+    setSavedThreeD(null);
     setGlbSizeKb(undefined);
     setThreedError(null);
     setUploadedThreeD(null);
@@ -500,7 +508,7 @@ function Home({ accessToken, studioSession }: AppProps) {
       workspaceSnapshots.current[workspace] = {
         historyInteractions, sketchStrokes, sketchStrength, sketchMetadata,
         prompt, stage, speedMode, enhancedPrompt, enhancedPromptJson, imageBase64, anatomySpec,
-        anatomyAnnotations, evaluation, evaluationRetries, evaluationWarning, glbBase64, glbSizeKb,
+        anatomyAnnotations, evaluation, evaluationRetries, evaluationWarning, glbBase64, glbSizeKb, modelAsset, savedThreeD,
         threedStage, historyId: currentHistoryId, chatId: currentChatId.current, uploadedThreeD, timings, outcomes,
       };
     }
@@ -516,6 +524,8 @@ function Home({ accessToken, studioSession }: AppProps) {
         setAnatomyAnnotations(saved.anatomyAnnotations); setEvaluation(saved.evaluation);
         setEvaluationRetries(saved.evaluationRetries); setEvaluationWarning(saved.evaluationWarning);
         setGlbBase64(saved.glbBase64); setGlbSizeKb(saved.glbSizeKb); setThreedStage(saved.threedStage);
+        setModelAsset(saved.modelAsset);
+        setSavedThreeD(saved.savedThreeD);
         setUploadedThreeD(saved.uploadedThreeD); setTimings(saved.timings); setOutcomes(saved.outcomes);
         setCurrentHistoryId(saved.historyId); currentChatId.current = saved.chatId;
       } else {
@@ -594,7 +604,8 @@ function Home({ accessToken, studioSession }: AppProps) {
     setEvaluationRetries(item.evaluationRetries ?? 0);
     setEvaluationWarning(item.evaluationWarning ?? null);
     setGlbBase64(item.glbBase64 ?? null); setGlbSizeKb(item.glbSizeKb);
-    setThreedStage(item.glbBase64 ? "done" : "idle");
+    setModelAsset(item.glbUrl ? { modelUrl: item.glbUrl, modelKey: item.modelKey || item.id } : null);
+    setThreedStage(item.glbBase64 || item.glbUrl ? "done" : "idle");
     setCurrentHistoryId(item.imageBase64 ? item.id : null); currentChatId.current = item.chatId ?? item.id;
     setImageOutputId(createOutputId("image")); setStage(item.imageBase64 ? "done" : "preview");
   };
@@ -1167,10 +1178,22 @@ function Home({ accessToken, studioSession }: AppProps) {
     } finally { setPickingThreeD(false); }
   };
 
+  const openSaved3D = async (id: string) => {
+    if (threedRequestInFlight.current) return;
+    threedRequestInFlight.current = true; setThreedError(null); setThreedStage("converting"); setJobPhase("opening saved model");
+    try {
+      const model = await getCloudModel(id);
+      setModelAsset(model); setGlbBase64(null); setGlbSizeKb(model.sizeKb); setThreedStage("done");
+      setOutcomes(current => ({ ...current, threed: "completed" }));
+    } catch (failure) { setThreedError(failure instanceof Error ? failure.message : "Unable to open the saved model."); setThreedStage("idle"); }
+    finally { threedRequestInFlight.current = false; }
+  };
   const handleCloud3D = async () => {
     if ((!currentHistoryId && !uploadedThreeD) || threedRequestInFlight.current) return;
+    const sourceKey = uploadedThreeD?.id || currentHistoryId;
+    if (savedThreeD?.sourceKey === sourceKey && !modelAsset) { await openSaved3D(savedThreeD.id); return; }
     threedRequestInFlight.current = true; setThreedStage("converting"); setThreedError(null);
-    setGlbBase64(null); setGlbSizeKb(undefined);
+    setGlbBase64(null); setModelAsset(null); setGlbSizeKb(undefined);
     setJobPhase("queued");
     try {
       await runTimed("threed", async () => {
@@ -1186,10 +1209,11 @@ function Home({ accessToken, studioSession }: AppProps) {
         }
         const job = await runJob({kind:"threed",generation_id:sourceId,speed_mode:speedMode},setJobPhase);
         if (!job.result?.history_id) throw new Error("3D job returned no saved history");
-        const item = await getCloudHistory(job.result.history_id);
-        if (!item.glbBase64) throw new Error("3D job returned no model");
-        setGlbBase64(item.glbBase64); setGlbSizeKb(item.glbSizeKb); setThreedStage("done");
-        await saveHistoryItem(item).catch(() => setThreedError("Model saved to your cloud history, but the local cache is unavailable."));
+        setSavedThreeD({ id: job.result.history_id, sourceKey });
+        setJobPhase("opening saved model");
+        const model = await getCloudModel(job.result.history_id);
+        setModelAsset(model); setGlbBase64(null); setGlbSizeKb(model.sizeKb); setThreedStage("done");
+        markHistoryChanged();
         markWarm("threed");
       });
     } catch(e) { setThreedError(e instanceof Error?e.message:"3D conversion failed"); setThreedStage("idle"); }
@@ -1601,8 +1625,8 @@ function Home({ accessToken, studioSession }: AppProps) {
                   {threedStage !== "converting" && (
                     <View style={styles.centeredBlock}>
                       <View style={styles.actionButtons}>
-                        <ActionButton icon="cube" label="Convert to 3D" disabled={isLoading || pickingThreeD || (!imageBase64 && !uploadedThreeD)} onPress={handleConvertTo3D} />
                         <ActionButton icon="image" label={pickingThreeD ? "Opening image…" : "Upload image for 3D"} disabled={isLoading || pickingThreeD} onPress={pickThreeDImage} />
+                        <ActionButton icon="cube" label="Convert to 3D" disabled={isLoading || pickingThreeD || (!imageBase64 && !uploadedThreeD)} onPress={handleConvertTo3D} />
                       </View>
                       {uploadedThreeD && <View style={{ alignItems: "center", gap: 10, width: "100%" }}>
                         <Image accessibilityLabel="Selected image for 3D generation" source={{ uri: uploadedThreeD.uri }} resizeMode="contain" style={{ width: "100%", maxWidth: 280, height: 200, borderRadius: 8 }} />
@@ -1628,8 +1652,9 @@ function Home({ accessToken, studioSession }: AppProps) {
                     </View>
                   )}
                   {threedError && <ErrorBanner title="3D conversion needs attention" message={threedError} />}
+                  {threedError && savedThreeD?.sourceKey === (uploadedThreeD?.id || currentHistoryId) && <ActionButton icon="cube" label="Open saved model" disabled={isLoading} onPress={() => openSaved3D(savedThreeD.id)} />}
                   {threedStage !== "converting" && timings.threed !== undefined && <Text style={styles.hint}>3D generation · {outcomes.threed === "failed" ? "Attempt ended after" : "Completed in"} {formatDuration(timings.threed)}</Text>}
-                  {threedStage === "done" && glbBase64 && <ThreeDViewer glbBase64={glbBase64} sizeKb={glbSizeKb} />}
+                  {threedStage === "done" && (glbBase64 || modelAsset) && <ThreeDViewer glbBase64={glbBase64 || undefined} modelUrl={glbBase64 ? undefined : modelAsset?.modelUrl} modelKey={glbBase64 ? threedOutputId || undefined : modelAsset?.modelKey} sizeKb={glbSizeKb} />}
                   {threedStage === "done" && threedOutputId && <FeedbackControls key={threedOutputId} agentName="threed-agent"
                     apiUrl={BACKEND_HEALTH_URL} accessToken={accessToken} sessionId={sessionId} outputId={threedOutputId}
                     inputContext={{ prompt: uploadedThreeD ? `Uploaded image: ${uploadedThreeD.name}` : enhancedPrompt || prompt }} outputSnapshot={{ size_kb: glbSizeKb }} />}

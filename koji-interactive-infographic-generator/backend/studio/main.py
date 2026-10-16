@@ -63,15 +63,22 @@ def account(identity=Depends(require_identity)):
 def public_job(row):
     return {key:row.get(key) for key in ("id","kind","generation_id","status","stage","result","error","created_at","updated_at")}
 
-def history_item(row,assets=False):
+def history_item(row,assets=False,asset_urls=False):
     item = {**row["metadata"],"id":str(row["id"]),"createdAt":row["created_at"].isoformat(),"imageBase64":""}
     storage = Storage()
     if assets:
         events=repo.get_interactions(str(row["user_id"]),str(row["id"]))
         item["interactions"]=list({turn["id"]:turn for turn in [*item.get("interactions",[]),*events]}.values())
-        item["imageBase64"] = storage.download(row["image_path"])
-        if row.get("glb_path"):
-            item["glbBase64"] = storage.download(row["glb_path"])
+        if asset_urls:
+            item["imageKey"]=row["image_path"]
+            item["imageUrl"]=storage.signed_url(row["image_path"])
+            if row.get("glb_path"):
+                item["modelKey"]=row["glb_path"]
+                item["glbUrl"]=storage.signed_url(row["glb_path"])
+        else:
+            item["imageBase64"] = storage.download(row["image_path"])
+            if row.get("glb_path"):
+                item["glbBase64"] = storage.download(row["glb_path"])
     else:
         item["imageUrl"] = storage.signed_url(row.get("thumbnail_path") or row["image_path"])
         item["hasThreeD"] = bool(row.get("glb_path"))
@@ -246,7 +253,8 @@ def list_history(before: datetime | None=Query(default=None),user_id: str=Depend
     return [history_item(row) for row in repo.list_history(user_id,before)]
 
 @app.get("/studio/history/{generation_id}")
-def get_history(generation_id: UUID,model_event: str | None=Query(default=None,max_length=160),user_id: str=Depends(require_user)):
+def get_history(generation_id: UUID,model_event: str | None=Query(default=None,max_length=160),
+                asset_mode: Literal["inline","urls"]=Query(default="inline"),user_id: str=Depends(require_user)):
     row = repo.get_history(user_id,str(generation_id))
     if not row:
         raise HTTPException(404,"Generation not found")
@@ -255,7 +263,30 @@ def get_history(generation_id: UUID,model_event: str | None=Query(default=None,m
         if not path:
             raise HTTPException(404,"3D model version not found")
         row={**row,"glb_path":path}
-    return history_item(row,assets=True)
+    return history_item(row,assets=True,asset_urls=asset_mode=="urls")
+
+@app.get("/studio/history/{generation_id}/model")
+def get_model(generation_id: UUID,model_event: str | None=Query(default=None,max_length=160),user_id: str=Depends(require_user)):
+    row=repo.get_history(user_id,str(generation_id))
+    if not row:
+        raise HTTPException(404,"Generation not found")
+    path=repo.model_path(user_id,str(generation_id),model_event) if model_event else row.get("glb_path")
+    if not path:
+        raise HTTPException(404,"3D model not found")
+    return {"id":str(generation_id),"modelKey":path,"modelUrl":Storage().signed_url(path),"sizeKb":row["metadata"].get("glbSizeKb")}
+
+@app.get("/studio/models")
+def list_models(before: datetime | None=Query(default=None),before_id: str=Query(default="",max_length=160),
+                query: str=Query(default="",max_length=100),trashed: bool=Query(default=False),user_id: str=Depends(require_user)):
+    from concurrent.futures import ThreadPoolExecutor
+    rows=repo.list_models(user_id,before,before_id,query.strip(),trashed)
+    storage=Storage()
+    def item(row):
+        return {"id":row["id"],"generationId":str(row["generation_id"]),"chatId":row["chat_id"],
+                "title":row["title"],"createdAt":row["created_at"].isoformat(),"mode":row["mode"],
+                "modelKey":row["glb_path"],"modelUrl":storage.signed_url(row["glb_path"])}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return list(pool.map(item,rows))
 
 @app.patch("/studio/history/{generation_id}")
 def patch_history(generation_id: UUID,body: HistoryPatch,user_id: str=Depends(require_user)):
@@ -324,17 +355,20 @@ def import_history(body: HistoryImport,user_id: str=Depends(require_user)):
 def list_chats(before: datetime | None=Query(default=None),before_id: str=Query(default="",max_length=128),
                query: str=Query(default="",max_length=100),
                mode: Literal["general","anatomy","sketch"] | None=Query(default=None),
-               since: datetime | None=Query(default=None),trashed: bool=Query(default=False),user_id: str=Depends(require_user)):
-    rows = repo.list_chats(user_id,before,before_id,query.strip(),mode or "",since,trashed=trashed)
+               since: datetime | None=Query(default=None),trashed: bool=Query(default=False),
+               category: Literal["images","sketch"] | None=Query(default=None),user_id: str=Depends(require_user)):
+    rows = repo.list_chats(user_id,before,before_id,query.strip(),mode or "",since,trashed=trashed,**({"category":category} if category else {}))
     storage = Storage()
-    result = []
-    for row in rows:
+    def preview(row):
         item = dict(row)
         path = item.pop("preview_path", None)
         if path:
+            item["imageKey"] = path
             item["imageUrl"] = storage.signed_url(path)
-        result.append(item)
-    return result
+        return item
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return list(pool.map(preview,rows))
 
 @app.post("/studio/chats/{chat_id}/events",status_code=201)
 def add_chat_event(chat_id: str,body: ChatEvent,user_id: str=Depends(require_user)):

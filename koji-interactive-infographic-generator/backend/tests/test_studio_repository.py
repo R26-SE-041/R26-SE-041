@@ -113,6 +113,26 @@ class RepositoryIntegrationTests(unittest.TestCase):
         with self.assertRaises(LookupError):
             self.repo.create_job(self.other,self.payload(kind="threed",generation_id=generation),{})
 
+    def test_gallery_includes_older_model_versions_and_filters_owner_and_recycle_bin(self):
+        generation, latest, sketch, foreign = (str(uuid4()) for _ in range(4))
+        self.repo.save_history(self.owner,generation,{"chatId":"models","prompt":"Skull","mode":"anatomy"},self.owner+"/skull.png")
+        self.repo.save_history(self.owner,latest,{"chatId":"models","mode":"anatomy"},self.owner+"/latest.png")
+        self.repo.save_history(self.owner,sketch,{"chatId":"drawing","mode":"sketch"},self.owner+"/drawing.png")
+        self.repo.append_chat_event(self.owner,"drawing","drawing.image","image",{"mode":"sketch"},sketch)
+        self.repo.save_history(self.other,foreign,{"chatId":"private","mode":"anatomy"},self.other+"/image.png")
+        self.repo.patch_history(self.owner,generation,{},glb_path=self.owner+"/new.glb")
+        self.repo.patch_history(self.other,foreign,{},glb_path=self.other+"/private.glb")
+        self.repo.append_chat_event(self.owner,"models","model.old","threed",{"glbPath":self.owner+"/old.glb"},generation)
+        self.repo.append_chat_event(self.owner,"models","model.new","threed",{"glbPath":self.owner+"/new.glb"},generation)
+        models = self.repo.list_models(self.owner)
+        self.assertEqual({row["glb_path"] for row in models},{self.owner+"/old.glb",self.owner+"/new.glb"})
+        self.assertEqual(len(models),2)
+        self.assertEqual(len(self.repo.list_chats(self.owner,category="sketch")),1)
+        self.assertEqual(len(self.repo.list_chats(self.owner,category="images")),1)
+        self.repo.set_chat_trashed(self.owner,"models",True)
+        self.assertEqual(self.repo.list_models(self.owner),[])
+        self.assertEqual(len(self.repo.list_models(self.owner,trashed=True)),2)
+
     def test_running_source_job_is_deduplicated(self):
         generation=str(uuid4())
         self.repo.save_history(self.owner,generation,{"chatId":"chat"},self.owner+"/image.png")

@@ -1,101 +1,45 @@
-import React, { Suspense, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import React, { useRef } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
-import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
-import Icon from "./Icon";
+import { useAppTheme, makeSharedStyles } from "../theme";
+import { ModelSource, useModel } from "./modelResources.web";
 import ModelLighting from "./ModelLighting";
 import { configureModelRenderer } from "./configureModelRenderer";
 
-interface Props { glbBase64: string; sizeKb?: number }
-
-function Model({ url, rotate }: { url: string; rotate: boolean }) {
-  const gltf = useLoader(GLTFLoader, url);
+function Model({ scene, rotate }: { scene: THREE.Group; rotate: boolean }) {
   const group = useRef<THREE.Group>(null);
-  useEffect(() => {
-    const box = new THREE.Box3().setFromObject(gltf.scene);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const scale = 2 / Math.max(size.x, size.y, size.z, 0.001);
-    gltf.scene.scale.setScalar(scale);
-    gltf.scene.position.sub(center.multiplyScalar(scale));
-  }, [gltf]);
-  useFrame((_, delta) => { if (rotate && group.current) group.current.rotation.y += delta * 0.25; });
-  return <group ref={group}><primitive object={gltf.scene} /></group>;
+  useFrame((_, delta) => { if (rotate && group.current) group.current.rotation.y += delta * .2; });
+  return <group ref={group}><primitive object={scene} dispose={null} /></group>;
 }
 
-function Fallback() {
+export default function ThreeDViewer(props: ModelSource & { sizeKb?: number; active?: boolean }) {
   const { colors } = useAppTheme();
-  return <mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color={colors.primary} wireframe /></mesh>;
-}
-
-export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
-  const { colors } = useAppTheme();
-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
-  const shared = React.useMemo(() => makeSharedStyles(colors), [colors]);
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  useEffect(() => {
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(preference.matches);
-    preference.addEventListener("change", update);
-    return () => preference.removeEventListener("change", update);
-  }, []);
-  useEffect(() => {
-    const binary = atob(glbBase64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    const url = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
-    setObjectUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [glbBase64]);
-
+  const shared = makeSharedStyles(colors);
+  const { scene, error, retry } = useModel(props);
+  const [rotate, setRotate] = React.useState(false);
   const download = () => {
-    if (!objectUrl) return;
     const anchor = document.createElement("a");
-    anchor.href = objectUrl;
+    anchor.href = props.modelUrl || `data:model/gltf-binary;base64,${props.glbBase64}`;
     anchor.download = "model.glb";
+    if (props.modelUrl) { anchor.target = "_blank"; anchor.rel = "noopener noreferrer"; }
     anchor.click();
   };
-
-  return (
-    <View style={[shared.card, styles.card]}>
-      <View style={styles.header}>
-        <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="cube" size={16} /><Text style={styles.badge}>3D Model - Hunyuan3D-2</Text></View>
-        <View style={styles.headerActions}>
-          {!!sizeKb && <Text style={styles.tag}>{sizeKb} KB GLB</Text>}
-          <Pressable onPress={download} style={styles.download}><Icon color={colors.onButton} name="download" size={15} /><Text style={styles.downloadText}>Download</Text></Pressable>
-        </View>
+  return <View style={[shared.card, { padding: 12, gap: 12 }]}>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <Text style={{ color: colors.text, fontWeight: "600" }}>3D Model{props.sizeKb ? ` · ${Math.round(props.sizeKb)} KB` : ""}</Text>
+      <View style={{ flexDirection: "row", gap: 12 }}>
+        <Pressable accessibilityRole="button" onPress={() => setRotate(value => !value)}><Text style={{ color: colors.text }}>{rotate ? "Pause rotation" : "Auto-rotate"}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={download}><Text style={{ color: colors.text }}>Download GLB</Text></Pressable>
       </View>
-      <View style={styles.canvas}>
-        {!objectUrl ? (
-          <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} /><Text style={styles.hint}>Preparing 3D viewer...</Text></View>
-        ) : (
-          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)} style={styles.canvasFill}>
-            <ModelLighting />
-            <Suspense fallback={<Fallback />}><Model url={objectUrl} rotate={!reducedMotion} /></Suspense>
-            <OrbitControls enablePan={false} minDistance={1.5} maxDistance={8} />
-          </Canvas>
-        )}
-      </View>
-      <Text style={styles.hint}>Drag to orbit. Scroll to zoom.{!reducedMotion && " Model auto-rotates."}</Text>
     </View>
-  );
+    <View style={{ height: 480, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas }}>
+      {error ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 }}><Text accessibilityRole="alert" style={{ color: colors.danger, textAlign: "center" }}>{error}</Text><Pressable accessibilityRole="button" onPress={retry}><Text style={{ color: colors.text }}>Retry model display</Text></Pressable></View>
+        : scene ? <Canvas frameloop={props.active === false ? "never" : rotate ? "always" : "demand"} dpr={[1, 1.5]} camera={{ position: [0, .8, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)}>
+          <ModelLighting /><Model scene={scene} rotate={rotate} /><OrbitControls enablePan={false} minDistance={1.5} maxDistance={8} />
+        </Canvas> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Opening your saved model…</Text></View>}
+    </View>
+    <Text style={{ color: colors.textMuted, textAlign: "center", fontSize: 12 }}>Drag or touch to rotate · Scroll or pinch to zoom</Text>
+  </View>;
 }
-
-const makeStyles = (colors: ColorPalette) => StyleSheet.create({
-  card: { padding: 12, gap: 12 },
-  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 5 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
-  badge: { color: colors.primaryBright, fontSize: 12, fontWeight: "800" },
-  tag: { color: colors.textDim, fontSize: 10 },
-  download: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 },
-  downloadText: { color: colors.onButton, fontSize: 11, fontWeight: "800" },
-  canvas: { width: "100%", height: 480, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas },
-  canvasFill: { width: "100%", height: "100%" },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  hint: { color: colors.textDim, textAlign: "center", fontSize: 11 },
-});

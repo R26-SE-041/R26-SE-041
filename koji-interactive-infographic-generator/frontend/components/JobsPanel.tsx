@@ -4,6 +4,7 @@ import { studioRequest, StudioJob, getCloudHistory } from "../studioClient";
 import type { GenerationHistoryItem } from "../historyStorage";
 import { useAppTheme } from "../theme";
 import Icon from "./Icon";
+import { formatDuration, jobElapsed } from "../processing";
 export default function JobsPanel({ onResume }: { onResume: (item: GenerationHistoryItem) => void }) {
   const { colors } = useAppTheme();
   const [jobs, setJobs] = useState<StudioJob[]>([]);
@@ -11,6 +12,13 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!expanded) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [expanded]);
   const mounted = useRef(false);
   const fetching = useRef(false);
   const refresh = useCallback(async () => {
@@ -67,7 +75,8 @@ export default function JobsPanel({ onResume }: { onResume: (item: GenerationHis
       <Pressable accessibilityRole="button" accessibilityLabel="Refresh task activity" onPress={() => void refresh()} style={{ alignSelf: "flex-start", minHeight: 36, justifyContent: "center" }}><Text style={{ color: colors.primaryBright }}>Refresh activity</Text></Pressable>
       {!loading && !error && !jobs.length && <Text style={{ color: colors.textDim, fontSize: 12 }}>Your next creation will appear here.</Text>}
       {jobs.slice(0, 10).map(job => <View key={job.id} style={{ gap: 5, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-        <Text style={{ color: colors.text, fontSize: 13 }}>{job.kind} · {job.status === "queued" ? "Queued — waiting for a worker" : job.stage}</Text>
+        <Text style={{ color: colors.text, fontSize: 13 }}>{job.kind} · {job.status === "queued" ? "Queued — waiting for a worker" : job.status === "completed" ? "Completed" : job.status === "failed" ? "Failed" : job.stage}</Text>
+        {jobElapsed(job, now) !== null && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{job.status === "completed" ? "Completed in" : job.status === "failed" ? "Attempt ended after" : job.status === "queued" ? "Waiting" : "Elapsed"} {formatDuration(jobElapsed(job, now)!)} · includes queue time</Text>}
         {job.error && <Text style={{ color: colors.danger }}>{job.error}</Text>}
         {job.status === "completed" && !job.result?.history_id && !job.generation_id && <Text style={{ color: colors.textMuted }}>Enhanced prompt saved in History.</Text>}
         {job.status === "completed" && (job.result?.history_id || job.generation_id) && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void open(job)} style={{ minHeight: 36, justifyContent: "center" }}><Text style={{ color: colors.primaryBright }}>Open result</Text></Pressable>}

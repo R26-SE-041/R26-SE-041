@@ -19,3 +19,9 @@ export function formatDuration(milliseconds: number): string {
   const totalSeconds = Math.round(duration / 1_000);
   return `${Math.floor(totalSeconds / 60)} min ${totalSeconds % 60} s`;
 }
+
+export function jobElapsed(job: { created_at: string; updated_at?: string; status: string }, now: number): number | null {
+  const started = Date.parse(job.created_at);
+  const finished = job.status === "completed" || job.status === "failed" ? Date.parse(job.updated_at || "") : now;
+  return Number.isFinite(started) && Number.isFinite(finished) ? Math.max(0, finished - started) : null;
+}

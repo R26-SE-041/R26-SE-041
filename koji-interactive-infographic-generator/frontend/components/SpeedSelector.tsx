@@ -22,8 +22,8 @@ export default function SpeedSelector({ options, value, disabled, onChange }: Pr
           borderWidth: 1, borderColor: selected ? colors.buttonBackground : colors.textDim,
           backgroundColor: selected ? colors.buttonBackground : colors.surface,
           flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", opacity: disabled ? .55 : pressed ? .65 : 1 })}>
-        <View style={{ width: 16 }}>{selected && <Icon name="check" size={16} color={color} />}</View>
         <Text style={{ color, fontSize: 13, fontWeight: "600" }}>{option.label}</Text>
+        <View style={{ width: 16 }}>{selected && <Icon name="check" size={16} color={color} />}</View>
       </Pressable>;
     })}
   </View>;

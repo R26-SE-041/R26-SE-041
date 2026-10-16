@@ -11,7 +11,7 @@ import Icon from "./Icon";
 import ModelLighting from "./ModelLighting";
 import { configureModelRenderer } from "./configureModelRenderer";
 
-interface Props { glbBase64: string; sizeKb?: number }
+interface Props { glbBase64?: string; modelUrl?: string; modelKey?: string; sizeKb?: number; active?: boolean }
 
 function Model({ scene, yaw, pitch, zoom }: { scene: THREE.Group; yaw: React.RefObject<number>; pitch: React.RefObject<number>; zoom: React.RefObject<number> }) {
   const group = useRef<THREE.Group>(null);
@@ -24,7 +24,7 @@ function Model({ scene, yaw, pitch, zoom }: { scene: THREE.Group; yaw: React.Ref
   return <group ref={group}><primitive object={scene} /></group>;
 }
 
-export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
+export default function ThreeDViewer({ glbBase64, modelUrl, sizeKb, active: isActive = true }: Props) {
   const { colors } = useAppTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const shared = React.useMemo(() => makeSharedStyles(colors), [colors]);
@@ -39,8 +39,9 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
     let active = true;
     setScene(null);
     setLoadError(null);
-    new GLTFLoader().parse(
-      decode(glbBase64),
+    const bytes = glbBase64 ? Promise.resolve(decode(glbBase64)) : fetch(modelUrl!).then(response => { if (!response.ok) throw new Error("Unable to download saved model"); return response.arrayBuffer(); });
+    void bytes.then(buffer => new GLTFLoader().parse(
+      buffer,
       "",
       (gltf) => {
         if (!active) return;
@@ -54,9 +55,9 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         setScene(loaded);
       },
       (caught) => active && setLoadError(caught instanceof Error ? caught.message : "Unable to load GLB"),
-    );
+    )).catch(caught => active && setLoadError(caught instanceof Error ? caught.message : "Unable to load GLB"));
     return () => { active = false; };
-  }, [glbBase64]);
+  }, [glbBase64, modelUrl]);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -72,7 +73,8 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
   const download = async () => {
     try {
       const uri = `${FileSystem.cacheDirectory}learnX-model.glb`;
-      await FileSystem.writeAsStringAsync(uri, glbBase64, { encoding: FileSystem.EncodingType.Base64 });
+      if (glbBase64) await FileSystem.writeAsStringAsync(uri, glbBase64, { encoding: FileSystem.EncodingType.Base64 });
+      else await FileSystem.downloadAsync(modelUrl!, uri);
       if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "model/gltf-binary", dialogTitle: "Save or share 3D model" });
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : "Unable to save GLB");
@@ -89,7 +91,7 @@ export default function ThreeDViewer({ glbBase64, sizeKb }: Props) {
         {!scene ? (
           <View style={styles.loading}><ActivityIndicator color={colors.primaryBright} size="large" /><Text style={styles.hint}>{loadError ?? "Preparing 3D viewer..."}</Text></View>
         ) : (
-          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)} style={styles.canvasFill}>
+          <Canvas frameloop={isActive ? "always" : "never"} camera={{ position: [0, 1.5, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)} style={styles.canvasFill}>
             <ModelLighting />
             <Model pitch={pitch} scene={scene} yaw={yaw} zoom={zoom} />
           </Canvas>

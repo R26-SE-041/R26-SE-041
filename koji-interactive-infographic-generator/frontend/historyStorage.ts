@@ -66,6 +66,9 @@ export interface GenerationHistoryItem {
     source?: "automatic" | "manual";
   }>;
   glbBase64?: string;
+  glbUrl?: string;
+  modelKey?: string;
+  imageKey?: string;
   glbSizeKb?: number;
   evaluation?: {
     visualScore: number;

@@ -30,7 +30,7 @@ test('3D uploads reject unsupported, empty and oversized files before conversion
   assert.doesNotThrow(() => source.validateThreeDImage(100, undefined, 'PHOTO.JPG'));
 });
 
-function studio({ cloud = true, canceled = false, invalid = false } = {}) {
+function studio({ cloud = true, canceled = false, invalid = false, modelLinkFailures = 0 } = {}) {
   let cursor = 0;
   const states = [];
   const calls = [];
@@ -64,7 +64,13 @@ function studio({ cloud = true, canceled = false, invalid = false } = {}) {
       studioRequest: async (url, init) => { calls.push(['import', JSON.parse(init.body)]); return { id: 'uploaded-cloud-id' }; },
       runJob: async payload => { calls.push(['job', payload]); return { result: { history_id: 'uploaded-cloud-id' } }; },
       getCloudHistory: async () => ({ id: 'uploaded-cloud-id', glbBase64: 'MODEL' }),
+      getCloudModel: async () => {
+        calls.push(['model-link']);
+        if (modelLinkFailures-- > 0) throw new Error('Saved model temporarily unavailable');
+        return { id: 'uploaded-cloud-id', modelUrl: 'https://fixture/model.glb', modelKey: 'model-key' };
+      },
     },
+    './historyActivity': { markHistoryChanged: () => {} },
   };
   const { testHome } = load('App.tsx', dependencies, '\nexports.testHome = Home;', {
     setTimeout: fn => { fn(); return 1; },
@@ -103,6 +109,16 @@ test('direct 3D conversion sends the chosen device image and saves a separate lo
   await app.button('Convert to 3D').onPress();
   assert.equal(app.calls.find(call => call[0] === 'convert')[1].image_base64, 'UPLOADED');
   assert.equal(app.calls.find(call => call[0] === 'save')[1].imageBase64, 'UPLOADED');
+});
+
+test('a completed 3D job retries opening its saved model without paying for another generation', async () => {
+  const app = studio({ modelLinkFailures: 1 });
+  await app.button('Upload image for 3D').onPress();
+  await app.button('Convert to 3D').onPress();
+  assert.ok(app.button('Open saved model'));
+  await app.button('Open saved model').onPress();
+  assert.equal(app.calls.filter(call => call[0] === 'job').length, 1);
+  assert.equal(app.calls.filter(call => call[0] === 'model-link').length, 2);
 });
 
 test('canceling the picker or selecting an invalid image leaves conversion disabled', async () => {

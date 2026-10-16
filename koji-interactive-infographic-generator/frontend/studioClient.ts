@@ -1,7 +1,8 @@
 import { STUDIO_API_URL } from "./config";
 import type { GenerationHistoryItem } from "./historyStorage";
 import { SessionConnectionError } from "./sessionTokens";
-import { markHistoryChanged } from "./historyActivity";
+import { getHistoryRevision, markHistoryChanged } from "./historyActivity";
+import { assetBase64, cachedAsset } from "./assetCache";
 let currentToken: string | undefined;
 let currentOwner = "anonymous";
 type TokenProvider = (refresh?: boolean) => Promise<string | undefined>;
@@ -11,6 +12,7 @@ function tokenOwner(token?: string) {
   catch { return "anonymous"; }
 }
 export function configureStudio(token?: string, provider?: TokenProvider) {
+  if (currentOwner !== tokenOwner(token)) historyCache.clear();
   currentToken = token;
   currentOwner = tokenOwner(token);
   tokenProvider = provider;
@@ -35,12 +37,13 @@ async function authenticatedFetch(path: string, init: RequestInit, origin: strin
     if (tokenOwner(token) !== owner) throw new Error("Account changed. Please try again.");
     try {
       const response = await fetch(origin.replace(/\/$/, "") + path, {
+        signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(45_000) : undefined,
         ...init, headers: { "Content-Type":"application/json", ...init.headers, ...(token ? { Authorization:"Bearer "+token } : {}) },
       });
       ensureOwner();
       return response;
     } catch (failure) {
-      if (failure && typeof failure === "object" && "message" in failure && typeof failure.message === "string" && /fetch|network|load failed/i.test(failure.message)) throw new StudioRequestError("Unable to reach your cloud workspace. Check your connection and retry.", 0);
+      if (failure && typeof failure === "object" && "message" in failure && typeof failure.message === "string" && /fetch|network|load failed|timeout|timed out|aborted/i.test(failure.message)) throw new StudioRequestError("Unable to reach your cloud workspace. Check your connection and retry.", 0);
       throw failure;
     }
   }
@@ -61,7 +64,7 @@ export async function studioRequest<T>(path: string, init: RequestInit = {}, ori
   if (init.method && !["GET", "HEAD"].includes(init.method.toUpperCase()) && /^\/studio\/(chats|history|jobs|import)(?:[/?]|$)/.test(path)) markHistoryChanged();
   return data as T;
 }
-export interface StudioJob { id: string; kind: string; status: "queued" | "running" | "completed" | "failed"; stage: string; generation_id?: string; result?: { history_id?: string; chat_id?: string; enhancement?: Record<string, any>; label_job_id?: string | null; interaction_id?: string }; error?: string; created_at: string }
+export interface StudioJob { id: string; kind: string; status: "queued" | "running" | "completed" | "failed"; stage: string; generation_id?: string; result?: { history_id?: string; chat_id?: string; enhancement?: Record<string, any>; label_job_id?: string | null; interaction_id?: string }; error?: string; created_at: string; updated_at?: string }
 export function requestId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r=Math.random()*16|0; return (c==="x"?r:(r&3)|8).toString(16); });
@@ -92,7 +95,28 @@ export async function runJob(payload: Record<string,unknown>, onProgress?: (stag
   const job = await studioRequest<StudioJob>("/studio/jobs", { method:"POST",body:JSON.stringify({ request_id:requestId(),...payload }) });
   return waitJob(job.id,onProgress);
 }
-export const getCloudHistory = (id: string, modelEvent?: string) => studioRequest<GenerationHistoryItem>("/studio/history/"+encodeURIComponent(id)+(modelEvent ? "?model_event="+encodeURIComponent(modelEvent) : ""));
+const historyCache = new Map<string, { at: number; revision: number; promise: Promise<GenerationHistoryItem> }>();
+export function getCloudHistory(id: string, modelEvent?: string): Promise<GenerationHistoryItem> {
+  const owner = studioOwner(), revision = getHistoryRevision();
+  const key = `${owner}:${id}:${modelEvent || ""}`;
+  const cached = historyCache.get(key);
+  if (cached && cached.revision === revision && Date.now() - cached.at < 60_000) return cached.promise;
+  const promise = (async () => {
+    const query = new URLSearchParams({ asset_mode: "urls" });
+    if (modelEvent) query.set("model_event", modelEvent);
+    const item = await studioRequest<GenerationHistoryItem>(`/studio/history/${encodeURIComponent(id)}?${query}`);
+    if (!item.imageBase64 && item.imageUrl) item.imageBase64 = assetBase64(await cachedAsset(owner, item.imageKey || id, item.imageUrl));
+    if (owner !== studioOwner()) throw new Error("Account changed. Please try again.");
+    return item;
+  })();
+  const entry = { at: Date.now(), revision, promise };
+  historyCache.delete(key); historyCache.set(key, entry);
+  while (historyCache.size > 12) historyCache.delete(historyCache.keys().next().value!);
+  void promise.catch(() => { if (historyCache.get(key) === entry) historyCache.delete(key); });
+  return promise;
+}
+export interface SavedModel { id: string; generationId: string; chatId: string; title: string; createdAt: string; mode?: string; modelKey: string; modelUrl?: string; glbBase64?: string }
+export const getCloudModel = (id: string, modelEvent?: string) => studioRequest<{ id: string; modelUrl: string; modelKey: string; sizeKb?: number }>(`/studio/history/${encodeURIComponent(id)}/model${modelEvent ? "?model_event="+encodeURIComponent(modelEvent) : ""}`);
 export async function appendChatEvent(chatId: string, kind: "prompt" | "enhancement", data: Record<string, unknown>) {
   if (!cloudEnabled()) return;
   const id = requestId();

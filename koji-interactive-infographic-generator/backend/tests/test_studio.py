@@ -57,6 +57,46 @@ class JobContractTests(unittest.TestCase):
         self.assertEqual(required_services({"kind":"sketch"}),{"sketch"})
 
 class OwnershipApiTests(unittest.TestCase):
+    def test_completed_model_link_does_not_download_large_assets_on_cpu_api(self):
+        generation_id = str(uuid4())
+        with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+            repo.get_history.return_value = {"id":generation_id,"glb_path":"owned/model.glb","metadata":{"glbSizeKb":120}}
+            storage.return_value.signed_url.return_value = "https://private.example/model"
+            response = self.client.get(f"/studio/history/{generation_id}/model")
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()["modelKey"],"owned/model.glb")
+            repo.get_history.assert_called_once_with(USER_B,generation_id)
+            storage.return_value.download.assert_not_called()
+            repo.get_history.return_value = None
+            self.assertEqual(self.client.get(f"/studio/history/{generation_id}/model").status_code,404)
+
+    def test_url_history_returns_metadata_without_retransferring_image_and_model(self):
+        from datetime import datetime, timezone
+        generation_id = str(uuid4())
+        with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+            repo.get_history.return_value = {"id":generation_id,"user_id":USER_B,"created_at":datetime.now(timezone.utc),
+                "metadata":{},"image_path":"owned/image.png","glb_path":"owned/model.glb"}
+            repo.get_interactions.return_value = []
+            storage.return_value.signed_url.side_effect = lambda value: "https://private.example/"+value
+            response = self.client.get(f"/studio/history/{generation_id}?asset_mode=urls")
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()["imageBase64"],"")
+            self.assertIn("glbUrl",response.json())
+            storage.return_value.download.assert_not_called()
+
+    def test_gallery_is_private_and_signs_models_without_loading_binaries(self):
+        from datetime import datetime, timezone
+        generation_id = str(uuid4())
+        with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
+            repo.list_models.return_value = [{"id":"model-event","generation_id":generation_id,"chat_id":"chat", "title":"Skull",
+                "created_at":datetime.now(timezone.utc),"mode":"anatomy","glb_path":"owned/skull.glb"}]
+            storage.return_value.signed_url.return_value = "https://private.example/model"
+            response = self.client.get("/studio/models?query=skull")
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()[0]["generationId"],generation_id)
+            repo.list_models.assert_called_once_with(USER_B,None,"","skull",False)
+            storage.return_value.download.assert_not_called()
+
     def setUp(self):
         app.dependency_overrides[require_user] = lambda: USER_B
         self.client = TestClient(app)

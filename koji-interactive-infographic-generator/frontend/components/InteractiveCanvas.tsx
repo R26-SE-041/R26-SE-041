@@ -311,14 +311,16 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
           <ModeButton active={selectionType === "box"} icon="box-select" label="Select Region" onPress={() => handleTypeChange("box")} />
         </View>
         <Text style={styles.toolbarHint}>{selectionType === "point" ? "Tap any object in the diagram to segment & analyze" : "Touch and drag a box around a region"}</Text>
+        <View style={styles.toolbarModes}>
         {anatomyAnnotations.length > 0 && (
           <Pressable accessibilityRole="button" accessibilityState={{ selected: showAnatomyLabels }} onPress={() => setShowAnatomyLabels((value) => !value)} style={styles.labelToggle}>
             <Text style={styles.labelToggleText}>{showAnatomyLabels ? "Hide labels" : "Show labels"}</Text>
           </Pressable>
         )}
+        {onAnnotationsChange && <Pressable accessibilityRole="button" accessibilityState={{ selected: editingLabels }} onPress={() => { if (editingLabels) commitLabelEdits.current?.(); else setShowAnatomyLabels(true); setEditingLabels(value => !value); }} style={styles.labelToggle}><Text style={styles.labelToggleText}>{editingLabels ? "Save changes" : "Edit labels"}</Text></Pressable>}
+        </View>
       </View>
 
-      {onAnnotationsChange && <Pressable accessibilityRole="button" accessibilityState={{ selected: editingLabels }} onPress={() => { if (editingLabels) commitLabelEdits.current?.(); setEditingLabels(value => !value); }} style={styles.labelToggle}><Text style={styles.labelToggleText}>{editingLabels ? "Save changes" : "Edit labels"}</Text></Pressable>}
       {editingLabels && onAnnotationsChange && <AnnotationEditor aspectRatio={aspectRatio} imageBase64={imageBase64} annotations={anatomyAnnotations} onChange={onAnnotationsChange} commitRef={commitLabelEdits} />}
 
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
