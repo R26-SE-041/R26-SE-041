@@ -1,58 +1,38 @@
-import base64
-import os
-import time
-import json
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+﻿import base64
+import binascii
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from app.core.config import settings
+from app.core.auth import AuthUser, pipeline_user
+from app.services.persistence import PersistenceError, save_feedback
 
 router = APIRouter(prefix="/api/feedback")
 
-DATASET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "dataset")
-IMAGES_DIR = os.path.join(DATASET_DIR, "images")
-METADATA_FILE = os.path.join(DATASET_DIR, "metadata.jsonl")
-
-# Ensure dataset directories exist
-os.makedirs(IMAGES_DIR, exist_ok=True)
 
 class FeedbackRequest(BaseModel):
     crop_b64: str
-    corrected_text: str
+    corrected_text: str = Field(min_length=1, max_length=10000)
+
 
 @router.post("/ocr")
-async def submit_ocr_feedback(req: FeedbackRequest):
-    """
-    Saves a cropped image and its corrected text to the local dataset for fine-tuning.
-    """
-    if not req.corrected_text.strip():
+async def submit_ocr_feedback(req: FeedbackRequest, user: AuthUser | None = Depends(pipeline_user)):
+    text = req.corrected_text.strip()
+    if not text:
         raise HTTPException(status_code=400, detail="Corrected text cannot be empty.")
-    
-    if not req.crop_b64:
-        raise HTTPException(status_code=400, detail="Image crop cannot be empty.")
-
+    if len(req.crop_b64) > ((settings.max_upload_bytes + 2) // 3) * 4:
+        raise HTTPException(status_code=413, detail="Image crop is too large.")
     try:
-        # Decode image
-        image_bytes = base64.b64decode(req.crop_b64)
-        
-        # Generate unique filename based on timestamp
-        timestamp = int(time.time() * 1000)
-        filename = f"crop_{timestamp}.jpg"
-        image_path = os.path.join(IMAGES_DIR, filename)
-        
-        # Save image
-        with open(image_path, "wb") as f:
-            f.write(image_bytes)
-            
-        # Append to metadata.jsonl
-        # HuggingFace ImageFolder format: {"file_name": "images/crop_xxx.jpg", "text": "corrected text"}
-        metadata_entry = {
-            "file_name": f"images/{filename}",
-            "text": req.corrected_text.strip()
-        }
-        
-        with open(METADATA_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(metadata_entry, ensure_ascii=False) + "\n")
-            
-        return JSONResponse({"status": "success", "message": "Feedback saved successfully."})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save feedback: {str(e)}")
+        image = base64.b64decode(req.crop_b64, validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(status_code=400, detail="Image crop must be valid base64.")
+    if not image:
+        raise HTTPException(status_code=400, detail="Image crop cannot be empty.")
+    if len(image) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail="Image crop is too large.")
+    try:
+        feedback_id = await save_feedback(image, text, user)
+    except (PersistenceError, OSError):
+        raise HTTPException(status_code=503, detail="Could not save feedback. Please try again.")
+    return {"status": "success", "message": "Feedback saved successfully.", "id": feedback_id}

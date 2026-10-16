@@ -1,20 +1,20 @@
 import { Platform } from "react-native";
 
-// Warm, high-contrast editorial system measured from Anthropic's current site.
+// Palette and typography roles from Anthropic's official October 2026 homepage.
 export const lightColors = {
-  background: "#F1F0E8",
-  surface: "#FCFBF8",
-  surfaceSoft: "#E5DED0",
-  border: "#D2CEC2",
+  background: "#F0EEE6",
+  surface: "#FAF9F5",
+  surfaceSoft: "#E3DACC",
+  border: "#D1CFC5",
   primary: "#141413",
   primaryBright: "#5E5D59",
   text: "#141413",
   textMuted: "#5E5D59",
-  textDim: "#85837C",
+  textDim: "#87867F",
   success: "#4D6B50",
   warning: "#96682F",
   danger: "#A44735",
-  canvas: "#EEECE5",
+  canvas: "#E8E6DC",
   shadow: "rgba(20,20,19,0.10)",
 } as const;
 
@@ -28,23 +28,18 @@ export function useAppTheme() {
 }
 
 export const fonts = {
-  display: Platform.OS === "web" ? "Arial, Helvetica, sans-serif" : undefined,
-  serif: Platform.OS === "web" ? "Georgia, 'Times New Roman', serif" : "Georgia",
-  sans: Platform.OS === "web" ? "Arial, Helvetica, sans-serif" : undefined,
+  display: Platform.OS === "web" ? "'Anthropic Sans', Arial, sans-serif" : undefined,
+  serif: Platform.OS === "web" ? "'Anthropic Serif', Georgia, serif" : "Georgia",
+  sans: Platform.OS === "web" ? "'Anthropic Sans', Arial, sans-serif" : undefined,
+  mono: Platform.OS === "web" ? "'Anthropic Mono', monospace" : "monospace",
 };
 
 export function editorialSurface(colors: AppColors) {
   return {
-    borderWidth: 1,
-    borderColor: colors.text,
     backgroundColor: colors.surface,
-    borderRadius: 26,
-    padding: 36,
+    borderRadius: 24,
+    padding: 40,
     marginBottom: 24,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 1,
-    shadowRadius: 30,
   };
 }
 

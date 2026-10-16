@@ -1,0 +1,8 @@
+node_modules
+.expo
+.tmp
+.env
+.env.*
+dist
+dist-*
+web-build

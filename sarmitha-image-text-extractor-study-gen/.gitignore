@@ -1,0 +1,11 @@
+.tmp/
+**/.tmp/
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+backend/.env
+backend/venv/
+backend/__pycache__/
+backend/app/**/__pycache__/
+backend/tests/__pycache__/
+backend/*.log

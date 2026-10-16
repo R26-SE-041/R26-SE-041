@@ -14,11 +14,13 @@ Other endpoints:
 
 import base64
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.auth import AuthUser, auth_configured, pipeline_user
 from app.services import srcnn_client, trocr_client, sinhalm_client, visual_client, translate_client
+from app.services.persistence import PersistenceError, check_database, save_run
 
 router = APIRouter(prefix="/api")
 
@@ -44,7 +46,7 @@ def _validate_upload(file: UploadFile, data: bytes) -> None:
 # POST /api/process  — full pipeline
 # ---------------------------------------------------------------------------
 @router.post("/process")
-async def process_image(file: UploadFile = File(...)):
+async def process_image(file: UploadFile = File(...), user: AuthUser | None = Depends(pipeline_user)):
     """
     Full pipeline:
       1. Enhance with Swin2SR (Modal)
@@ -124,24 +126,27 @@ async def process_image(file: UploadFile = File(...)):
     except Exception as exc:
         print(f"English translation failed: {exc}")
 
-    return JSONResponse(
-        {
-            "original_b64":    base64.b64encode(raw_bytes).decode(),
-            "enhanced_b64":    base64.b64encode(enhanced_bytes).decode(),
-            "extracted_text":  final_full_text,
-            "extracted_text_ta": translated_ta,
-            "extracted_text_en": translated_en,
-            "lines":           processed_lines,
-            "context_improved": False,
-        }
-    )
+    result = {
+        "original_b64": base64.b64encode(raw_bytes).decode(),
+        "enhanced_b64": base64.b64encode(enhanced_bytes).decode(),
+        "extracted_text": final_full_text,
+        "extracted_text_ta": translated_ta,
+        "extracted_text_en": translated_en,
+        "lines": processed_lines,
+        "context_improved": False,
+    }
+    try:
+        result["id"] = await save_run(result, user, file.filename or "Untitled image")
+    except PersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return JSONResponse(result)
 
 
 # ---------------------------------------------------------------------------
 # POST /api/enhance  — enhancement only
 # ---------------------------------------------------------------------------
 @router.post("/enhance")
-async def enhance_only(file: UploadFile = File(...)):
+async def enhance_only(file: UploadFile = File(...), user: AuthUser | None = Depends(pipeline_user)):
     """Enhance image resolution with Swin2SR only."""
     raw_bytes = await file.read()
     _validate_upload(file, raw_bytes)
@@ -165,7 +170,7 @@ async def enhance_only(file: UploadFile = File(...)):
 # POST /api/ocr  — OCR only
 # ---------------------------------------------------------------------------
 @router.post("/ocr")
-async def ocr_only(file: UploadFile = File(...)):
+async def ocr_only(file: UploadFile = File(...), user: AuthUser | None = Depends(pipeline_user)):
     """Extract text from an image using TrOCR only."""
     raw_bytes = await file.read()
     _validate_upload(file, raw_bytes)
@@ -189,4 +194,19 @@ async def health():
         "status": "ok",
         "srcnn_configured": bool(settings.srcnn_modal_url),
         "trocr_configured": bool(settings.trocr_modal_url),
+        "storage_backend": settings.storage_backend,
     }
+
+
+@router.get("/ready")
+async def ready():
+    if not settings.srcnn_modal_url or not (settings.trocr_lines_modal_url or settings.trocr_modal_url):
+        raise HTTPException(status_code=503, detail="OCR services are not configured.")
+    if settings.storage_backend == "supabase":
+        if not auth_configured():
+            raise HTTPException(status_code=503, detail="Account services are not configured.")
+        try:
+            await check_database()
+        except Exception:
+            raise HTTPException(status_code=503, detail="Database or feedback storage is unavailable.")
+    return {"status": "ready"}

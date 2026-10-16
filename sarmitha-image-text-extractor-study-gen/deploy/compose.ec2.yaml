@@ -1,0 +1,59 @@
+services:
+  api:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_FEEDBACK_BUCKET: ${SUPABASE_FEEDBACK_BUCKET:-ocr-feedback}
+      AUTH_SITE_URL: ${AUTH_SITE_URL:-https://sarmitha-ocr.vercel.app}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set allowed frontend origins}
+      SRCNN_MODAL_URL: ${SRCNN_MODAL_URL:?Set SRCNN_MODAL_URL}
+      TROCR_MODAL_URL: ${TROCR_MODAL_URL:-}
+      TROCR_LINES_MODAL_URL: ${TROCR_LINES_MODAL_URL:?Set TROCR_LINES_MODAL_URL}
+      TRANSLATE_MODAL_URL: ${TRANSLATE_MODAL_URL:-}
+      VISUAL_OCR_MODAL_URL: ${VISUAL_OCR_MODAL_URL:-}
+      SINHALM_MODAL_URL: ${SINHALM_MODAL_URL:-}
+      MAX_UPLOAD_BYTES: 10485760
+    expose:
+      - '8000'
+    volumes:
+      - feedback_data:/app/dataset
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      BACKEND_DOMAIN: ${BACKEND_DOMAIN:?Set the backend hostname}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile.ec2:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  feedback_data:
+  caddy_data:
+  caddy_config:

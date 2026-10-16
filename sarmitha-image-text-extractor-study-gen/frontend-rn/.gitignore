@@ -2,6 +2,11 @@
 
 # dependencies
 node_modules/
+.vercel/
+
+# Application TypeScript helpers are source files, not Python build output.
+!lib/
+!lib/**
 
 # Expo
 .expo/

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Check, Copy } from "lucide-react-native";
 import type { ProcessResult } from "@/lib/api";
@@ -10,6 +10,7 @@ type Language = "si" | "ta" | "en";
 
 export default function OcrResult({ result }: Props) {
   const { colors } = useAppTheme();
+  const { width } = useWindowDimensions();
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<Language>("si");
   const text = activeTab === "ta"
@@ -25,15 +26,17 @@ export default function OcrResult({ result }: Props) {
   };
 
   return (
-    <View style={[styles.section, editorialSurface(colors)]}>
+    <View style={[styles.section, editorialSurface(colors), { padding: width < 680 ? 24 : width >= 1000 ? 56 : 36 }]}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={[styles.sectionLabel, { color: colors.primary }]}>03 / EXTRACTED TEXT</Text>
-          <Text style={[styles.title, { color: colors.text }]}>Your document, digitised.</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>02 / YOUR WORDS</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }, width < 680 && { fontSize: 32, lineHeight: 37 }]}>A page, now in words.</Text>
           {activeTab === "si" && !isEmpty ? <Text style={[styles.wordCount, { color: colors.textMuted }]}>{wordCount} {wordCount === 1 ? "word" : "words"} extracted</Text> : null}
         </View>
         {!isEmpty ? (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={copied ? "Text copied to clipboard" : "Copy the selected language text"}
             style={({ pressed }) => [styles.copyBtn, { borderColor: colors.text }, pressed && styles.pressed]}
             onPress={handleCopy}
           >
@@ -50,9 +53,9 @@ export default function OcrResult({ result }: Props) {
       </View>
 
       {isEmpty ? (
-        <View style={[styles.emptyWrap, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]}><Text style={[styles.emptyText, { color: colors.textMuted }]}>No text was detected in this image.</Text></View>
+        <View style={[styles.emptyWrap, { backgroundColor: colors.background, borderColor: colors.border }]}><Text style={[styles.emptyText, { color: colors.textMuted }]}>No text was detected in this image.</Text></View>
       ) : (
-        <ScrollView style={[styles.textBox, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]} nestedScrollEnabled showsVerticalScrollIndicator={Platform.OS !== "web"}>
+        <ScrollView style={[styles.textBox, { backgroundColor: colors.background, borderColor: colors.border }]} nestedScrollEnabled showsVerticalScrollIndicator={Platform.OS !== "web"}>
           <Text style={[styles.ocrText, { color: colors.text }]} selectable>{text}</Text>
         </ScrollView>
       )}
@@ -64,10 +67,12 @@ function LanguageTab({ id, label, active, onPress, colors }: { id: Language; lab
   const selected = active === id;
   return (
     <Pressable
-      style={({ pressed }) => [styles.tab, { borderColor: colors.border }, selected && { backgroundColor: colors.text }, pressed && styles.pressed]}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.tab, { borderColor: selected ? colors.text : "transparent" }, pressed && styles.pressed]}
       onPress={() => onPress(id)}
     >
-      <Text style={[styles.tabText, { color: selected ? colors.background : colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.tabText, { color: selected ? colors.text : colors.textMuted }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -76,17 +81,17 @@ const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 16 },
   headerCopy: { flex: 1, minWidth: 230 },
-  sectionLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 1.4, marginBottom: 10, fontFamily: fonts.sans },
-  title: { fontSize: 44, lineHeight: 47, fontWeight: "700", letterSpacing: -1.4, fontFamily: fonts.display },
+  sectionLabel: { fontSize: 10, letterSpacing: 1.1, marginBottom: 14, fontFamily: fonts.mono },
+  title: { fontSize: 44, lineHeight: 49, fontWeight: "400", letterSpacing: -1.3, fontFamily: fonts.serif },
   wordCount: { fontSize: 12, marginTop: 8, fontFamily: fonts.sans },
-  copyBtn: { minHeight: 46, borderWidth: 1, borderRadius: 10, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", gap: 9 },
-  copyBtnText: { fontSize: 12, fontWeight: "700", fontFamily: fonts.sans },
-  tabsContainer: { flexDirection: "row", alignSelf: "flex-start", borderWidth: 1, borderRadius: 12, overflow: "hidden", marginBottom: 16 },
-  tab: { minHeight: 42, borderRightWidth: 1, paddingHorizontal: 20, alignItems: "center", justifyContent: "center" },
-  tabText: { fontSize: 11, fontWeight: "700", fontFamily: fonts.sans },
-  textBox: { minHeight: 220, maxHeight: 460, borderWidth: 1, borderRadius: 18, padding: 24 },
+  copyBtn: { minHeight: 38, borderWidth: 1, borderRadius: 8, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 9 },
+  copyBtnText: { fontSize: 13, fontWeight: "500", fontFamily: fonts.sans },
+  tabsContainer: { flexDirection: "row", borderBottomWidth: 1, marginBottom: 24 },
+  tab: { minHeight: 44, borderBottomWidth: 2, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
+  tabText: { fontSize: 14, fontWeight: "500", fontFamily: fonts.sans },
+  textBox: { minHeight: 220, maxHeight: 460, borderRadius: 12, padding: 24 },
   ocrText: { fontSize: 18, lineHeight: 34, fontWeight: "400", fontFamily: fonts.sans },
-  emptyWrap: { minHeight: 220, padding: 24, alignItems: "center", justifyContent: "center", borderRadius: 18, borderWidth: 1 },
+  emptyWrap: { minHeight: 220, padding: 24, alignItems: "center", justifyContent: "center", borderRadius: 12 },
   emptyText: { fontSize: 14, fontFamily: fonts.sans },
   pressed: { opacity: 0.72 },
 });

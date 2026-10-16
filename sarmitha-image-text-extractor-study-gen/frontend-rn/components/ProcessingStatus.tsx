@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Check } from "lucide-react-native";
 import { editorialSurface, fonts, useAppTheme } from "@/theme";
 
@@ -8,21 +8,22 @@ interface Props { step: Step; errorMessage?: string; }
 
 const STEPS = [
   { id: "uploading" as Step, label: "Receive image", doneLabel: "Image received" },
-  { id: "enhancing" as Step, label: "Enhance with SwinSR", doneLabel: "Image enhanced · 4×" },
-  { id: "extracting" as Step, label: "Extract Sinhala text", doneLabel: "Sinhala text extracted" },
+  { id: "enhancing" as Step, label: "Enhance and recognise handwriting", doneLabel: "Image enhanced and text recognised" },
+  { id: "extracting" as Step, label: "Prepare text and translations", doneLabel: "Text and translations ready" },
 ] as const;
 const ORDER: Step[] = ["idle", "uploading", "enhancing", "extracting", "done", "error"];
 
 export default function ProcessingStatus({ step, errorMessage }: Props) {
   const { colors } = useAppTheme();
+  const { width } = useWindowDimensions();
   if (step === "idle") return null;
   const currentIndex = ORDER.indexOf(step);
 
   return (
-    <View style={[styles.section, editorialSurface(colors)]}>
+    <View accessibilityLiveRegion="polite" style={[styles.section, editorialSurface(colors), { padding: width < 680 ? 24 : 40 }]}>
       <View style={styles.heading}>
         <Text style={[styles.sectionLabel, { color: colors.primary }]}>LIVE PROCESS</Text>
-        <Text style={[styles.title, { color: colors.text }]}>From image to language.</Text>
+        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }, width < 680 && { fontSize: 32, lineHeight: 37 }]}>From image to language.</Text>
       </View>
       <View style={[styles.steps, { borderColor: colors.border }]}>
         {STEPS.map((item, index) => {
@@ -53,10 +54,10 @@ export default function ProcessingStatus({ step, errorMessage }: Props) {
 const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   heading: { marginBottom: 26 },
-  sectionLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 1.4, marginBottom: 10, fontFamily: fonts.sans },
-  title: { fontSize: 44, lineHeight: 47, fontWeight: "700", letterSpacing: -1.4, fontFamily: fonts.display },
-  steps: { gap: 10 },
-  stepRow: { minHeight: 76, borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", gap: 18 },
+  sectionLabel: { fontSize: 10, letterSpacing: 1.1, marginBottom: 14, fontFamily: fonts.mono },
+  title: { fontSize: 40, lineHeight: 45, fontWeight: "400", letterSpacing: -1.1, fontFamily: fonts.serif },
+  steps: { gap: 0 },
+  stepRow: { minHeight: 76, borderTopWidth: 1, paddingHorizontal: 2, flexDirection: "row", alignItems: "center", gap: 18 },
   stepIndex: { width: 30, fontSize: 11, fontWeight: "700", fontFamily: fonts.sans },
   stepCopy: { flex: 1 },
   stepLabel: { fontSize: 14, fontWeight: "600", fontFamily: fonts.sans },

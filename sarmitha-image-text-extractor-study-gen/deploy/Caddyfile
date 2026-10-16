@@ -1,0 +1,15 @@
+{
+    email {$ACME_EMAIL}
+}
+
+{$BACKEND_DOMAIN} {
+    request_body {
+        max_size 15MB
+    }
+    reverse_proxy api:8000 {
+        transport http {
+            response_header_timeout 900s
+        }
+    }
+    header X-Content-Type-Options nosniff
+}

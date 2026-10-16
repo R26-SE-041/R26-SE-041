@@ -1,3 +1,6 @@
+from typing import Literal
+
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,10 +17,17 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:3000"
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+    storage_backend: Literal["local", "supabase"] = "local"
+    supabase_url: str = ""
+    supabase_publishable_key: SecretStr = SecretStr("")
+    supabase_service_role_key: SecretStr = SecretStr("")
+    supabase_feedback_bucket: str = "ocr-feedback"
+    supabase_history_bucket: str = "ocr-history"
+    auth_site_url: str = "https://sarmitha-ocr.vercel.app"
 
     @property
     def origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",")]
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
 
 settings = Settings()

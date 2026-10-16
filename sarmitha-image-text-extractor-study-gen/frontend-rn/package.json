@@ -27,6 +27,10 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "typecheck": "node --stack_size=8192 node_modules/typescript/bin/tsc --noEmit",
+    "test:auth": "node --test scripts/test-auth.cjs",
+    "prebuild": "node scripts/check-web-env.cjs",
+    "build": "expo export --platform web --clear",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
