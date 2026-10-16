@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { getHistoryRevision, isHistoryFresh, subscribeHistory } from "../historyActivity";
 import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from "react-native";
 import { cloudEnabled, getCloudHistory, studioRequest } from "../studioClient";
 import { trashConversation, restoreConversation, purgeConversation, GenerationHistoryItem, listHistory, loadHistoryItem, syncLocalHistory, updateHistoryItem } from "../historyStorage";
@@ -14,9 +15,9 @@ import type { AnatomyAnnotation } from "../App";
 
 interface CloudChat { id: string; title: string; updated_at: string; deleted_at?: string | null; mode?: string; latest_generation_id?: string; imageUrl?: string; version_count?: number; has_three_d?: boolean }
 interface SavedEvent { id: string; kind: string; generationId?: string; createdAt: string; imageUrl?: string; data: { sources?: GenerationInteraction["sources"]; grounding?: GenerationInteraction["grounding"]; prompt?: string; originalPrompt?: string; question?: string; answer?: string; error?: string; message?: string; enhancedPrompt?: string; payload?: unknown; mode?: string; version?: number; speedMode?: "normal" | "pro" | "promax" } }
-interface Props { onResume?: (item: GenerationHistoryItem) => void }
+interface Props { active?: boolean; onResume?: (item: GenerationHistoryItem) => void }
 
-export default function CreationArchive({ onResume }: Props) {
+export default function CreationArchive({ active = true, onResume }: Props) {
   const { colors } = useAppTheme();
   const shared = makeSharedStyles(colors);
   const cloud = cloudEnabled();
@@ -41,6 +42,11 @@ export default function CreationArchive({ onResume }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const requestVersion = useRef(0);
   const openVersion = useRef(0);
+  const lastLoaded = useRef<{ key: string; at: number; revision: number } | null>(null);
+  const revision = useSyncExternalStore(subscribeHistory, getHistoryRevision, getHistoryRevision);
+  const viewKey = JSON.stringify([cloud, query.trim(), trash]);
+  const requestedView = useRef(viewKey);
+  const inFlight = useRef<{ key: string; revision: number; version: number } | null>(null);
   const button = { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.surfaceSoft, justifyContent: "center" as const };
   const text = { color: colors.text, fontSize: 14, lineHeight: 22 };
   const row = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
@@ -48,7 +54,10 @@ export default function CreationArchive({ onResume }: Props) {
   const cardWidth = archiveWidth ? (archiveWidth - 16 * (columns - 1)) / columns : undefined;
 
   const refresh = useCallback(async (older?: CreationSummary) => {
+    const startedRevision = getHistoryRevision();
+    if (inFlight.current?.key === viewKey && inFlight.current.revision === startedRevision && inFlight.current.version === requestVersion.current) return;
     const version = ++requestVersion.current;
+    inFlight.current = { key: viewKey, revision: startedRevision, version };
     setLoading(true); setError(null);
     try {
       let rows: CreationSummary[];
@@ -67,11 +76,35 @@ export default function CreationArchive({ onResume }: Props) {
       } else rows = localSummaries(await listHistory(undefined, trash));
       if (version !== requestVersion.current) return;
       setItems(previous => older ? [...new Map([...previous, ...rows].map(item => [item.id, item])).values()] : rows);
+      if (!older) lastLoaded.current = { key: viewKey, at: Date.now(), revision: startedRevision };
     } catch (failure) { if (version === requestVersion.current) setError(failure instanceof Error ? failure.message : "Unable to load history."); }
-    finally { if (version === requestVersion.current) setLoading(false); }
-  }, [cloud, query, trash]);
-  useEffect(() => { const timer = setTimeout(() => void refresh(), 250); return () => { clearTimeout(timer); requestVersion.current++; }; }, [refresh]);
-  useEffect(() => () => { openVersion.current++; }, []);
+    finally {
+      if (inFlight.current?.version === version) inFlight.current = null;
+      if (version === requestVersion.current) setLoading(false);
+    }
+  }, [cloud, query, trash, viewKey]);
+  useEffect(() => {
+    if (!active) return;
+    // Cancel reads for a different search/bin, but allow an accepted read to
+    // finish while the user visits another workspace.
+    if (requestedView.current !== viewKey) { requestVersion.current++; requestedView.current = viewKey; }
+    if (isHistoryFresh(lastLoaded.current, viewKey, revision)) return;
+    const timer = setTimeout(() => {
+      if (!isHistoryFresh(lastLoaded.current, viewKey, getHistoryRevision())) void refresh();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [active, refresh, revision, viewKey]);
+  useEffect(() => {
+    if (!active || typeof window === "undefined") return;
+    const revalidate = () => {
+      if (document.hidden || isHistoryFresh(lastLoaded.current, viewKey, getHistoryRevision())) return;
+      void refresh();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", revalidate);
+    return () => { window.removeEventListener("focus", revalidate); document.removeEventListener("visibilitychange", revalidate); };
+  }, [active, refresh, viewKey]);
+  useEffect(() => () => { openVersion.current++; requestVersion.current++; }, []);
 
   const open = async (item: CreationSummary, resume = false) => {
     const version = ++openVersion.current;
@@ -172,7 +205,7 @@ export default function CreationArchive({ onResume }: Props) {
         {creation && <>
           <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", aspectRatio: 1, backgroundColor: "white", borderRadius: 8, overflow: "hidden" }}><Image source={{ uri: creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl }} resizeMode="contain" style={{ width: "100%", height: "100%" }} /><AnatomyOverlay annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
           <ImageDownloadControls imageBase64={creation.imageBase64} annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} organ={(creation.anatomy as { organ?: string })?.organ} />
-          {creation.glbBase64 && <ThreeDViewer glbBase64={creation.glbBase64} sizeKb={creation.glbSizeKb} />}
+          {active && creation.glbBase64 && <ThreeDViewer glbBase64={creation.glbBase64} sizeKb={creation.glbSizeKb} />}
           <Text style={text}>{creation.prompt || "Created from a drawing."}</Text>
         </>}
         {selected.versionCount > 1 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: versionsOpen }} style={button} onPress={() => setVersionsOpen(!versionsOpen)}><Text style={text}>{versionsOpen ? "Hide versions" : `Versions (${selected.versionCount})`}</Text></Pressable>}
@@ -191,7 +224,8 @@ export default function CreationArchive({ onResume }: Props) {
       </View>
     </> : <>
       <TextInput accessibilityLabel="Search creations" placeholder="Search your creations…" placeholderTextColor={colors.textDim} value={query} onChangeText={setQuery} maxLength={100} style={{ ...text, padding: 14, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface }} />
-      {loading && <View style={[shared.card, { gap: 12 }]}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Loading your creations…</Text><View style={{ height: 100, backgroundColor: colors.surfaceSoft, borderRadius: 8 }} /></View>}
+      {loading && !items.length && <View style={[shared.card, { gap: 12 }]}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Loading your creations…</Text><View style={{ height: 100, backgroundColor: colors.surfaceSoft, borderRadius: 8 }} /></View>}
+      {loading && !!items.length && <View style={row}><ActivityIndicator size="small" color={colors.primary} /><Text style={{ color: colors.textMuted }}>Updating your creations…</Text></View>}
       {!loading && !visible.length && <View style={[shared.card, { paddingVertical: 40, alignItems: "center", gap: 10 }]}><Icon name="image" color={colors.primary} size={32} /><Text style={{ ...text, fontWeight: "600" }}>{query.trim() ? "No matching creations" : trash ? "Recycle Bin is empty" : "Your ideas belong here"}</Text><Text style={{ color: colors.textMuted, textAlign: "center" }}>{query.trim() ? "Try a different search." : trash ? "Deleted creations stay here until you restore or permanently delete them." : "Create an image or drawing. Its conversation and versions will stay together."}</Text></View>}
       {groups.map(([label, rows]) => <View key={label} style={{ gap: 12 }}><Text accessibilityRole="header" style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>{label}</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>{rows.map(item => <View key={item.id} style={[shared.card, { padding: 14, gap: 12, width: cardWidth ?? "100%", flexGrow: 0, flexShrink: 0 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title}`} disabled={busy || trash} onPress={() => void open(item)} style={{ borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceSoft }}>{item.imageUrl ? <Image source={{ uri: item.imageUrl }} resizeMode="contain" style={{ width: "100%", aspectRatio: 1.65 }} /> : <View style={{ aspectRatio: 1.65, alignItems: "center", justifyContent: "center" }}><Icon name={item.mode === "sketch" ? "pencil" : item.mode === "anatomy" ? "heart" : "image"} size={40} color={colors.textDim} /></View>}</Pressable>

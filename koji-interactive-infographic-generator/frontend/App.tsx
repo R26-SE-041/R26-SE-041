@@ -1433,7 +1433,10 @@ function Home({ accessToken, studioSession }: AppProps) {
             </View>
 
             {cloudEnabled() && <JobsPanel onResume={restoreHistory} />}
-            {workspace === "history" ? <HistoryPanel onResume={restoreHistory} /> : <>
+            <View style={workspace === "history" ? undefined : { display: "none" }}>
+              <HistoryPanel active={workspace === "history"} onResume={restoreHistory} />
+            </View>
+            {workspace !== "history" && <>
             <View style={[shared.card, styles.promptCard]}>
               {workspace === "sketch" && <>
                 <Text style={styles.promptLabel}>Draw your subject</Text>

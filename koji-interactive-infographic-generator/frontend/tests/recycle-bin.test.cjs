@@ -48,7 +48,7 @@ function loadStorage(initial, cloud = false) {
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(code, { module, exports: module.exports, indexedDB, console,
-    require: () => ({ cloudEnabled: () => cloud, studioOwner: () => owner,
+    require: () => ({ markHistoryChanged: () => {}, cloudEnabled: () => cloud, studioOwner: () => owner,
       studioRequest: async (route, options) => { calls.push({ route, options }); return []; } }),
   });
   return { storage: module.exports, calls, changeOwner(value) { owner = value; },

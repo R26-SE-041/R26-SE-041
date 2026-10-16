@@ -28,6 +28,37 @@ const annotation = {
   label_x: .05, label_y: .2, verified: false, user_edited: true, confidence: 0,
 };
 
+test('history remains fresh across tab visits but expires or invalidates after changes', () => {
+  const activity = loadModule('historyActivity.ts');
+  const loaded = { key: 'creations', at: 1000, revision: activity.getHistoryRevision() };
+  assert.equal(activity.isHistoryFresh(loaded, 'creations', activity.getHistoryRevision(), 2000), true);
+  assert.equal(activity.isHistoryFresh(loaded, 'creations', activity.getHistoryRevision(), 61000), false);
+  assert.equal(activity.isHistoryFresh(loaded, 'bin', activity.getHistoryRevision(), 2000), false);
+  let notified = 0;
+  const unsubscribe = activity.subscribeHistory(() => notified++);
+  activity.markHistoryChanged();
+  assert.equal(notified, 1);
+  assert.equal(activity.isHistoryFresh(loaded, 'creations', activity.getHistoryRevision(), 2000), false);
+  unsubscribe();
+  activity.markHistoryChanged();
+  assert.equal(notified, 1);
+});
+
+test('successful history writes invalidate retained history; reads and failures do not', async () => {
+  const cache = new Map();
+  let ok = true;
+  const client = loadModule('studioClient.ts', { fetch: async () => ({ ok, status: 500, json: async () => ({}) }) }, cache);
+  const activity = loadModule('historyActivity.ts', {}, cache);
+  const initial = activity.getHistoryRevision();
+  await client.studioRequest('/studio/chats');
+  assert.equal(activity.getHistoryRevision(), initial);
+  await client.studioRequest('/studio/chats/one', { method: 'PATCH', body: '{}' });
+  assert.equal(activity.getHistoryRevision(), initial + 1);
+  ok = false;
+  await assert.rejects(client.studioRequest('/studio/chats/one', { method: 'DELETE' }));
+  assert.equal(activity.getHistoryRevision(), initial + 1);
+});
+
 test('SVG export contains edited names and arrowhead at the selected target', () => {
   const exporter = loadModule('components/anatomyExport.ts');
   const svg = exporter.buildLabeledSvg('image', [{ ...annotation, label: 'Left ventricle', anchor_x: .65 }]);

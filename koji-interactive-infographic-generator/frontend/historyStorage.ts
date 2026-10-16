@@ -1,5 +1,6 @@
 import { cloudEnabled, studioOwner, studioRequest, getCloudHistory } from "./studioClient";
 import type { PdfSource } from "./pdfSources";
+import { markHistoryChanged } from "./historyActivity";
 export type HistoryMode = "general" | "anatomy" | "sketch";
 
 export interface SketchStroke {
@@ -194,7 +195,10 @@ export async function loadHistoryItem(item: GenerationHistoryItem): Promise<Gene
   await localSaveHistoryItem(full);
   return full;
 }
-export const saveHistoryItem = localSaveHistoryItem;
+export async function saveHistoryItem(item: GenerationHistoryItem): Promise<void> {
+  await localSaveHistoryItem(item);
+  markHistoryChanged();
+}
 export async function deleteHistoryItem(id: string) {
   if(cloudEnabled() && /^[0-9a-f-]{36}$/i.test(id)) await studioRequest("/studio/history/"+id,{method:"DELETE"});
   const item = (await localListHistory()).find(item => item.id === id);
@@ -207,6 +211,7 @@ async function persistHistoryPatch(id: string, patch: Partial<Omit<GenerationHis
     if(Object.keys(allowed).length) await studioRequest("/studio/history/"+id,{method:"PATCH",body:JSON.stringify(allowed)});
   }
   await localUpdateHistoryItem(id,patch);
+  markHistoryChanged();
 }
 const pendingPatches = new Map<string, Promise<void>>();
 export function updateHistoryItem(id: string, patch: Partial<Omit<GenerationHistoryItem, "id" | "createdAt">>): Promise<void> {
@@ -223,6 +228,7 @@ export function updateHistoryItem(id: string, patch: Partial<Omit<GenerationHist
 export async function appendHistoryInteraction(id: string, interaction: GenerationInteraction, alreadySaved = false) {
   if(!alreadySaved && cloudEnabled() && /^[0-9a-f-]{36}$/i.test(id)) await studioRequest("/studio/history/"+id+"/interactions",{method:"POST",body:JSON.stringify(interaction)});
   await localAppendHistoryInteraction(id,interaction);
+  markHistoryChanged();
 }
 export async function deleteConversation(chatId: string) {
   return trashConversation(chatId, true);
@@ -253,6 +259,7 @@ async function localConversationAction(chatId: string, action: "trash" | "restor
       }
     };
     await complete(transaction).catch(error => { throw failure ?? error; });
+    markHistoryChanged();
   } finally { database.close(); }
 }
 

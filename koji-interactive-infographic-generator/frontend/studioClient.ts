@@ -1,6 +1,7 @@
 import { STUDIO_API_URL } from "./config";
 import type { GenerationHistoryItem } from "./historyStorage";
 import { SessionConnectionError } from "./sessionTokens";
+import { markHistoryChanged } from "./historyActivity";
 let currentToken: string | undefined;
 let currentOwner = "anonymous";
 type TokenProvider = (refresh?: boolean) => Promise<string | undefined>;
@@ -57,6 +58,7 @@ export async function studioRequest<T>(path: string, init: RequestInit = {}, ori
   const data = await response.json().catch(() => ({}));
   if (owner !== studioOwner()) throw new Error("Account changed. Please try again.");
   if (!response.ok) throw new StudioRequestError(typeof data.detail === "string" ? data.detail : data.error || "Studio request failed ("+response.status+")", response.status);
+  if (init.method && !["GET", "HEAD"].includes(init.method.toUpperCase()) && /^\/studio\/(chats|history|jobs|import)(?:[/?]|$)/.test(path)) markHistoryChanged();
   return data as T;
 }
 export interface StudioJob { id: string; kind: string; status: "queued" | "running" | "completed" | "failed"; stage: string; generation_id?: string; result?: { history_id?: string; chat_id?: string; enhancement?: Record<string, any>; label_job_id?: string | null; interaction_id?: string }; error?: string; created_at: string }
