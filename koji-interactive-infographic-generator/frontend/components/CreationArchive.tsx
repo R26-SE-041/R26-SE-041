@@ -43,6 +43,7 @@ export default function CreationArchive({ active = true, onResume }: Props) {
   const requestVersion = useRef(0);
   const openVersion = useRef(0);
   const lastLoaded = useRef<{ key: string; at: number; revision: number } | null>(null);
+  const detailLoaded = useRef<{ key: string; at: number; revision: number } | null>(null);
   const revision = useSyncExternalStore(subscribeHistory, getHistoryRevision, getHistoryRevision);
   const viewKey = JSON.stringify([cloud, query.trim(), trash]);
   const requestedView = useRef(viewKey);
@@ -106,10 +107,11 @@ export default function CreationArchive({ active = true, onResume }: Props) {
   }, [active, refresh, viewKey]);
   useEffect(() => () => { openVersion.current++; requestVersion.current++; }, []);
 
-  const open = async (item: CreationSummary, resume = false) => {
+  const open = useCallback(async (item: CreationSummary, resume = false, background = false) => {
     const version = ++openVersion.current;
+    const startedRevision = getHistoryRevision();
     setBusy(true); setError(null); setMenu(null);
-    if (!resume) { setSelected(item); setCreation(null); setEvents([]); setVersionsOpen(false); setDetailsOpen(false); }
+    if (!resume && !background) { setSelected(item); setCreation(null); setEvents([]); setVersionsOpen(false); setDetailsOpen(false); }
     try {
       let [full, turns] = await Promise.all([
         item.generationId ? (item.source === "cloud" ? getCloudHistory(item.generationId) : loadHistoryItem(item.versions![item.versions!.length - 1])) : Promise.resolve(null),
@@ -127,10 +129,15 @@ export default function CreationArchive({ active = true, onResume }: Props) {
       if (item.source === "cloud" && !item.versionCount) setSelected({ ...item, versionCount: turns.filter(event => event.kind === "image" && event.generationId).length });
       setCreation(full); setEvents(turns.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
       setHasMoreEvents(turns.length === 50);
+      detailLoaded.current = { key: item.id, at: Date.now(), revision: startedRevision };
       if (resume && !full) setNotice("Open a saved instruction below to continue this creation.");
     } catch (failure) { if (version === openVersion.current) setError(failure instanceof Error ? failure.message : "Unable to open creation."); }
     finally { if (version === openVersion.current) setBusy(false); }
-  };
+  }, [onResume]);
+  useEffect(() => {
+    if (!active || !selected || busy || error || isHistoryFresh(detailLoaded.current, selected.id, revision)) return;
+    void open(selected, false, true);
+  }, [active, selected, busy, error, revision, open]);
   const action = async (operation: () => Promise<void>) => {
     setBusy(true); setError(null); setNotice(null);
     try { await operation(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Please retry."); }
