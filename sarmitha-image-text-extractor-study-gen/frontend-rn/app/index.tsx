@@ -174,32 +174,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={[styles.footer, { backgroundColor: colors.text }]}>
-          <View style={styles.footerMain}>
-            <Text style={[styles.footerLogo, { color: colors.background }]}>SI</Text>
-            <View style={styles.footerColumns}>
-              <FooterColumn title="Workflow" items={["Upload image", "Enhance source", "Extract Sinhala"]} colors={colors} />
-              <FooterColumn title="Languages" items={["Sinhala", "Tamil", "English"]} colors={colors} />
-              <FooterColumn title="Models" items={["SwinSR", "TrOCR", "Translation"]} colors={colors} />
-              <FooterColumn title="Output" items={["Image comparison", "Editable text", "Copy result"]} colors={colors} />
-            </View>
-          </View>
-          <View style={styles.footerBottom}>
-            <Text style={[styles.footerBrand, { color: colors.background }]}>SINHALA OCR</Text>
-            <Text style={[styles.footerText, { color: colors.textDim }]}>Image enhancement · extraction · multilingual translation</Text>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function FooterColumn({ title, items, colors }: { title: string; items: string[]; colors: AppColors }) {
-  return (
-    <View style={styles.footerColumn}>
-      <Text style={[styles.footerColumnTitle, { color: colors.background }]}>{title}</Text>
-      {items.map((item) => <Text key={item} style={[styles.footerColumnItem, { color: colors.border }]}>{item}</Text>)}
-    </View>
   );
 }
 
@@ -275,14 +251,4 @@ const styles = StyleSheet.create({
   resultsHeading: { paddingHorizontal: 36, marginBottom: 26 },
   resultsEyebrow: { fontSize: 10, fontWeight: "700", letterSpacing: 1.3, marginBottom: 12, fontFamily: fonts.sans },
   resultsTitle: { fontSize: 46, lineHeight: 50, maxWidth: 760, fontWeight: "700", letterSpacing: -1.8, fontFamily: fonts.display },
-  footer: { minHeight: 250, marginHorizontal: -24, marginBottom: -24, marginTop: 40, paddingHorizontal: 42, paddingVertical: 28, justifyContent: "space-between" },
-  footerMain: { flexDirection: "row", alignItems: "flex-start", gap: 48 },
-  footerLogo: { fontSize: 36, lineHeight: 40, fontWeight: "800", letterSpacing: -2, fontFamily: fonts.display },
-  footerColumns: { flex: 1, flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: 36 },
-  footerColumn: { width: 140, gap: 2 },
-  footerColumnTitle: { fontSize: 12, fontWeight: "700", marginBottom: 4, fontFamily: fonts.sans },
-  footerColumnItem: { fontSize: 12, lineHeight: 15, fontFamily: fonts.sans },
-  footerBottom: { borderTopWidth: 1, borderColor: "#5E5D59", marginTop: 20, paddingTop: 10, flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 10 },
-  footerBrand: { fontSize: 13, fontWeight: "800", fontFamily: fonts.sans },
-  footerText: { fontSize: 11, fontFamily: fonts.sans },
 });
