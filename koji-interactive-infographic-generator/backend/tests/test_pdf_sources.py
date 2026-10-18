@@ -1,5 +1,4 @@
 """PDF source isolation, extraction failures and durable question provenance. No GPU calls."""
-import base64
 import os
 from io import BytesIO
 from unittest import TestCase
@@ -191,6 +190,84 @@ class PdfPipelineTests(TestCase):
             self.assertEqual(saved["grounding"],"no_match")
             self.assertEqual(saved["sources"],[])
             self.assertIn("selected PDFs",saved["answer"])
+
+    def run_citation_recovery(self, responses):
+        self.pipeline.invoke.side_effect = [{"identified_concept":"Heart"}, *responses]
+        with patch("studio.documents.Documents") as documents:
+            documents.return_value.retrieve.return_value = [
+                {"document_id":self.doc,"page":1,"filename":"Heart.pdf",
+                 "content":"The heart has four chambers. The left ventricle pumps blood through the aorta."}]
+            self.pipeline.process_source(self.job)
+        return self.repo.append_interaction.call_args.args[2]
+
+    def test_missing_citations_retry_original_question_with_same_evidence(self):
+        self.job["payload"]["analysis"]["question"] = "explain this in the exam point of view"
+        saved = self.run_citation_recovery([
+            {"response_text":"The heart has four chambers."},
+            {"response_text":"[1] The heart has four chambers."}])
+        self.assertEqual(self.pipeline.invoke.call_count,3)
+        first,retry = self.pipeline.invoke.call_args_list[1:]
+        self.assertEqual(retry.args[4],"analysis_citation_retry")
+        self.assertEqual(first.args[3]["pdf_context"],retry.args[3]["pdf_context"])
+        self.assertEqual(retry.args[3]["pdf_concept"],"Heart")
+        self.assertIn("explain this in the exam point of view",retry.args[3]["question"])
+        self.assertFalse(retry.args[3]["enable_rag"])
+        self.assertIn("Sources:\n[1] Heart.pdf",saved["answer"])
+        self.assertNotIn("could not verify",saved["answer"])
+        self.assertEqual(saved["answerMethod"],"pdf_retry")
+
+    def test_invented_citations_do_not_bypass_recovery(self):
+        saved = self.run_citation_recovery([
+            {"response_text":"False claim [1, 99]."},
+            {"response_text":"[1] The heart has four chambers."}])
+        self.assertEqual(self.pipeline.invoke.call_count,3)
+        self.assertNotIn("False claim",saved["answer"])
+        self.assertNotIn("99",saved["answer"])
+
+    def test_two_invalid_drafts_show_original_passages_without_fake_citations(self):
+        saved = self.run_citation_recovery([
+            {"response_text":"Invented draft."},
+            {"response_text":"Another invented claim [999]."}])
+        self.assertEqual(self.pipeline.invoke.call_count,3)
+        self.assertIn("could not verify a full explanation",saved["answer"])
+        self.assertIn("> The heart has four chambers.",saved["answer"])
+        self.assertIn("Sources:\n[1] Heart.pdf",saved["answer"])
+        self.assertNotIn("invented",saved["answer"])
+        self.assertEqual(saved["grounding"],"pdf")
+        self.assertEqual(saved["sources"][0]["page"],1)
+        self.assertEqual(saved["documentIds"],[self.doc])
+        self.assertEqual(saved["answerMethod"],"pdf_passages")
+
+    def test_retry_service_failure_keeps_the_retrieved_pdf_evidence(self):
+        saved = self.run_citation_recovery([
+            {"response_text":"Uncited draft."}, RuntimeError("interactive request failed")])
+        self.assertIn("> The heart has four chambers.",saved["answer"])
+        self.assertEqual(saved["status"],"completed")
+
+    def test_empty_model_answer_can_recover_with_valid_citations(self):
+        saved = self.run_citation_recovery([
+            {"response_text":None}, {"response_text":"[1] The heart has four chambers."}])
+        self.assertIn("[1] The heart has four chambers.",saved["answer"])
+
+    def test_incomplete_structured_answer_gets_one_recovery_attempt(self):
+        saved = self.run_citation_recovery([
+            RuntimeError("PDFAnswerFormatInvalid: Unterminated string"),
+            {"response_text":"[1] The heart has four chambers."}])
+        self.assertEqual(self.pipeline.invoke.call_count,3)
+        self.assertEqual(saved["answerMethod"],"pdf_retry")
+
+    def test_unavailable_generation_still_returns_the_authorized_pdf_passages(self):
+        saved = self.run_citation_recovery([
+            RuntimeError("interactive request failed")])
+        self.assertEqual(self.pipeline.invoke.call_count,2)
+        self.assertIn("> The heart has four chambers.",saved["answer"])
+        self.assertEqual(saved["answerMethod"],"pdf_passages")
+        self.assertEqual(saved["status"],"completed")
+
+    def test_valid_draft_does_not_add_an_extra_gpu_call(self):
+        saved = self.run_citation_recovery([{"response_text":"[1] The heart has four chambers."}])
+        self.assertEqual(self.pipeline.invoke.call_count,2)
+        self.assertEqual(saved["answerMethod"],"pdf_generated")
 
     def test_unselected_question_does_not_search_any_pdf(self):
         self.job["payload"]["analysis"]["document_ids"]=[]

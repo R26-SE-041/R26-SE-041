@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import time
 from urllib.parse import urlparse
-from uuid import UUID, uuid5, NAMESPACE_URL
+from uuid import uuid5, NAMESPACE_URL
 import requests
 from studio.repository import Repository
 from studio.storage import Storage
@@ -241,10 +241,12 @@ class Pipeline:
         image = self.storage.download(source["image_path"])
         if job["kind"] == "analysis":
             a=p["analysis"]
-            from studio.documents import Documents, evidence_context, checked_pdf_answer
+            from studio.documents import Documents, evidence_context, checked_pdf_answer, pdf_passage_answer
             selected = a.get("document_ids",[])
             sources = []
             grounding = "image"
+            answer_method = "image"
+            generation_failed = False
             payload = {"image_base64":image,"speed_mode":p["speed_mode"],"enable_rag":False,
                        **{key:value for key,value in a.items() if key not in {"id","document_ids"}}}
             if selected:
@@ -261,19 +263,55 @@ class Pipeline:
                 if not chunks:
                     data = {"response_text":"I could not find relevant information in the selected PDFs for this image question. Try another source or rephrase your question. Deselect all PDFs to ask for an image-based explanation."}
                     grounding = "no_match"
+                    answer_method = "no_match"
                 else:
-                    data = self.invoke(job,"interactive","/analyze",
-                        {**payload,"pdf_context":context,"pdf_concept":concept},"analysis")
+                    try:
+                        data = self.invoke(job,"interactive","/analyze",
+                            {**payload,"pdf_context":context,"pdf_concept":concept,
+                             "pdf_sources":[{"number":s["number"],"excerpt":s["excerpt"]} for s in sources]},"analysis")
+                    except RuntimeError as exc:
+                        # Even if generation is unavailable, retain the PDF
+                        # evidence instead of turning a retrieved result into an error.
+                        data = {"response_text":None}
+                        generation_failed = not str(exc).startswith("PDFAnswerFormatInvalid:")
                     grounding = "pdf"
+                    answer_method = "pdf_generated"
             else:
                 data = self.invoke(job,"interactive","/analyze",payload,"analysis")
             answer=data.get("response_text")
+            if grounding == "pdf":
+                from shared.citations import cited_sources
+                if not generation_failed and (not isinstance(answer,str) or not cited_sources(answer,sources)):
+                    answer_method = "pdf_retry"
+                    # A distinct checkpoint prevents replaying the first failed
+                    # draft on recovery. Never silently cite that draft ourselves.
+                    numbers = ", ".join(f"[{s['number']}]" for s in sources)
+                    retry_question = (
+                        (a.get("question") or "Explain the selected region") +
+                        "\nAnswer using only the provided PDF excerpts. Start each factual bullet "
+                        "with its supporting source number, then explain the point. "
+                        "For structured output, copy the supporting evidence quote exactly from an excerpt. "
+                        f"Allowed references: {numbers}. Do not write a bibliography. "
+                        "If the excerpts cannot answer the question, say what is missing."
+                    )
+                    try:
+                        retry = self.invoke(job,"interactive","/analyze",
+                            {**payload,"mode":"ask","question":retry_question,
+                             "pdf_context":context,"pdf_concept":concept,
+                             "pdf_sources":[{"number":s["number"],"excerpt":s["excerpt"]} for s in sources]},"analysis_citation_retry")
+                        answer = retry.get("response_text")
+                    except RuntimeError:
+                        # A failed retry must not discard evidence already retrieved.
+                        answer = None
+                used = cited_sources(answer,sources) if isinstance(answer,str) else []
+                if used:
+                    answer = checked_pdf_answer(answer,sources)
+                    sources = used
+                else:
+                    answer = pdf_passage_answer(sources)
+                    answer_method = "pdf_passages"
             if not isinstance(answer,str) or not answer.strip():
                 raise RuntimeError("Analysis returned no answer")
-            if grounding == "pdf":
-                answer = checked_pdf_answer(answer,sources)
-                from shared.citations import cited_sources
-                sources = cited_sources(answer,sources) or sources
             if not self.repo.heartbeat(job):
                 raise RuntimeError("Worker lease lost")
             self.repo.append_interaction(str(job["user_id"]),str(p["generation_id"]),
@@ -281,7 +319,7 @@ class Pipeline:
                     ("Identify selected object" if a["mode"]=="identify" else "Explain selected region"),
                  "answer":answer,"selection":a["interaction"],"structureId":a.get("structure_id"),
                  "status":"completed","jobId":str(job["id"]),"documentIds":selected,
-                 "sources":sources,"grounding":grounding})
+                 "sources":sources,"grounding":grounding,"answerMethod":answer_method})
             return {"history_id":str(p["generation_id"]),"interaction_id":a["id"]}
         if job["kind"] == "labels":
             anatomy = source["metadata"].get("anatomy") or {}

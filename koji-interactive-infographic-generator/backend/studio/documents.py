@@ -256,3 +256,20 @@ def checked_pdf_answer(answer, sources):
     return sourced_answer(answer, sources,
         "I could not produce an answer with valid references to the selected PDFs. "
         "Review the retrieved passages below, try a more specific question, or choose another PDF.")
+
+
+def pdf_passage_answer(sources):
+    """Recover with actual evidence, never attach citations to an uncited draft."""
+    passages = [f"> {source['excerpt'].strip()} [{source['number']}]"
+                for source in sources if source.get("excerpt", "").strip()]
+    if not passages:
+        raise RuntimeError("No readable PDF passages are available")
+    answer = (
+        "I could not verify a full explanation. These are the retrieved PDF passages "
+        "for your question; they may only answer part of it:\n\n" + "\n\n".join(passages)
+    )
+    # Excerpts are reference data, including any source-looking text in them.
+    # Add our own footer without interpreting the quoted document's contents.
+    from shared.citations import source_label
+    footer = "\n".join(f"[{s['number']}] {source_label(s)}" for s in sources if s.get("excerpt", "").strip())
+    return answer + "\n\nSources:\n" + footer
