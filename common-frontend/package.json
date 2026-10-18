@@ -8,6 +8,7 @@
     "start": "expo start --port 8085",
     "android": "expo start --android --port 8085",
     "build:web": "expo export --platform web",
+    "preview": "node scripts/preview.mjs",
     "typecheck": "tsc --noEmit",
     "proxy": "node --env-file-if-exists=.env.local scripts/proxy.mjs",
     "test": "node --test tests/*.test.mjs"

@@ -1,0 +1,11 @@
+.env*
+.expo/
+.npm-cache/
+node_modules/
+tmp/
+test-artifacts/
+tests/
+IntegratedWorkspace.tsx
+INTEGRATED_WORKSPACE.md
+AUTH_SETUP.md
+INTEGRATION.md
