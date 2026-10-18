@@ -21,3 +21,8 @@ backend/db/checkpoints.db
 backend/db/chroma/
 backend/db/chroma_v5/
 backend/db/chroma_v6/
+
+# Local assessment state and uploaded study material
+backend/db/*.db-wal
+backend/db/*.db-shm
+backend/data/uploads/

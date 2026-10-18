@@ -3,10 +3,12 @@
 import json
 import logging
 import math
+import os
 import random
 import re
 import uuid
 from functools import lru_cache
+from difflib import SequenceMatcher
 from typing import List, Optional, Tuple
 
 import httpx
@@ -14,6 +16,8 @@ from dotenv import load_dotenv
 
 from app.graph.state import AssessmentState, QuestionRecord
 from app.services.db_service import DbService
+from app.services.biology_recovery import reviewed_source_candidates
+from app.services.topic_practice import reviewed_topic_bank
 from app.services.grounding_service import GroundingService
 from app.services.llm_service import LlmService
 from app.services.rag_service import RagService
@@ -27,6 +31,7 @@ DIFF_BANDS = [
     (0.66, 1.0, "hard", "analyze"),
 ]
 INIT_DIFFICULTY = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.8}
+QUIZ_GENERATION_BUDGET_SEC = float(os.getenv("QUIZ_GENERATION_BUDGET_SEC", "15"))
 MCQ_OPTION_KEYS = {"1", "2", "3", "4", "5"}
 INSUFFICIENT_SOURCE_MESSAGE = "Insufficient source context to generate a valid question."
 GENERATION_FAILED_MESSAGE = "Could not generate a complete valid quiz. Please try again."
@@ -76,7 +81,7 @@ Rules:
 - Keep the question under 30 words, each choice under 18 words, and close every quote and brace.
 - Keep the complete JSON under 220 words.
 - Put choices only in the options object; never append choices to the question string.
-- HARD (0.66-1.00): Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match. Make every distractor plausible.
+- HARD (0.66-1.00): Make the question indirect and intellectually demanding, requiring deep thinking. Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match. Make every distractor plausible.
 - MEDIUM (0.33-0.65): Do not make it a direct question. Require one genuine application step using a short scenario, observation, relationship, or consequence. Never ask a direct definition or word-match item.
 - EASY (0.00-0.32): Make it a direct, straightforward question directly from the syllabus. Ask one clear, direct recall or recognition question about a single concept.
 - If the excerpts are weak, irrelevant, non-Biology, or insufficient, return {{"insufficient_context":true}}.
@@ -103,7 +108,7 @@ Rules:
 - Do not refer to the PDF, source, excerpt, plan, item, or page.
 - Keep each stem under 30 words and each choice under 18 words.
 - Give every question a substantive 2-4 sentence, 35-70 word explanation, not merely the correct option text.
-- Obey each plan item's difficulty exactly. HARD requires at least two linked reasoning steps, making it indirect and confusing; MEDIUM requires one application step and no direct definition; EASY must be a direct, clear recall question from the syllabus.
+- Obey each plan item's difficulty exactly. HARD requires at least two linked reasoning steps, making it indirect and intellectually demanding; MEDIUM requires one application step and no direct definition; EASY must be a direct, clear recall question from the syllabus.
 
 Return only compact JSON in this exact shape:
 {{"questions":[{{"plan_index":1,"question":"Which...?","options":{{"1":"choice","2":"choice","3":"choice","4":"choice","5":"choice"}},"correct_answer":"1","model_answer":"Source-grounded explanation."}}]}}
@@ -114,7 +119,7 @@ Generate one accurate {subject} MCQ about the student-requested topic: "{topic}"
 Difficulty: {diff_label} ({difficulty:.2f}/1.0), Bloom level: {bloom_level}.
 
 Difficulty rules:
-- HARD: Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require at least two linked reasoning steps through a scenario, experimental result, prediction, comparison, cause-effect chain, or structure-function relationship. Do not ask a definition, simple identification, or direct fact recall.
+- HARD: Make the question indirect and intellectually demanding, requiring deep thinking. Require at least two linked reasoning steps through a scenario, experimental result, prediction, comparison, cause-effect chain, or structure-function relationship. Do not ask a definition, simple identification, or direct fact recall.
 - MEDIUM: Do not make it a direct question. Require one application or interpretation step. Do not ask a direct definition or word match.
 - EASY: Make it a direct, straightforward question directly from the syllabus. Ask one unambiguous, direct single-concept recall or recognition question.
 
@@ -157,7 +162,7 @@ Rules:
 - model_answer must be a real, complete answer addressing every sub-part, not a label or one-liner.
 - Do not refer to the PDF, excerpts, context, document, text, source, or page in the question.
 - Match {subject} terminology and avoid trivial general-knowledge sub-parts.
-- HARD (0.66-1.00): Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match.
+- HARD (0.66-1.00): Make the question indirect and intellectually demanding, requiring deep thinking. Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match.
 - MEDIUM (0.33-0.65): Do not make it a direct question. Require one genuine application step using a short scenario, observation, relationship, or consequence. Never ask a direct definition or word-match item.
 - EASY (0.00-0.32): Make it a direct, straightforward question directly from the syllabus. Each sub-part should test clear recall or recognition of a single concept.
 - If the excerpts are weak, irrelevant, non-Biology, or insufficient, return {{"insufficient_context":true}}.
@@ -183,7 +188,7 @@ Rules:
 - Every claim in model_answer must be directly supported by the excerpts; it must be real content a grader can compare the student's essay against, not a label.
 - Do not refer to the PDF, excerpts, context, document, text, source, or page in the question.
 - Match {subject} terminology and avoid trivial general-knowledge framing.
-- HARD (0.66-1.00): Make the question indirect and confusing, requiring deep thinking ("mandaya pottu kulapura maathiri"). Require linking at least two concepts, comparing scenarios, or reasoning through a cause-effect chain across the essay.
+- HARD (0.66-1.00): Make the question indirect and intellectually demanding, requiring deep thinking. Require linking at least two concepts, comparing scenarios, or reasoning through a cause-effect chain across the essay.
 - MEDIUM (0.33-0.65): Require one genuine application or interpretation step across the essay; do not ask a direct definition or simple description.
 - EASY (0.00-0.32): Make it a direct, straightforward question directly from the syllabus, asking for a clear recall/explanation of the assigned concept.
 - If the excerpts are weak, irrelevant, non-Biology, or insufficient, return {{"insufficient_context":true}}.
@@ -207,6 +212,30 @@ Rules:
 - Give a clear 2-4 sentence explanation.
 - If support is insufficient, return {{"insufficient_context":true}}.
 """
+
+
+COGNITIVE_DIFFICULTY_RULES = """
+Cognitive difficulty contract (applies to the requested level only):
+- HARD: Give a coherent but demanding scenario with at least two linked inferences.
+  Combine observations or a perturbation and a contrasting condition; ask for the
+  mechanism that explains both or a downstream prediction. Keep the deciding fact
+  implicit. For MCQs, all five choices must address the same mechanism or outcome, with
+  close, biologically plausible distractors based on different causal assumptions.
+- MEDIUM: Use a short scenario requiring interpretation followed by one linked
+  consequence. Give one useful contextual cue, fewer competing observations than
+  HARD; for MCQs use plausible choices from the same biological process. Avoid direct recall.
+- EASY: Ask a direct, clearly worded recall or recognition question about one fact.
+  Use short, familiar choices. Do not add experiments, hidden conditions, causal
+  chains, counterfactuals, or misleading wording.
+- Difficulty comes from reasoning, never ambiguous language or inaccurate biology.
+  Exactly one answer must satisfy the question. Explain the causal steps after grading.
+"""
+MCQ_PROMPT += COGNITIVE_DIFFICULTY_RULES
+BATCH_MCQ_PROMPT += COGNITIVE_DIFFICULTY_RULES
+TOPIC_ONLY_MCQ_PROMPT += COGNITIVE_DIFFICULTY_RULES
+STRUCTURED_PROMPT += COGNITIVE_DIFFICULTY_RULES
+ESSAY_PROMPT += COGNITIVE_DIFFICULTY_RULES
+FILL_BLANK_PROMPT += COGNITIVE_DIFFICULTY_RULES
 
 
 def _relationship_explanation(question_text: str, correct_text: str) -> str:
@@ -363,7 +392,11 @@ def _validate_essay(q_data: dict) -> dict:
 
 def _validate_mcq(q_data: dict) -> dict:
     """Reject anything other than one well-formed five-option MCQ."""
+    if not isinstance(q_data, dict):
+        raise ValueError("MCQ must be a JSON object")
     options = q_data.get("options")
+    if not isinstance(options, (dict, list)) or len(options) != 5:
+        raise ValueError("MCQ must contain exactly five options")
     if isinstance(options, list) and len(options) == 5:
         options = {str(index): str(value) for index, value in enumerate(options, start=1)}
     elif isinstance(options, dict):
@@ -589,7 +622,11 @@ def _semantic_duplicate_reason(
         ))
 
     candidate_is_topic_recovery = is_topic_recovery(candidate)
+    normalized_stem = re.sub(r"\W+", " ", str(candidate.get("question", "")).casefold()).strip()
     for index, previous in enumerate(accepted, start=1):
+        previous_stem = re.sub(r"\W+", " ", str(previous.get("question", "")).casefold()).strip()
+        if normalized_stem and normalized_stem == previous_stem:
+            return f"identical_question_with_q{index}"
         previous_is_topic_recovery = is_topic_recovery(previous)
         both_topic_recoveries = candidate_is_topic_recovery and previous_is_topic_recovery
         if (
@@ -619,6 +656,23 @@ def _semantic_duplicate_reason(
             embedding_cache,
         ) >= SEMANTIC_EMBEDDING_THRESHOLD:
             return f"semantic_embedding_overlap_with_q{index}"
+    return ""
+
+
+def _historical_duplicate_reason(candidate: dict, history: List[dict]) -> str:
+    """Reject repeated questions, while allowing a new application of a syllabus fact.
+
+    An organelle or answer option occurring in an old quiz does not exhaust that
+    concept forever. Within the current quiz the stronger fact-set gate remains.
+    """
+    stem = re.sub(r"\W+", " ", str(candidate.get("question", "")).casefold()).strip()
+    for index, previous in enumerate(history, 1):
+        old = re.sub(r"\W+", " ", str(previous.get("question", "")).casefold()).strip()
+        if stem and stem == old:
+            return f"identical_question_with_prior_q{index}"
+        if (stem and old and SequenceMatcher(None, stem, old).ratio() >= .86
+                and _token_overlap(stem, old) >= .65):
+            return f"paraphrased_question_with_prior_q{index}"
     return ""
 
 
@@ -995,6 +1049,7 @@ def _previous_learner_questions(state: AssessmentState, q_type: str) -> List[dic
             student_id,
             exclude_session_id=str(state.get("session_id", "")),
             q_type=q_type,
+            limit=None,
         )
     except Exception:
         logger.warning("Could not load cross-session question history", exc_info=True)
@@ -1258,7 +1313,7 @@ def _source_fallback_open_ended(
 def _sequential_quiz_agent(state: AssessmentState) -> dict:
     """Retrieve before generation, validate against that retrieval, and fail closed."""
     logger.info("[QuizAgent] Starting | session=%s | q_index=%s", state["session_id"], state.get("current_q_index", 0))
-    llm = LlmService()
+    llm = LlmService(generation_budget_sec=QUIZ_GENERATION_BUDGET_SEC)
     rag = RagService()
     grounding = GroundingService()
     # Don't hold the whole request for the full 45s Modal timeout when the
@@ -1295,7 +1350,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
         "fill_blank": FILL_BLANK_PROMPT,
     }.get(q_type, MCQ_PROMPT)
     # Keep the anti-repeat prompt compact; the validator still checks the full
-    # 120-question history below without paying that token/latency cost.
+    # persisted history below without paying that token/latency cost.
     existing = [
         question["question"]
         for question in [*questions, *historical_questions[:30]]
@@ -1336,7 +1391,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
             bloom_level=bloom,
             diff_label=diff_label,
             difficulty=diff_score,
-        ) + no_repeat
+        ) + no_repeat + "\nFresh question variant: " + str(uuid.uuid4())
         try:
             candidate = llm.call_json(prompt)
             if candidate.get("insufficient_context") is True:
@@ -1352,7 +1407,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 candidate = _validate_essay(candidate)
             duplicate_reason = (
                 _semantic_duplicate_reason(candidate, questions, grounding, {})
-                or _semantic_duplicate_reason(candidate, historical_questions)
+                or _historical_duplicate_reason(candidate, historical_questions)
             )
             if duplicate_reason:
                 logs.append(f"[QuizAgent] Cross-session duplicate rejected: {duplicate_reason}")
@@ -1400,7 +1455,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 bloom_level=bloom,
                 diff_label=diff_label,
                 difficulty=diff_score,
-            ) + no_repeat
+            ) + no_repeat + "\nFresh question variant: " + str(uuid.uuid4())
             try:
                 candidate = llm.call_json(prompt)
                 if candidate.get("insufficient_context") is not True:
@@ -1414,7 +1469,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                         candidate = _validate_essay(candidate)
                     duplicate_reason = (
                         _semantic_duplicate_reason(candidate, questions, grounding, {})
-                        or _semantic_duplicate_reason(candidate, historical_questions)
+                        or _historical_duplicate_reason(candidate, historical_questions)
                     )
                     if duplicate_reason:
                         logs.append(f"[QuizAgent] Seed duplicate rejected: {duplicate_reason}")
@@ -1452,7 +1507,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
                 fallback = _validate_structured(fallback) if q_type == "structured" else _validate_essay(fallback)
                 duplicate_reason = (
                     _semantic_duplicate_reason(fallback, questions, grounding, {})
-                    or _semantic_duplicate_reason(fallback, historical_questions)
+                    or _historical_duplicate_reason(fallback, historical_questions)
                 )
                 if duplicate_reason:
                     raise ValueError(f"source recovery repeats learner history: {duplicate_reason}")
@@ -1582,7 +1637,7 @@ def _record_from_candidate(
         "correct_answer": candidate.get("correct_answer", ""),
         "model_answer": candidate.get("model_answer", ""),
         "grounding_score": float(audit["grounding_score"]),
-        "grounding_status": "grounded",
+        "grounding_status": audit.get("grounding_status", "grounded"),
         "source_file": str(primary.get("source", "")),
         "page_number": int(primary.get("page", 0) or 0),
         "retrieved_text": str(primary.get("text", "")),
@@ -1649,7 +1704,9 @@ def _compact_source_statement(text: str, max_words: int = 18) -> str:
     return " ".join(words[:max_words]).rstrip(" ,;:")
 
 
-def _curated_source_recovery(slot: dict, difficulty: float, question_index: int) -> Optional[dict]:
+def _curated_source_recovery(
+    slot: dict, difficulty: float, question_index: int, excluded: Optional[List[dict]] = None,
+) -> Optional[dict]:
     """High-quality deterministic recovery for syllabus concepts visible in the source."""
     text = " ".join([
         str(slot.get("concept", "")),
@@ -1810,7 +1867,10 @@ def _curated_source_recovery(slot: dict, difficulty: float, question_index: int)
     for keywords, by_difficulty in banks:
         if not any(keyword in text for keyword in keywords):
             continue
-        candidates = by_difficulty.get(diff_label, [])
+        candidates = [
+            candidate for candidate in by_difficulty.get(diff_label, [])
+            if not _semantic_duplicate_reason(candidate, excluded or [])
+        ]
         if not candidates:
             continue
         selected = dict(candidates[question_index % len(candidates)])
@@ -1826,11 +1886,14 @@ def _curated_source_recovery(slot: dict, difficulty: float, question_index: int)
     return None
 
 
-def _source_fallback_mcq(slot: dict, source_chunks: List[dict], question_index: int) -> Optional[dict]:
+def _source_fallback_mcq(
+    slot: dict, source_chunks: List[dict], question_index: int,
+    excluded: Optional[List[dict]] = None,
+) -> Optional[dict]:
     """Build a conservative direct MCQ when the model repeatedly breaks JSON/format rules."""
     focus = str(slot.get("concept_focus", "")).strip()
     difficulty = float(slot.get("difficulty", 0.8))
-    curated = _curated_source_recovery(slot, difficulty, question_index)
+    curated = _curated_source_recovery(slot, difficulty, question_index, excluded)
     if curated is not None:
         return curated
     correct = _compact_source_statement(focus)
@@ -2450,40 +2513,49 @@ _GENERIC_TOPIC_FALLBACK = [
 ]
 
 
+def _eligible_topic_questions(
+    bank: List[dict], existing: List[dict], diff_label: str,
+    historical_questions: Optional[List[dict]] = None,
+) -> List[dict]:
+    """Validate local topic questions without exhausting a fact merely seen before."""
+    eligible = []
+    for raw in bank:
+        if raw.get("_difficulty") and raw["_difficulty"] != diff_label:
+            continue
+        try:
+            candidate = _validate_mcq(dict(raw))
+        except ValueError:
+            continue
+        if (_historical_duplicate_reason(candidate, [*existing, *(historical_questions or [])])
+                or _difficulty_candidate_rejection(candidate, diff_label)):
+            continue
+        eligible.append(candidate)
+    return eligible
+
+
+def _topic_question_bank(topic: str) -> List[dict]:
+    bank = list(reviewed_topic_bank(topic))
+    topic_lower = topic.casefold()
+    for keyword, questions in _TOPIC_FALLBACK_BANK:
+        if keyword in topic_lower:
+            bank.extend(questions)
+    if topic_lower in {"biology", "general biology", "a/l biology"}:
+        bank.extend(_GENERIC_TOPIC_FALLBACK)
+    return bank
+
+
 def _make_fallback_topic_question(
     topic: str,
     existing_questions: list,
     difficulty: float,
     diff_label: str,
+    historical_questions: Optional[List[dict]] = None,
 ) -> Optional[dict]:
-    """Return a curated fallback MCQ for the given topic when the LLM is offline.
-
-    Tries to pick a question not already used (by comparing the 'question' string).
-    Falls back to the generic bank if no topic-specific question is available.
-    """
-    topic_lower = topic.casefold()
-    used_stems = {q.get("question", "").casefold() for q in existing_questions}
-
-    def _pick_unused(bank: list[dict]) -> Optional[dict]:
-        for q in bank:
-            declared = q.get("_difficulty")
-            if q["question"].casefold() not in used_stems and (not declared or declared == diff_label):
-                return q
-        return None
-
-    # Search topic-specific bank first
-    for keyword, bank in _TOPIC_FALLBACK_BANK:
-        if keyword in topic_lower:
-            q = _pick_unused(bank)
-            if q:
-                return q
-
-    # Never disguise an unrelated generic Biology item as a question about the
-    # learner's requested topic. Generic fallback is valid only for an equally
-    # generic Biology request.
-    if topic_lower in {"biology", "general biology", "a/l biology"}:
-        return _pick_unused(_GENERIC_TOPIC_FALLBACK) or _GENERIC_TOPIC_FALLBACK[0]
-    return None
+    """Choose a validated, unseen question from the requested topic's local bank."""
+    eligible = _eligible_topic_questions(
+        _topic_question_bank(topic), existing_questions, diff_label, historical_questions,
+    )
+    return {**random.choice(eligible), "_curated_topic": topic} if eligible else None
 
 
 @lru_cache(maxsize=64)
@@ -2546,14 +2618,13 @@ def _universal_topic_fallback(
     topic: str,
     existing_questions: list,
     diff_label: str,
-) -> dict:
+) -> Optional[dict]:
     """Create a relevant MCQ for any topic when Modal is unavailable.
 
     Wikipedia is used only as an emergency factual reference. If that lookup is
     also unavailable, a valid scientific-inquiry item keeps setup recoverable
     without inventing a topic-specific biological fact.
     """
-    used = {str(question.get("question", "")).casefold() for question in existing_questions}
     try:
         title, extract, links = _wikipedia_topic_material(topic)
     except Exception as exc:
@@ -2614,8 +2685,10 @@ def _universal_topic_fallback(
                 f"Therefore, {correct} is the term that completes the stated relationship about {topic}."
             ),
         })
+    random.shuffle(candidates)
     for candidate in candidates:
-        if candidate["question"].casefold() not in used:
+        if (not _semantic_duplicate_reason(candidate, existing_questions)
+                and not _difficulty_candidate_rejection(candidate, diff_label)):
             return _validate_mcq(candidate)
 
     # Network-independent last resort: still assess evidence-based biological
@@ -2625,7 +2698,7 @@ def _universal_topic_fallback(
         "hard": (
             f"Two controlled studies of {topic} produce opposite outcomes. Which next step best distinguishes a causal effect from an uncontrolled association?",
             "Repeat both studies while controlling the differing variable",
-            ["Acceptance of the larger result without replication", "Removal of the control group from both studies", "Simultaneous alteration of several variables", "Selective use of observations supporting one outcome"],
+            ["Repeat only the study with the larger effect under its original conditions", "Pool both datasets and compare their overall mean outcomes", "Standardise several differing conditions together before repeating both studies", "Increase sample sizes while retaining the original differences between studies"],
             "Controlling the differing variable and repeating both studies tests whether that variable caused the conflicting outcome. Replication and controlled comparison provide stronger biological evidence than selective observation or simultaneous changes.",
         ),
         "medium": (
@@ -2642,26 +2715,27 @@ def _universal_topic_fallback(
         ),
     }
     stem, correct, distractors, explanation = templates[diff_label]
-    return _validate_mcq({
+    candidate = _validate_mcq({
         "question": stem,
         "options": {"1": correct, "2": distractors[0], "3": distractors[1], "4": distractors[2], "5": distractors[3]},
         "correct_answer": "1",
         "model_answer": explanation,
     })
+    if (_semantic_duplicate_reason(candidate, existing_questions)
+            or _difficulty_candidate_rejection(candidate, diff_label)):
+        return None
+    return candidate
 
 
-def _topic_fallback_capacity(topic: str, existing_questions: list, diff_label: str) -> int:
-    """Count distinct curated questions available for this topic/difficulty."""
-    topic_lower = topic.casefold()
-    used_stems = {question.get("question", "").casefold() for question in existing_questions}
-    for keyword, bank in _TOPIC_FALLBACK_BANK:
-        if keyword in topic_lower:
-            return sum(
-                1 for question in bank
-                if question["question"].casefold() not in used_stems
-                and (not question.get("_difficulty") or question.get("_difficulty") == diff_label)
-            )
-    return 0
+
+def _topic_fallback_capacity(
+    topic: str, existing_questions: list, diff_label: str,
+    historical_questions: Optional[List[dict]] = None,
+) -> int:
+    """Count questions using exactly the picker?s validity and novelty criteria."""
+    return len(_eligible_topic_questions(
+        _topic_question_bank(topic), existing_questions, diff_label, historical_questions,
+    ))
 
 
 def _difficulty_candidate_rejection(candidate: dict, diff_label: str) -> str:
@@ -2674,10 +2748,20 @@ def _difficulty_candidate_rejection(candidate: dict, diff_label: str) -> str:
         re.IGNORECASE,
     ))
     reasoning_markers = bool(re.search(
-        r"\b(?:after|before|blocked|change|compared|defect|evidence|experiment|fails?|if|inhibits?|observed|predict|result|while|yet)\b",
+        r"\b(?:after|before|blocked|change|compared|defect|evidence|experiment|fails?|if|inhibits?|observed|observations?|outcomes?|studies|inhibitor|mutant|reduced|increased|prevented|whereas|despite|although|predict|result|while|yet)\b",
         stem,
         re.IGNORECASE,
     ))
+    disguised_recall = bool(re.search(
+        r"(?:which (?:term|concept) (?:completes|must be integrated)|which topic should|which biological topic)",
+        stem, re.IGNORECASE,
+    ))
+    if diff_label in {"hard", "medium"} and disguised_recall:
+        return f"{diff_label} question disguises direct recall with scenario wording"
+    if diff_label == "easy" and reasoning_markers and re.search(
+        r"\b(?:experiment|predict|defect|inhibit|blocked|compared|evidence|outcomes?)\b", stem, re.IGNORECASE
+    ):
+        return "easy question should ask direct single-concept recall"
     if diff_label == "hard" and (direct_stem or len(words) < 14 or not reasoning_markers):
         return "hard question lacks a two-step scenario or evidence-based reasoning"
     if diff_label == "medium" and (direct_stem or len(words) < 10 or not reasoning_markers):
@@ -2696,7 +2780,14 @@ def _topic_candidate_rejection(candidate: dict, topic: str, diff_label: str) -> 
         " ".join(str(value) for value in (candidate.get("options") or {}).values()),
         str(candidate.get("model_answer", "")),
     ])
-    if topic_terms and not (topic_terms & _semantic_tokens(content)):
+    # Curated entries are selected from a topic-specific bank; model drafts
+    # must independently mention the topic (allow ordinary singular/plural).
+    def singular(token: str) -> str:
+        return token[:-1] if len(token) > 4 and token.endswith("s") and not token.endswith("ss") else token
+    normalized_topic = {singular(token) for token in topic_terms}
+    normalized_content = {singular(token) for token in _semantic_tokens(content)}
+    if (topic_terms and not (normalized_topic & normalized_content)
+            and candidate.get("_curated_topic") != topic):
         return "question is unrelated to the requested topic"
 
     return _difficulty_candidate_rejection(candidate, diff_label)
@@ -2714,10 +2805,8 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     if len(questions) >= requested or current_index < len(questions):
         return {"questions": questions, "agent_logs": logs}
 
-    if not questions:
-        difficulty = 0.8
-    elif state.get("difficulty_mode") == "adaptive":
-        difficulty = float(state.get("current_difficulty", 0.8))
+    if state.get("difficulty_mode") == "adaptive":
+        difficulty = 0.8 if not questions else float(state.get("current_difficulty", 0.8))
     else:
         difficulty = INIT_DIFFICULTY.get(state.get("difficulty_mode", "hard"), 0.8)
     diff_label, bloom = get_diff_info(difficulty)
@@ -2734,24 +2823,20 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     candidate = None
     service_error = ""
     fallback_candidate = _make_fallback_topic_question(
-        topic, [*questions, *historical_questions], difficulty, diff_label
+        topic, questions, difficulty, diff_label, historical_questions=historical_questions
     )
     is_universal_fallback = False
-    llm = LlmService()
-    endpoint_warm = llm.check_health()
+    llm = LlmService(generation_budget_sec=QUIZ_GENERATION_BUDGET_SEC)
+    # A valid local question is immediately usable. Do not send the learner
+    # to a slow remote call merely because the remaining quiz is longer than
+    # the currently available local pool.
+    prefer_curated = fallback_candidate is not None
+    endpoint_warm = llm.check_health() if not prefer_curated else False
     if fallback_candidate is None and not endpoint_warm:
         is_universal_fallback = True
         fallback_candidate = _universal_topic_fallback(
             topic, [*questions, *historical_questions], diff_label
         )
-    remaining_questions = max(1, requested - len(questions))
-    fallback_capacity = _topic_fallback_capacity(
-        topic, [*questions, *historical_questions], diff_label
-    )
-    # A complete curated set is both faster and more reliable than waiting for
-    # a remote generation call.  This is especially important after a health
-    # probe succeeds but the larger Modal inference subsequently stalls.
-    prefer_curated = fallback_candidate is not None and fallback_capacity >= remaining_questions
     if fallback_candidate is not None and (is_universal_fallback or not endpoint_warm or prefer_curated):
         candidate = _validate_mcq(dict(fallback_candidate))
         logs.append(
@@ -2759,7 +2844,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
             "without waiting for remote inference"
         )
 
-    for attempt in range(1, 4) if candidate is None else range(0):
+    for attempt in range(1, 4) if candidate is None and endpoint_warm else range(0):
         prompt = TOPIC_ONLY_MCQ_PROMPT.format(
             topic=topic,
             subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
@@ -2770,19 +2855,14 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
             seed=str(uuid.uuid4())
         )
         try:
-            # Skip the 3-second health-check probe — Modal GPU containers take
-            # 30-60 s to cold-start, so the probe always times out and blocks
-            # the topic-only path. Let the full-timeout inference call handle failures.
-            raw = llm.call_json(prompt, max_new_tokens=384)
+            raw = llm.call_json(prompt, max_new_tokens=1024)
             parsed = _validate_mcq(raw)
             rejection = _topic_candidate_rejection(parsed, topic, diff_label)
             if rejection:
                 logger.warning("[QuizAgent] Rejected topic candidate (attempt %d): %s", attempt, rejection)
                 logs.append(f"[QuizAgent] Rejected model question (attempt {attempt}): {rejection}")
                 continue
-            duplicate_reason = _semantic_duplicate_reason(
-                parsed, [*questions, *historical_questions], None, {}
-            )
+            duplicate_reason = _historical_duplicate_reason(parsed, [*questions, *historical_questions])
             if duplicate_reason:
                 logger.warning("[QuizAgent] Duplicate detected (attempt %d), retrying: %s", attempt, duplicate_reason)
                 logs.append(f"[QuizAgent] Duplicate question rejected (attempt {attempt}): {duplicate_reason}")
@@ -2813,11 +2893,23 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
             topic, [*questions, *historical_questions], diff_label
         )
     if candidate is None:
-        error = service_error or f'Could not generate a relevant {diff_label} question for "{topic}".'
+        error = service_error or f'No new {diff_label} question is available for "{topic}". Try another topic or add study material.'
         return {
             "error": error,
             "questions": questions,
-            "agent_logs": logs + ["[QuizAgent] Refused an unrelated generic fallback"],
+            "agent_logs": logs + ["[QuizAgent] Refused a repeated or unrelated fallback"],
+        }
+
+    candidate = _validate_mcq(dict(candidate))
+    final_rejection = (
+        _topic_candidate_rejection(candidate, topic, diff_label)
+        or _historical_duplicate_reason(candidate, [*questions, *historical_questions])
+    )
+    if final_rejection:
+        return {
+            "error": "No new question at this difficulty is available for this topic. Try another topic or add study material.",
+            "questions": questions,
+            "agent_logs": logs + [f"[QuizAgent] Final candidate rejected: {final_rejection}"],
         }
 
     record: QuestionRecord = {
@@ -2859,7 +2951,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
 def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     """Keep a whole-quiz concept plan and generate the next adaptive MCQ."""
     logger.info("[QuizAgent] Starting planned adaptive generation | session=%s", state["session_id"])
-    llm = LlmService()
+    llm = LlmService(generation_budget_sec=QUIZ_GENERATION_BUDGET_SEC)
     rag = RagService()
     grounding = GroundingService()
     logs = list(state.get("agent_logs", []))
@@ -2912,7 +3004,13 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         nonlocal _reserve_slots_cache
         if _reserve_slots_cache is None:
             reserve_state = dict(state)
-            reserve_state["num_questions"] = min(requested * 3, requested + 20)
+            # A short shuffled slice can contain only broken question-paper
+            # continuations. Explore the entire source pool before concluding
+            # that no validated replacement exists.
+            reserve_state["num_questions"] = max(
+                requested,
+                sum(len(_concept_sentences(str(chunk.get("text", "")))) for chunk in source_chunks),
+            )
             expanded_plan = build_concept_plan(reserve_state, source_chunks)
             planned_focuses = {str(slot.get("concept_focus", "")).casefold() for slot in blueprint[:requested]}
             _reserve_slots_cache = [
@@ -2927,10 +3025,8 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     # This lets the previous question's terminal attempt select real difficulty.
     generation_end = min(len(existing_questions) + 1, requested)
     pending_slots = blueprint[len(existing_questions):generation_end]
-    if not existing_questions:
-        active_difficulty = 0.8  # The first question is always hard.
-    elif state.get("difficulty_mode") == "adaptive":
-        active_difficulty = float(state.get("current_difficulty", 0.8))
+    if state.get("difficulty_mode") == "adaptive":
+        active_difficulty = 0.8 if not existing_questions else float(state.get("current_difficulty", 0.8))
     else:
         active_difficulty = INIT_DIFFICULTY.get(state.get("difficulty_mode", "hard"), 0.8)
     for offset, slot in enumerate(pending_slots):
@@ -2959,6 +3055,9 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     batch_prompt = BATCH_MCQ_PROMPT.format(
         concept_plan=_render_batch_plan(pending_slots, source_map),
         subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology")
+    ) + "\nFresh question variant: " + str(uuid.uuid4()) + "\nDo not reuse these prior questions or answer facts:\n" + "\n".join(
+        f"- {q.get('question', '')} | Answer fact: {_answer_text(q)}"
+        for q in [*existing_questions, *historical_questions[:30]]
     )
 
     try:
@@ -2967,7 +3066,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         # Keep the model from running to a very large token ceiling when a
         # compact batch is requested; malformed LoRA output otherwise makes
         # setup appear hung for several minutes.
-        batch_token_budget = max(384, min(8192, 140 * len(pending_slots)))
+        batch_token_budget = min(8192, 1024 * len(pending_slots))
         batch_data = llm.call_json(batch_prompt, max_new_tokens=batch_token_budget)
         raw_candidates = batch_data.get("questions")
         if not isinstance(raw_candidates, list):
@@ -2980,6 +3079,8 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
 
     supplied: dict[int, dict] = {}
     for position, candidate in enumerate(raw_candidates, start=1):
+        if not isinstance(candidate, dict):
+            continue
         try:
             plan_index = int(candidate.get("plan_index", position))
         except (TypeError, ValueError):
@@ -2992,6 +3093,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         candidate: dict,
         *,
         use_embedding_duplicate_check: bool = True,
+        reviewed_recovery: bool = False,
     ) -> bool:
         slot = pending_slots[local_index - 1]
         absolute_index = len(existing_questions) + local_index - 1
@@ -3018,8 +3120,6 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 grounding if use_embedding_duplicate_check else None,
                 semantic_embedding_cache,
             )
-            if not duplicate_reason:
-                duplicate_reason = _semantic_duplicate_reason(candidate, historical_questions)
             if duplicate_reason:
                 rejection_by_index[absolute_index] = duplicate_reason
                 logs.append(
@@ -3027,6 +3127,12 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 )
                 return False
             audit = _embedding_grounding_audit(grounding, candidate, chunks)
+            if reviewed_recovery:
+                # An unkeyed question paper names a concept but cannot entail an
+                # answer. Preserve its real similarity score and disclose reviewed
+                # syllabus practice instead of mislabelling it as source-grounded.
+                audit["grounding_status"] = "topic_model"
+                audit["reason"] = "reviewed_syllabus_practice"
             if (
                 audit["grounding_status"] != "grounded"
                 and not use_embedding_duplicate_check
@@ -3038,7 +3144,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                     f"[QuizAgent] Accepted exact-source recovery at score "
                     f"{audit['grounding_score']:.3f}"
                 )
-            if audit["grounding_status"] != "grounded":
+            if audit["grounding_status"] not in {"grounded", "topic_model"}:
                 rejection_by_index[absolute_index] = (
                     f"grounding score {audit['grounding_score']:.3f} was below the required threshold"
                 )
@@ -3046,6 +3152,11 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                     f"[QuizAgent] Grounding rejected planned Q{absolute_index + 1} "
                     f"(score={audit['grounding_score']:.3f})"
                 )
+                return False
+            historical_reason = _historical_duplicate_reason(candidate, historical_questions)
+            if historical_reason:
+                rejection_by_index[absolute_index] = "Already used in an earlier quiz: " + historical_reason
+                logs.append(f"[QuizAgent] Rejected previously seen Q{absolute_index + 1}: {historical_reason}")
                 return False
             accepted_candidates.append(candidate)
             generated_by_index[absolute_index] = (candidate, chunks, audit)
@@ -3059,6 +3170,35 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         candidate = supplied.get(local_index)
         if candidate is not None:
             validate_for_slot(local_index, candidate)
+
+    def try_reviewed_recovery(local_index: int) -> bool:
+        level, _ = get_diff_info(active_difficulty)
+        pool = reviewed_source_candidates(source_chunks, level)
+        random.shuffle(pool)
+        for candidate, anchor in pool:
+            if (_semantic_duplicate_reason(candidate, accepted_candidates)
+                    or _historical_duplicate_reason(candidate, historical_questions)):
+                continue
+            replacement = {
+                "topic": candidate["_topic"], "concept": candidate["_topic"],
+                "concept_focus": candidate["question"], "retrieval_query": candidate["_topic"],
+                "source_chunk_id": anchor["chunk_id"], "source_file": anchor.get("source", ""),
+                "source_page": anchor.get("page", 0), "q_type": "mcq", "difficulty": active_difficulty,
+            }
+            absolute_index = len(existing_questions) + local_index - 1
+            old_slot = pending_slots[local_index - 1]
+            pending_slots[local_index - 1] = replacement
+            blueprint[absolute_index] = replacement
+            if validate_for_slot(local_index, candidate, use_embedding_duplicate_check=False, reviewed_recovery=True):
+                logs.append(f"[QuizAgent] Used reviewed {level} syllabus practice for source topic {candidate['_topic']}")
+                return True
+            pending_slots[local_index - 1] = old_slot
+            blueprint[absolute_index] = old_slot
+        return False
+
+    if generation_service_unavailable:
+        for local_index in range(1, len(pending_slots) + 1):
+            try_reviewed_recovery(local_index)
 
     # Repair only rejected/missing slots, retaining the complete concept plan and
     # every accepted fact-set in each retry prompt.
@@ -3077,11 +3217,12 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                         slot,
                         chunks,
                         blueprint,
-                        accepted_candidates,
+                        [*accepted_candidates, *historical_questions[:30]],
                         difficulty,
                         rejection_by_index.get(absolute_index, ""),
                         state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
-                    )
+                    ),
+                    max_new_tokens=1024,
                 )
                 if validate_for_slot(local_index, candidate):
                     logs.append(
@@ -3112,11 +3253,12 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                             replacement,
                             chunks,
                             blueprint,
-                            accepted_candidates,
+                            [*accepted_candidates, *historical_questions[:30]],
                             active_difficulty,
                             "The previous concept repeatedly produced an invalid or duplicate MCQ; use this replacement concept.",
                             state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
-                        )
+                        ),
+                        max_new_tokens=1024,
                     )
                     if validate_for_slot(local_index, candidate):
                         logs.append(
@@ -3127,7 +3269,9 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                     if isinstance(exc, RuntimeError):
                         generation_service_unavailable = True
         if absolute_index not in generated_by_index:
-            fallback = _source_fallback_mcq(slot, source_chunks, absolute_index)
+            fallback = _source_fallback_mcq(
+                slot, source_chunks, absolute_index, [*accepted_candidates, *historical_questions]
+            )
             # Short questions about one organelle can have near-identical
             # embeddings while testing different source-backed relationships.
             # Exact fact/answer/option duplicate checks remain active here.
@@ -3153,6 +3297,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 replacement,
                 source_chunks,
                 absolute_index,
+                [*accepted_candidates, *historical_questions],
             )
             if replacement_fallback is None:
                 continue
@@ -3166,6 +3311,11 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 )
                 break
 
+    for local_index in range(1, len(pending_slots) + 1):
+        absolute_index = len(existing_questions) + local_index - 1
+        if absolute_index not in generated_by_index:
+            try_reviewed_recovery(local_index)
+
     if len(generated_by_index) != len(pending_slots):
         missing = [
             str(index + 1)
@@ -3173,7 +3323,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
             if index not in generated_by_index
         ]
         return {
-            "error": GENERATION_FAILED_MESSAGE,
+            "error": "Could not generate a new question from this material at the selected difficulty. Add more study material or try another topic.",
             "quiz_blueprint": blueprint,
             "agent_logs": logs + [f"[QuizAgent] Batch rejected; missing distinct questions: {', '.join(missing)}"],
         }

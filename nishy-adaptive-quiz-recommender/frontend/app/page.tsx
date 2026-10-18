@@ -1,229 +1,57 @@
 import Link from "next/link";
-import {
-  FileTextIcon,
-  ZapIcon,
-  HelpCircleIcon,
-  BarChartIcon,
-  TargetIcon,
-  TrendingUpIcon,
-  LayersIcon,
-  CpuIcon,
-  ListIcon,
-  ClipboardIcon,
-  ArrowRightIcon,
-} from "@/components/ui/Icons";
+import AppHeader from "@/components/ui/AppHeader";
+import { ArrowRightIcon, FileTextIcon, HelpCircleIcon, BarChartIcon } from "@/components/ui/Icons";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen flex flex-col">
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-[18px] py-5 max-w-[1040px] mx-auto w-full border-b border-stone-900/10">
-        <div className="flex items-center gap-2.5">
-          <div className="brand-mark w-8 h-8 rounded-lg">
-            <span className="font-bold text-sm">AQ</span>
-          </div>
-          <span className="font-bold text-lg tracking-tight">
-            Adaptive<span className="text-gradient">IQ</span>
-          </span>
+    <main className="landing min-h-screen">
+      <AppHeader home />
+      <section className="editorial-hero">
+        <h1 className="animate-slide-up">Study with <span className="hero-underline">purpose.</span><br />Learn with<br className="hidden lg:block" /> evidence.</h1>
+        <div className="hero-intro animate-fade-in">
+          <p>Better understanding starts with better questions. Turn your study material into thoughtful practice that grows with you.</p>
+          <Link href="/upload" id="cta-start-quiz" className="btn-primary mt-8">Start adaptive quiz <ArrowRightIcon /></Link>
         </div>
-        <div className="hidden md:flex items-center gap-6 text-sm text-stone-900/60">
-          <a href="#how-it-works" className="hover:text-stone-900 transition-colors">How it works</a>
-          <a href="#features" className="hover:text-stone-900 transition-colors">Features</a>
+      </section>
+      <section className="featured-learning" aria-labelledby="learning-heading">
+        <div className="featured-copy">
+          <p className="section-label mb-6">A more thoughtful way to learn</p>
+          <h2 id="learning-heading">Make room for<br />deeper thinking.</h2>
+          <p className="featured-description">Start with what you know. Connect ideas, work through a challenge, and use carefully paced hints to find your own way forward.</p>
+          <a href="#how-it-works" className="editorial-link mt-8">Explore the process <ArrowRightIcon /></a>
         </div>
-        <Link href="/upload" className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5">
-          Start Quiz <ArrowRightIcon />
-        </Link>
-      </nav>
-
-      {/* Hero */}
-      <section className="flex-1 flex flex-col items-center justify-center text-center px-[18px] pt-20 pb-24 relative">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 42% at 50% 10%, rgba(216,101,59,0.10) 0%, transparent 72%)",
-          }}
-          aria-hidden="true"
-        />
-
-        {/* Badge */}
-        <div className="animate-fade-in mb-6">
-          <span className="badge-violet text-sm px-4 py-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-600" />
-            Source-grounded adaptive assessment
-          </span>
+        <div className="learning-illustration" aria-hidden="true">
+          <svg viewBox="0 0 480 400" fill="none">
+            <path d="M100 314C138 273 155 209 225 83M383 314C342 254 312 168 244 65" stroke="currentColor" strokeWidth="2" />
+            <path d="M124 275C184 311 307 311 360 275M151 226C204 196 278 196 332 226M178 177C218 202 271 202 306 177M204 128C229 110 256 110 280 128M224 84H252M90 335H390" stroke="currentColor" strokeWidth="2" />
+            <circle cx="225" cy="83" r="7" fill="currentColor" /><circle cx="151" cy="226" r="5" fill="currentColor" /><circle cx="360" cy="275" r="5" fill="currentColor" />
+            <circle cx="240" cy="199" r="158" stroke="currentColor" strokeOpacity=".2" />
+            <path d="M67 116L77 121L67 126L62 136L57 126L47 121L57 116L62 106Z" fill="currentColor" />
+          </svg>
         </div>
-
-        {/* Heading */}
-        <h1 className="animate-slide-up text-5xl md:text-[58px] font-bold tracking-[-2px] leading-[1.08] md:leading-[63px] mb-7 max-w-4xl text-stone-800">
-          Study with purpose.
-          <br />
-          <span className="text-gradient italic">Learn with evidence.</span>
-        </h1>
-
-        <p className="animate-fade-in text-lg md:text-xl text-stone-900/60 max-w-2xl mb-10 leading-relaxed">
-          Turn your own notes into structured, adaptive assessments. Every question is grounded
-          in your material and adjusts thoughtfully as you progress.
-        </p>
-
-        {/* CTA Buttons */}
-        <div className="animate-fade-in flex flex-col sm:flex-row gap-4">
-          <Link href="/upload" id="cta-start-quiz" className="btn-primary text-base px-8 py-4">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Start Adaptive Quiz
-          </Link>
-          <a href="#how-it-works" className="btn-secondary text-base px-8 py-4">
-            See how it works
-          </a>
-        </div>
-
-        {/* Stats row */}
-        <div className="animate-fade-in mt-16 grid grid-cols-3 gap-0 max-w-xl w-full mx-auto text-center editorial-rule py-5">
+      </section>
+      <section id="how-it-works" className="editorial-section">
+        <div className="editorial-section-heading"><h2>From your notes to new understanding.</h2><p className="section-label">The process</p></div>
+        <div className="grid md:grid-cols-3 gap-8">
           {[
-            { val: "7B", label: "Parameter LLM" },
-            { val: "RAG", label: "Grounded Questions" },
-            { val: "IRT", label: "Adaptive Engine" },
-          ].map((s) => (
-            <div key={s.val} className="px-4 border-r border-stone-900/10 last:border-r-0">
-              <div className="text-2xl font-semibold text-orange-700 font-serif">{s.val}</div>
-              <div className="text-xs text-stone-500 mt-1">{s.label}</div>
-            </div>
-          ))}
+            { icon: <FileTextIcon />, number: "01", title: "Bring your material", text: "Choose your notes, upload a document, or start with a Biology topic. Your material sets the direction." },
+            { icon: <HelpCircleIcon />, number: "02", title: "Think it through", text: "Work through direct recall or more demanding questions. Hints guide your reasoning without giving the answer away." },
+            { icon: <BarChartIcon />, number: "03", title: "Build on what you learn", text: "Review your performance, revisit useful study notes, and explore relevant YouTube videos." },
+          ].map(item => <article key={item.number} className="process-item">
+            <div className="flex items-center justify-between mb-9"><span className="section-label">{item.number}</span>{item.icon}</div>
+            <h3>{item.title}</h3><p>{item.text}</p>
+          </article>)}
         </div>
       </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="py-24 px-[18px] max-w-[1040px] mx-auto w-full">
-        <div className="text-center mb-16">
-          <p className="section-label mb-3">The Process</p>
-          <h2 className="text-3xl md:text-4xl font-bold">How AdaptiveIQ works</h2>
-        </div>
-
-        <div className="grid md:grid-cols-4 gap-4">
-          {[
-            {
-              step: "01",
-              icon: <FileTextIcon className="w-8 h-8" />,
-              title: "Upload Documents",
-              desc: "Use PDF, DOCX, PPTX, TXT, JPG, or PNG study material.",
-            },
-            {
-              step: "02",
-              icon: <ZapIcon className="w-8 h-8" />,
-              title: "AI Ingestion",
-              desc: "LangGraph agents extract topics and build a knowledge graph.",
-            },
-            {
-              step: "03",
-              icon: <HelpCircleIcon className="w-8 h-8" />,
-              title: "Adaptive Questions",
-              desc: "Qwen2.5-7B generates Bloom's-level MCQs grounded in your docs.",
-            },
-            {
-              step: "04",
-              icon: <BarChartIcon className="w-8 h-8" />,
-              title: "Instant Feedback",
-              desc: "See your performance, weak topics, and difficulty progression.",
-            },
-          ].map((item) => (
-            <div
-              key={item.step}
-              className="glass-card p-[22px] relative overflow-hidden"
-            >
-              <div className="text-xs font-bold text-stone-400 mb-4 tracking-widest">STEP {item.step}</div>
-              <div className="mb-4 text-orange-700 w-12 h-12 rounded-xl bg-orange-50 border border-orange-900/10 flex items-center justify-center">{item.icon}</div>
-              <h3 className="font-bold text-stone-900 mb-2">{item.title}</h3>
-              <p className="text-sm text-stone-500 leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
+      <section id="features" className="editorial-section">
+        <div className="editorial-section-heading"><h2>Practice, at your pace.</h2><p className="section-label">Designed for understanding</p></div>
+        <div className="grid md:grid-cols-2 gap-5">
+          <article className="feature-panel"><span className="section-label">Adaptive questions</span><h3>A challenge that responds to you.</h3><p>Choose Easy, Medium, or Hard. Adaptive mode adjusts the next question as you work through your answers.</p></article>
+          <article className="feature-panel feature-panel-clay"><span className="section-label">Thoughtful guidance</span><h3>Keep the thinking yours.</h3><p>Move from a demanding reasoning prompt to a gentler scaffold, then a reminder to revisit your own notes.</p></article>
         </div>
       </section>
-
-      {/* Features */}
-      <section id="features" className="py-24 px-[18px] max-w-[1040px] mx-auto w-full">
-        <div className="text-center mb-16">
-          <p className="section-label mb-3">Features</p>
-          <h2 className="text-3xl md:text-4xl font-bold">
-            Research-grade <span className="text-gradient">adaptive learning</span>
-          </h2>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {[
-            {
-              icon: <TargetIcon className="w-7 h-7" />,
-              title: "RAG-Grounded Questions",
-              desc: "Every question is verified against your uploaded material using cosine similarity. Hallucinations are detected and rejected.",
-              badge: "Research Metric",
-              badgeType: "badge-violet",
-            },
-            {
-              icon: <TrendingUpIcon className="w-7 h-7" />,
-              title: "Real-time Difficulty Adaptation",
-              desc: "Strong performance keeps questions challenging. More attempts gradually reduce the next question's difficulty.",
-              badge: "IRT Model",
-              badgeType: "badge-cyan",
-            },
-            {
-              icon: <LayersIcon className="w-7 h-7" />,
-              title: "Bloom's Taxonomy Mapping",
-              desc: "Questions span recall, application, and analysis. The system tracks coverage across cognitive levels.",
-              badge: "6 Levels",
-              badgeType: "badge-green",
-            },
-            {
-              icon: <CpuIcon className="w-7 h-7" />,
-              title: "Multi-Agent LangGraph",
-              desc: "7 specialized agents: Ingestion, Knowledge, Quiz, Evaluation, Adaptive, Recommendation, Analytics.",
-              badge: "7 Agents",
-              badgeType: "badge-violet",
-            },
-            {
-              icon: <ZapIcon className="w-7 h-7" />,
-              title: "Qwen2.5-7B on Modal.com",
-              desc: "The open-source LLM runs serverlessly on GPU with a reproducible research setup.",
-              badge: "Open Source",
-              badgeType: "badge-cyan",
-            },
-            {
-              icon: <ListIcon className="w-7 h-7" />,
-              title: "MCQ + Structured + Essay",
-              desc: "Choose your exam format. All types support adaptive difficulty and grounding verification.",
-              badge: "3 Types",
-              badgeType: "badge-green",
-            },
-          ].map((f) => (
-            <div key={f.title} className="glass-card-hover p-[22px]">
-              <div className="mb-4 text-orange-700">{f.icon}</div>
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <h3 className="font-bold text-stone-900 text-lg leading-tight">{f.title}</h3>
-                <span className={`${f.badgeType} shrink-0 mt-0.5`}>{f.badge}</span>
-              </div>
-              <p className="text-sm text-stone-500 leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA Banner */}
-      <section className="py-20 px-6 max-w-4xl mx-auto w-full text-center">
-        <div className="glass-card p-[22px] md:p-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to test your knowledge?
-          </h2>
-          <p className="text-stone-900/60 mb-8 text-lg">Upload your study material and start your first adaptive quiz in minutes.</p>
-          <Link href="/upload" id="cta-banner-start" className="btn-primary inline-flex items-center gap-2 text-base px-10 py-4">
-            Get Started Free <ArrowRightIcon />
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-8 px-6 text-center text-stone-400 text-sm border-t border-orange-900/10">
-        AdaptiveIQ | MSc Research Project | Adaptive AI Assessment Platform | Built with LangGraph + Qwen2.5 + Next.js
-      </footer>
+      <section className="home-closing"><h2>What will you understand next?</h2><Link href="/upload" id="cta-banner-start" className="btn-primary">Begin a quiz <ArrowRightIcon /></Link></section>
+      <footer className="app-footer"><span className="app-wordmark">AdaptiveIQ</span><span>Nishy ? Adaptive learning</span><Link href="/upload" className="nav-link">Start learning</Link></footer>
     </main>
   );
 }

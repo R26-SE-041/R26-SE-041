@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import AppHeader from "@/components/ui/AppHeader";
 import { getAnalyticsReport, submitFeedback } from "@/lib/api";
 import type {
   AnalyticsReport,
@@ -125,26 +126,43 @@ function MarksBadge({ marks }: { marks: number }) {
 }
 
 // ── Resource Link Card ────────────────────────────────────────────
+function isYouTubeVideoUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
+    let id: string | null = null;
+    if (url.hostname === "youtu.be") id = url.pathname.slice(1);
+    if (["youtube.com", "www.youtube.com", "m.youtube.com"].includes(url.hostname)) {
+      if (url.pathname === "/watch") id = url.searchParams.get("v");
+      else if (/^\/(shorts|embed)\//.test(url.pathname)) id = url.pathname.split("/").pop() ?? null;
+    }
+    return !!id && /^[A-Za-z0-9_-]{11}$/.test(id);
+  } catch {
+    return false;
+  }
+}
+
 function ResourceCard({ resource }: { resource: ResourceLink }) {
   const style = getLangStyle(resource.label);
+  if (!isYouTubeVideoUrl(resource.url)) return null;
   return (
     <a
       href={resource.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 hover:scale-[1.02] hover:brightness-110 group"
+      className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 hover:bg-stone-900/5 group"
       style={{ background: style.bg, borderColor: style.border }}
     >
       <span className="shrink-0" style={{ color: style.text }}>
-        <SourceIcon source={resource.source} />
+        <SourceIcon source="YouTube" />
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-bold truncate" style={{ color: style.text }}>{resource.title}</p>
-        <p className="text-xs text-stone-400 mt-0.5">{resource.source}</p>
+        <p className="text-xs text-stone-400 mt-0.5">YouTube</p>
       </div>
       <span
         className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-        style={{ background: `${style.dot}20`, color: style.text }}
+        style={{ background: `color-mix(in srgb, ${style.dot} 12%, transparent)`, color: style.text }}
       >
         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: style.dot }} />
         {resource.label}
@@ -164,6 +182,7 @@ function WeakTopicCard({
   onToggle: () => void;
 }) {
   const isEnrichment = rec.recommendation_type === "enrichment";
+  const videos = (rec.resources ?? []).filter((r) => isYouTubeVideoUrl(r.url));
   return (
     <div
       className="rounded-2xl border overflow-hidden"
@@ -172,7 +191,7 @@ function WeakTopicCard({
       {/* Header */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-4 text-left transition-colors duration-150 hover:bg-orange-900/5"
+        className="w-full flex items-center justify-between px-6 py-4 text-left transition-colors duration-150 hover:bg-[var(--surface)]"
       >
         <div className="flex items-center gap-3">
           <span className="text-red-600/70">
@@ -205,7 +224,7 @@ function WeakTopicCard({
               <div className="flex items-center gap-2 mb-3">
                 <div
                   className="w-5 h-5 rounded flex items-center justify-center"
-                  style={{ background: "rgba(224,108,79,0.2)", color: "#f4a28c" }}
+                  style={{ background: "var(--canvas)", color: "var(--accent)" }}
                 >
                   <NoteIcon className="w-3 h-3" />
                 </div>
@@ -230,27 +249,27 @@ function WeakTopicCard({
           )}
 
           {/* Resource Links */}
-          {rec.resources && rec.resources.length > 0 && (
+          {videos.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div
                   className="w-5 h-5 rounded flex items-center justify-center"
-                  style={{ background: "rgba(6,182,212,0.15)", color: "#67e8f9" }}
+                  style={{ background: "rgba(6,182,212,0.15)", color: "var(--accent)" }}
                 >
                   <LinkIcon className="w-3 h-3" />
                 </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-stone-500">Learning Resources</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-stone-500">YouTube Videos</p>
               </div>
               <div className="space-y-2">
-                {rec.resources.map((r, i) => (
+                {videos.map((r, i) => (
                   <ResourceCard key={i} resource={r} />
                 ))}
               </div>
             </div>
           )}
-          {(!rec.resources || rec.resources.length === 0) && (
-            <p className="rounded-xl border border-orange-900/10 bg-orange-900/[0.03] p-4 text-sm text-stone-500">
-              No exact verified external link was found. The source-grounded notes above remain available for revision.
+          {videos.length === 0 && (
+            <p className="rounded-xl border border-[var(--border)] bg-orange-900/[0.03] p-4 text-sm text-stone-500">
+              No matching verified YouTube video was found. The source-grounded notes above remain available for revision.
             </p>
           )}
         </div>
@@ -261,18 +280,18 @@ function WeakTopicCard({
 
 // ── Question Breakdown Row ─────────────────────────────────────────
 function QMarkRow({ qm }: { qm: QuestionMarkDetail }) {
-  const diffColor = qm.difficulty < 0.33 ? "#34d399" : qm.difficulty < 0.66 ? "#fbbf24" : "#f87171";
+  const diffColor = qm.difficulty < 0.33 ? "var(--success)" : qm.difficulty < 0.66 ? "var(--warning)" : "var(--danger)";
   const diffLabel = qm.difficulty < 0.33 ? "Easy" : qm.difficulty < 0.66 ? "Medium" : "Hard";
   const hasPartialCredit = !qm.is_correct && qm.marks > 0 && (qm.q_type === "structured" || qm.q_type === "essay");
-  const resultColor = qm.is_correct ? "#34d399" : hasPartialCredit ? "#f59e0b" : "#f87171";
+  const resultColor = qm.is_correct ? "var(--success)" : hasPartialCredit ? "var(--warning)" : "var(--danger)";
   return (
-    <tr className="border-t border-orange-900/10 hover:bg-orange-900/[0.03] transition-colors">
+    <tr className="border-t border-[var(--border)] hover:bg-orange-900/[0.03] transition-colors">
       <td className="py-3 px-4 text-stone-500 text-sm font-mono">Q{qm.q_num}</td>
       <td className="py-3 px-4 text-stone-900/70 text-sm max-w-[180px] truncate">{qm.topic}</td>
       <td className="py-3 px-4">
         <span
           className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
-          style={{ color: diffColor, background: `${diffColor}15`, border: `1px solid ${diffColor}30` }}
+          style={{ color: diffColor, background: `color-mix(in srgb, ${diffColor} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${diffColor} 24%, transparent)` }}
         >
           {diffLabel}
         </span>
@@ -301,7 +320,7 @@ function QMarkRow({ qm }: { qm: QuestionMarkDetail }) {
 // ── Topic Performance Bar ─────────────────────────────────────────
 function TopicBar({ topic, correct, total }: { topic: string; correct: number; total: number }) {
   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-  const color = pct >= 70 ? "#34d399" : pct >= 50 ? "#fbbf24" : "#f87171";
+  const color = pct >= 70 ? "var(--success)" : pct >= 50 ? "var(--warning)" : "var(--danger)";
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
@@ -311,7 +330,7 @@ function TopicBar({ topic, correct, total }: { topic: string; correct: number; t
       <div className="h-2 rounded-full bg-orange-900/10 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-1000"
-          style={{ width: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}50` }}
+          style={{ width: `${pct}%`, background: color, boxShadow: "none" }}
         />
       </div>
     </div>
@@ -399,16 +418,16 @@ function RatingModal({
     /* Backdrop */
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center px-4 pb-6 sm:pb-0"
-      style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(6px)" }}
+      style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "none" }}
       onClick={(e) => { if (e.target === e.currentTarget) onDismiss(); }}
     >
       {/* Modal card — slides up from bottom */}
       <div
         className="w-full max-w-sm rounded-3xl border p-7 animate-[slideUp_0.35s_cubic-bezier(0.34,1.56,0.64,1)]"
         style={{
-          background: "linear-gradient(145deg, rgba(255,255,255,0.97), rgba(250,248,245,0.99))",
-          borderColor: "rgba(224,108,79,0.25)",
-          boxShadow: "0 -4px 60px rgba(224,108,79,0.2), 0 0 0 1px rgba(0,0,0,0.04) inset",
+          background: "var(--background)",
+          borderColor: "var(--canvas)",
+          boxShadow: "none",
         }}
       >
         {submitted ? (
@@ -416,7 +435,7 @@ function RatingModal({
           <div className="text-center py-4 animate-[fadeIn_0.4s_ease-out]">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.25), rgba(16,185,129,0.15))", border: "1px solid rgba(52,211,153,0.3)" }}
+              style={{ background: "var(--surface)", border: "1px solid rgba(52,211,153,0.3)" }}
             >
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
@@ -434,7 +453,7 @@ function RatingModal({
               <button
                 id="btn-rating-skip"
                 onClick={onDismiss}
-                className="text-stone-400 hover:text-stone-900/60 transition-colors p-1 rounded-lg hover:bg-orange-900/5"
+                className="text-stone-400 hover:text-stone-900/60 transition-colors p-1 rounded-lg hover:bg-[var(--surface)]"
                 aria-label="Skip rating"
               >
                 <XIcon className="w-4 h-4" />
@@ -455,11 +474,11 @@ function RatingModal({
                     className="transition-all duration-150"
                     style={{
                       transform: filled ? "scale(1.25)" : "scale(1)",
-                      filter: filled ? `drop-shadow(0 0 8px ${n <= selected ? "#fbbf24" : "#f4a28c"})` : "none",
+                      filter: filled ? `drop-shadow(0 0 8px ${n <= selected ? "var(--warning)" : "var(--accent)"})` : "none",
                       color: filled
                         ? n <= selected
-                          ? "#fbbf24"
-                          : "#f4a28c"
+                          ? "var(--warning)"
+                          : "var(--accent)"
                         : "rgba(0,0,0,0.15)",
                     }}
                     aria-label={`Rate ${n} star${n !== 1 ? "s" : ""}`}
@@ -475,7 +494,7 @@ function RatingModal({
             {/* ── Rating label ─── */}
             <p
               className="text-center text-sm font-semibold mb-5 h-5 transition-all duration-200"
-              style={{ color: displayRating >= 4 ? "#34d399" : displayRating >= 3 ? "#fbbf24" : displayRating >= 1 ? "#f87171" : "transparent" }}
+              style={{ color: displayRating >= 4 ? "var(--success)" : displayRating >= 3 ? "var(--warning)" : displayRating >= 1 ? "var(--danger)" : "transparent" }}
             >
               {displayRating ? RATING_LABELS[displayRating] : ""}
             </p>
@@ -501,12 +520,12 @@ function RatingModal({
                 id="btn-rating-submit"
                 disabled={!selected || submitting}
                 onClick={handleSubmit}
-                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-200 ${selected && !submitting ? "text-white" : "text-stone-400"}`}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-200 ${selected && !submitting ? "text-[var(--background)]" : "text-stone-400"}`}
                 style={{
                   background: selected && !submitting
-                    ? "linear-gradient(135deg, #e06c4f, #cc5234)"
+                    ? "var(--primary)"
                     : "rgba(0,0,0,0.05)",
-                  boxShadow: selected && !submitting ? "0 4px 16px rgba(224,108,79,0.35)" : "none",
+                  boxShadow: "none",
                   cursor: !selected || submitting ? "not-allowed" : "pointer",
                   opacity: !selected ? 0.5 : 1,
                 }}
@@ -516,7 +535,7 @@ function RatingModal({
               <button
                 id="btn-rating-skip-text"
                 onClick={onDismiss}
-                className="px-4 py-3 rounded-xl text-sm text-stone-400 hover:text-stone-900/60 transition-colors border border-orange-900/10 hover:border-orange-900/15 hover:bg-orange-900/5"
+                className="px-4 py-3 rounded-xl text-sm text-stone-400 hover:text-stone-900/60 transition-colors border border-[var(--border)] hover:border-[var(--border)] hover:bg-[var(--surface)]"
               >
                 Skip
               </button>
@@ -589,8 +608,8 @@ export default function ResultsPage() {
           </div>
           <h1 className="text-2xl font-bold text-stone-900 mb-2">Could not load results</h1>
           <p className="text-stone-500 mb-6">{error}</p>
-          <Link href="/" className="inline-block px-6 py-3 rounded-xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #e06c4f, #cc5234)" }}>
+          <Link href="/" className="inline-block px-6 py-3 rounded-xl font-bold text-[var(--background)]"
+            style={{ background: "var(--primary)" }}>
             Back to Home
           </Link>
         </div>
@@ -609,11 +628,11 @@ export default function ResultsPage() {
   const studyRecs = report.recommendations ?? [];
 
   const stats = [
-    { icon: <CheckIcon className="w-5 h-5" />,      label: "Correct",      val: `${correctCount} / ${report.total_questions}`, color: "#34d399" },
+    { icon: <CheckIcon className="w-5 h-5" />,      label: "Correct",      val: `${correctCount} / ${report.total_questions}`, color: "var(--success)" },
     { icon: <TargetIcon className="w-5 h-5" />,     label: "Grade",        val: grade,                                          color: gradeColor },
     { icon: <LightbulbIcon className="w-5 h-5" />,  label: "Hints Used",   val: String(
         (report.question_marks_detail ?? []).reduce((s, q) => s + q.hints_used, 0)
-      ),                                                                                          color: "#f4a28c" },
+      ),                                                                                          color: "var(--accent)" },
   ];
 
   return (
@@ -623,25 +642,13 @@ export default function ResultsPage() {
         <RatingModal sessionId={sessionId} onDismiss={() => setShowRating(false)} />
       )}
 
-      <main className="min-h-screen py-10 px-4">
-        {/* Nav */}
-        <nav className="flex items-center justify-between max-w-5xl mx-auto mb-10">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="brand-mark w-7 h-7 rounded-lg">
-              <span className="font-bold text-xs">AQ</span>
-            </div>
-            <span className="font-bold text-base text-stone-900">AdaptiveIQ</span>
-          </Link>
-          <Link href="/upload" id="btn-new-quiz"
-            className="flex items-center gap-2 text-sm text-orange-600 hover:text-orange-700 transition-colors font-semibold">
-            New Quiz <ArrowRightIcon />
-          </Link>
-        </nav>
+      <main className="results-page min-h-screen">
+        <AppHeader><Link href="/upload" id="btn-new-quiz" className="editorial-link text-sm">New quiz <ArrowRightIcon /></Link></AppHeader>
 
-        <div className="max-w-5xl mx-auto animate-[fadeIn_0.5s_ease-out]">
+        <div className="workspace-content max-w-5xl mx-auto animate-[fadeIn_0.5s_ease-out]">
 
           {/* ── Page Title ── */}
-          <h1 className="text-4xl font-semibold text-stone-900 mb-1 tracking-tight">Quiz Complete</h1>
+          <h1 className="page-heading mb-4">Quiz Complete</h1>
           <p className="text-stone-500 text-base mb-8">
             Here&apos;s your full performance breakdown, including marks, weak concepts, and study resources.
           </p>
@@ -650,7 +657,7 @@ export default function ResultsPage() {
             <div className="glass-card p-4 mb-6 text-sm text-stone-500 flex items-center gap-3" role="status">
               <span className="h-4 w-4 rounded-full border-2 border-orange-600/25 border-t-orange-600 animate-spin" />
               {studyRecs.length > 0
-                ? "Your results and initial study notes are ready. Exact resource links are being verified in the background."
+                ? "Your results and initial study notes are ready. YouTube videos are being verified in the background."
                 : "Your results are ready. Initial study notes are being prepared."}
             </div>
           )}
@@ -659,7 +666,7 @@ export default function ResultsPage() {
             {/* Score ring */}
             <div
               className="rounded-2xl p-6 border flex flex-col items-center justify-center gap-3"
-              style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.1)", backdropFilter: "blur(12px)" }}
+              style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.1)", backdropFilter: "none" }}
             >
               <ScoreRing score={finalPct} />
               <div className="text-center">
@@ -676,7 +683,7 @@ export default function ResultsPage() {
                 <div
                   key={s.label}
                   className="rounded-xl p-5 border"
-                  style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.1)", backdropFilter: "blur(12px)" }}
+                  style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.1)", backdropFilter: "none" }}
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span style={{ color: s.color }}>{s.icon}</span>
@@ -692,7 +699,7 @@ export default function ResultsPage() {
           {report.question_marks_detail && report.question_marks_detail.length > 0 && (
             <div
               className="rounded-2xl border mb-6 overflow-hidden"
-              style={{ background: "rgba(0,0,0,0.03)", borderColor: "rgba(0,0,0,0.09)", backdropFilter: "blur(12px)" }}
+              style={{ background: "rgba(0,0,0,0.03)", borderColor: "rgba(0,0,0,0.09)", backdropFilter: "none" }}
             >
               <div className="px-6 pt-5 pb-3 flex items-center gap-2">
                 <span className="text-stone-900/60">
@@ -705,7 +712,7 @@ export default function ResultsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-t border-orange-900/15">
+                    <tr className="border-t border-[var(--border)]">
                       {["Q", "Topic", "Difficulty", "Result", "Hints", "Marks"].map((h) => (
                         <th key={h} className="py-2.5 px-4 text-xs font-bold uppercase tracking-widest text-stone-400">{h}</th>
                       ))}
@@ -717,7 +724,7 @@ export default function ResultsPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t border-orange-900/15 bg-orange-900/[0.03]">
+                    <tr className="border-t border-[var(--border)] bg-orange-900/[0.03]">
                       <td colSpan={5} className="py-3 px-4 text-sm font-bold text-stone-900/60 text-right">Total Marks</td>
                       <td className="py-3 px-4 text-center">
                         <span className="text-lg font-extrabold" style={{ color: gradeColor }}>
@@ -741,7 +748,7 @@ export default function ResultsPage() {
                 <h2 className="font-bold text-stone-900 text-xl">Weak Areas and Study Notes</h2>
               </div>
               <p className="text-stone-500 text-sm mb-5">
-                Each weak area has its own card. Click a topic for deep notes, explanations, and exact learning resources. High scorers receive an extra-knowledge card instead.
+                Each weak area has its own card. Click a topic for deep notes, explanations, and relevant YouTube videos. High scorers receive an extra-knowledge card instead.
               </p>
               <div className="space-y-3">
                 {studyRecs.map((rec, i) => (
@@ -761,7 +768,7 @@ export default function ResultsPage() {
           {topicEntries.length > 0 && (
             <div
               className="rounded-2xl p-6 border mb-5"
-              style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.09)", backdropFilter: "blur(12px)" }}
+              style={{ background: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.09)", backdropFilter: "none" }}
             >
               <h2 className="font-bold text-stone-900 text-lg mb-5 flex items-center gap-2">
                 <span className="text-stone-900/60"><BarChartIcon className="w-5 h-5" /></span>
@@ -778,8 +785,8 @@ export default function ResultsPage() {
           {/* ── Actions ── */}
           <div className="flex flex-col sm:flex-row gap-4">
             <Link href="/upload" id="btn-retake-quiz"
-              className="flex flex-1 items-center justify-center gap-2 py-4 rounded-xl font-bold text-white text-center transition-all duration-200"
-              style={{ background: "linear-gradient(135deg, #e06c4f, #cc5234)", boxShadow: "0 4px 20px rgba(224,108,79,0.35)" }}>
+              className="flex flex-1 items-center justify-center gap-2 py-4 rounded-xl font-bold text-[var(--background)] text-center transition-all duration-200"
+              style={{ background: "var(--primary)", boxShadow: "none" }}>
               Take Another Quiz <ArrowRightIcon />
             </Link>
             <button
@@ -791,18 +798,20 @@ export default function ResultsPage() {
 <head>
 <title>AdaptiveIQ Quiz Results</title>
 <style>
-  body { font-family: 'Inter', system-ui, sans-serif; background: #fcfaf6; color: #2d2926; padding: 40px; margin: 0; }
-  .card { background: white; padding: 40px; border-radius: 16px; border: 1px solid #f1ebe0; max-width: 800px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.02); }
-  h1 { color: #e06c4f; margin-top: 0; margin-bottom: 5px; font-size: 2rem; }
-  .subtitle { color: #867253; font-size: 0.9rem; margin-bottom: 30px; }
+  @font-face { font-family: 'Anthropic Sans'; src: url('${window.location.origin}/fonts/anthropic-sans-roman.woff2'); font-weight: 300 800; }
+  :root { --success: #52654b; --warning: #906e30; --danger: #a04436; }
+  body { font-family: 'Anthropic Sans', Arial, sans-serif; background: #faf9f5; color: #141413; padding: 40px; margin: 0; }
+  .card { background: white; padding: 40px; border-radius: 16px; border: 1px solid #d8d6cc; max-width: 800px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.02); }
+  h1 { color: #141413; margin-top: 0; margin-bottom: 5px; font-size: 2rem; }
+  .subtitle { color: #5e5d59; font-size: 0.9rem; margin-bottom: 30px; }
   .stats { display: flex; gap: 15px; margin-bottom: 30px; }
-  .stat { background: #f8f6f0; padding: 15px 20px; border-radius: 12px; flex: 1; text-align: center; border: 1px solid #f1ebe0; }
-  .stat-val { font-size: 28px; font-weight: 800; color: #e06c4f; }
-  .stat-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #867253; font-weight: 700; margin-top: 5px; }
+  .stat { background: #f8f6f0; padding: 15px 20px; border-radius: 12px; flex: 1; text-align: center; border: 1px solid #d8d6cc; }
+  .stat-val { font-size: 28px; font-weight: 800; color: #141413; }
+  .stat-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #5e5d59; font-weight: 700; margin-top: 5px; }
   table { width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 30px; }
   th, td { padding: 14px 15px; border-bottom: 1px solid #f1ebe0; font-size: 14px; }
-  th { font-size: 12px; text-transform: uppercase; color: #867253; background: #f8f6f0; font-weight: 700; }
-  .correct { color: #059669; font-weight: 700; }
+  th { font-size: 12px; text-transform: uppercase; color: #5e5d59; background: #f8f6f0; font-weight: 700; }
+  .correct { color: var(--success); font-weight: 700; }
   .incorrect { color: #dc2626; font-weight: 700; }
   h3 { color: #3d3222; border-bottom: 2px solid #f1ebe0; padding-bottom: 10px; margin-top: 40px; }
   .notes { font-size: 14px; color: #3d3222; line-height: 1.6; }
@@ -853,7 +862,7 @@ export default function ResultsPage() {
             <div style="font-weight: 600; margin-bottom: 8px; color: #3d3222;">Q: ${q.question}</div>
             <div style="margin-bottom: 12px; padding-left: 15px; font-size: 13px;">
               ${Object.entries(q.options || {}).map(([k, v]) => `
-                <div style="margin-bottom: 4px; ${k === q.correct_answer ? 'color: #059669; font-weight: 700;' : ''} ${k === q.student_answer && k !== q.correct_answer ? 'color: #dc2626; text-decoration: line-through;' : ''}">
+                <div style="margin-bottom: 4px; ${k === q.correct_answer ? 'color: var(--success); font-weight: 700;' : ''} ${k === q.student_answer && k !== q.correct_answer ? 'color: #dc2626; text-decoration: line-through;' : ''}">
                   ${k}. ${v} ${k === q.student_answer ? '(Your Answer)' : ''} ${k === q.correct_answer ? '✓' : ''}
                 </div>
               `).join('')}
@@ -903,7 +912,7 @@ export default function ResultsPage() {
                 a.click();
                 URL.revokeObjectURL(url);
               }}
-              className="flex-1 py-4 rounded-xl font-bold border border-orange-900/15 bg-orange-900/5 text-stone-900/70 hover:text-stone-900 hover:bg-orange-900/10 transition-all duration-200 text-center"
+              className="flex-1 py-4 rounded-xl font-bold border border-[var(--border)] bg-[var(--surface)] text-stone-900/70 hover:text-stone-900 hover:bg-orange-900/10 transition-all duration-200 text-center"
             >
               Save Recall Sheet as PDF
             </button>

@@ -132,6 +132,28 @@ class AdaptiveHintGenerationTests(unittest.TestCase):
         self.assertEqual(hint, medium)
         self.assertIn(hard, llm.call.call_args.args[0])
 
+    def test_easy_is_note_review_without_model_or_retrieved_answer_facts(self):
+        llm, rag = Mock(), Mock()
+        llm.call.return_value = "Cellulose is the answer."
+        rag.retrieve.return_value = [{"text": "Cellulose microfibrils form the cell wall."}]
+        for question in (BIOLOGY_QUESTION, {**BIOLOGY_QUESTION, "model_answer": "secret decisive fact"}):
+            hint = generate_adaptive_hint(llm, rag, question, 2, "collection")
+            self.assertEqual(hint, SAFE_FALLBACKS[2])
+            self.assertIn("notes", hint)
+            self.assertNotIn("cellulose", hint.casefold())
+            self.assertNotIn("secret", hint.casefold())
+        llm.check_health.assert_not_called()
+        llm.call.assert_not_called()
+        rag.retrieve.assert_not_called()
+
+    def test_unavailable_model_uses_distinct_reasoning_and_note_fallbacks(self):
+        llm, rag = Mock(), Mock()
+        llm.check_health.return_value = False
+        for level in range(3):
+            self.assertEqual(generate_adaptive_hint(llm, rag, BIOLOGY_QUESTION, level, "collection"), SAFE_FALLBACKS[level])
+        self.assertEqual(len(set(SAFE_FALLBACKS)), 3)
+        llm.call.assert_not_called()
+
     def test_weak_rag_context_is_not_injected(self):
         llm = Mock()
         llm.call.return_value = (

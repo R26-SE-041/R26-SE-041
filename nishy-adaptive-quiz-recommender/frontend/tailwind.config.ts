@@ -8,11 +8,22 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      borderRadius: { lg: "8px", xl: "12px", "2xl": "18px", "3xl": "24px" },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        serif: ["var(--font-display)", "Georgia", "serif"],
         mono: ["var(--font-mono)", "monospace"],
       },
       colors: {
+        emerald: { 400: "#91a184", 500: "#6e8362", 600: "#52654b", 700: "#42543a" },
+        green: { 400: "#91a184", 500: "#6e8362", 600: "#52654b", 700: "#42543a" },
+        red: { 400: "#c77f6d", 500: "#b66350", 600: "#a04436", 700: "#85382d" },
+        amber: { 400: "#b49a65", 500: "#a18850", 600: "#906e30", 700: "#725720" },
+        orange: {
+          50: "#faf4ef", 100: "#f2e5dc", 200: "#e8cbbc",
+          300: "#dfb39d", 400: "#dc9678", 500: "#d97757",
+          600: "#c56648", 700: "#a95037", 800: "#82442f", 900: "#674432",
+        },
         // Deep navy base
         navy: {
           950: "#03050f",
@@ -43,8 +54,8 @@ const config: Config = {
           "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.35) 0%, rgba(6,11,26,0) 70%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(34,211,238,0.15) 0%, transparent 70%)",
         "card-gradient":
           "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)",
-        "progress-gradient": "linear-gradient(90deg, #d8653b 0%, #ad7b54 100%)",
-        "button-gradient": "linear-gradient(135deg, #d8653b 0%, #b94e2d 100%)",
+        "progress-gradient": "linear-gradient(var(--accent), var(--accent))",
+        "button-gradient": "linear-gradient(var(--primary), var(--primary))",
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",

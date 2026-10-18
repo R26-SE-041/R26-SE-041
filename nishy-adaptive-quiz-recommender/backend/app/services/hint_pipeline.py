@@ -49,18 +49,15 @@ BIOLOGY_TERMS = {
 }
 
 SAFE_FALLBACKS = (
-    (
-        "Identify the main biological process tested in the stem, then connect its "
-        "function to the relevant structure or mechanism before comparing the choices."
-    ),
-    (
-        "Trace the biological process one step at a time: determine what changes, "
-        "where that change occurs, and which mechanism could produce that outcome."
-    ),
-    (
-        "Focus on the immediate structure-to-function relationship described in the "
-        "stem, and use that single relationship to make your final comparison."
-    ),
+    "Build a biological explanation from first principles without consulting the choices. "
+    "Test your own assumptions against a contrasting case, and identify the missing "
+    "logical link before returning to the question.",
+    "Separate the biological observations in the stem from your assumptions. Sketch "
+    "a chain of causes and consequences, then justify each connection using your "
+    "existing understanding before comparing the choices independently.",
+    "Revisit the relevant chapter in your uploaded study notes. Review its headings, "
+    "definitions, diagrams, and worked examples, then close the notes and write a "
+    "brief summary in your own words before trying again.",
 )
 
 
@@ -279,9 +276,9 @@ def _build_hint_prompt(
 ) -> str:
     level = HINT_LEVELS[min(max(hint_level, 0), 2)]
     level_instruction = (
-        "Give a subtle Socratic conceptual direction that forces reasoning. Do not apply the decisive fact to this exact case.",
-        "Narrow the reasoning by exactly one meaningful biological mechanism or relationship beyond HARD, without deciding the answer.",
-        "Focus one biological step more than MEDIUM and state how to reason through that step, while leaving the final decision to the learner.",
+        "Give an indirect, demanding first-principles reasoning challenge. Require the learner to connect ideas and test assumptions independently. Do not name the deciding mechanism, supply a factual clue, or simplify the answer. Be challenging but scientifically coherent, never misleading.",
+        "Give a moderately demanding reasoning scaffold: ask the learner to separate observations from assumptions and construct a causal argument independently. Offer slightly more structure than HARD but still require deep thinking. Do not identify the deciding mechanism or supply its outcome.",
+        "Suggest revisiting uploaded chapter notes, headings, diagrams, and definitions only. Supply no answer facts, option clues, decisive terminology, or solved steps.",
     )[hint_level]
     context_block = (
         f"Relevant Biology resource context (use only if helpful):\n{context}"
@@ -324,6 +321,11 @@ def generate_adaptive_hint(
     """Generate and validate HARD/MEDIUM/EASY hints with safe fallback."""
     level = min(max(hint_level, 0), 2)
     history = list(previous_hints or [])[:level]
+
+    # EASY is a fixed note-review instruction, isolated from model output and
+    # retrieved passages so paraphrased answer facts cannot leak through it.
+    if level == 2:
+        return SAFE_FALLBACKS[2]
 
     # A cold/unavailable Modal worker used to make the learner wait for three
     # full inference timeouts before receiving this same validated fallback.

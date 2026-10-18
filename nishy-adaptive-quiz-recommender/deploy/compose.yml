@@ -1,0 +1,58 @@
+name: nishy-quiz
+
+services:
+  api:
+    image: nishy-quiz-api:local
+    build:
+      context: ../backend
+    env_file:
+      - ./backend.env
+    environment:
+      FORWARDED_ALLOW_IPS: "*"
+    expose:
+      - "8000"
+    volumes:
+      - quiz_db:/app/db
+      - quiz_data:/app/data
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in deploy/.env}
+      TLS_EMAIL: ${TLS_EMAIL:?Set TLS_EMAIL in deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  quiz_db:
+  quiz_data:
+  caddy_data:
+  caddy_config:

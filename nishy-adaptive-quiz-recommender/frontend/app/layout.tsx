@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AuthProvider from "@/components/auth/AuthProvider";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 
 export const metadata: Metadata = {
@@ -23,10 +24,8 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased min-h-screen">
         <div className="paper-background fixed inset-0 pointer-events-none z-0" aria-hidden="true" />
-        <div className="ambient-blob ambient-top-right" aria-hidden="true" />
-        <div className="ambient-blob ambient-bottom-left" aria-hidden="true" />
         <ThemeToggle />
-        <div className="relative z-10">{children}</div>
+        <div className="relative z-10"><AuthProvider>{children}</AuthProvider></div>
       </body>
     </html>
   );

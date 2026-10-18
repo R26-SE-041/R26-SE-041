@@ -438,74 +438,39 @@ def wikipedia_resource(topic: str) -> Dict:
 
 
 # ── Main entry point ───────────────────────────────────────────────────────
+def is_youtube_video_url(url: str) -> bool:
+    """Accept only HTTPS YouTube video links, never search pages or lookalike hosts."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or parsed.username or parsed.password or parsed.port:
+            return False
+        host = (parsed.hostname or "").lower()
+        if host == "youtu.be":
+            video_id = parsed.path.removeprefix("/")
+        elif host in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+            if parsed.path == "/watch":
+                video_id = urllib.parse.parse_qs(parsed.query).get("v", [""])[0]
+            elif parsed.path.startswith(("/shorts/", "/embed/")):
+                video_id = parsed.path.split("/")[-1]
+            else:
+                return False
+        else:
+            return False
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id))
+    except (ValueError, TypeError):
+        return False
+
+
 def build_resources(topic: str) -> List[Dict]:
-    """
-    Build a list of 3 validated, specific resource links for a weak topic.
-
-    Strategy (in order): official Sri Lankan NIE Biology material, then
-    topic-specific Khan Academy and OpenStax Biology pages, followed by a
-    specific YouTube video when one can be extracted and validated.
-
-    Search-result pages and unrelated generic tutorials are never returned.
-
-    Args:
-        topic: The weak Biology concept inferred from the quiz.
-
-    Returns:
-        List of 3 resource dicts, each with: label, title, url, source
-    """
+    """Find a topic-matched YouTube video; never fall back to another website."""
     clean_topic = re.sub(r"\s+", " ", str(topic)).strip(" .:;-/")
     if (
         not clean_topic
         or re.search(r"(?:^|\b)(?:AL|GCE)[/\s-]*\d", clean_topic, re.IGNORECASE)
-        or len(re.findall(r"[A-Za-z]{3,}", clean_topic)) == 0
+        or not re.search(r"[A-Za-z]{3,}", clean_topic)
     ):
-        logger.warning("[WebScraper] Refusing resources for non-concept topic '%s'", topic)
         return []
-
-    logger.info(f"[WebScraper] Building A/L Biology resources for '{clean_topic}'")
-
-    def _khan_academy(topic: str) -> Optional[Dict]:
-        query = f'site:khanacademy.org/science/biology "{topic}" biology'
-        url = _ddg_first_url(query=query, must_contain="khanacademy.org")
-        # The search resolver already restricts the result to Khan Academy.
-        # A second serial HEAD/GET round trip added latency and discarded
-        # valid pages when the site rate-limited probes with 403.
-        if not url:
-            return None
-        return {
-            "label": "English",
-            "title": f"{topic} — Khan Academy",
-            "url": url,
-            "source": "Khan Academy",
-        }
-
-    # These three sources are independent network round trips — run them
-    # concurrently instead of one after another so a slow lookup on one
-    # source doesn't hold up the other two.
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        video_future = executor.submit(find_youtube_video, clean_topic)
-        openstax_future = executor.submit(find_openstax_index_article, clean_topic)
-        khan_future = executor.submit(_khan_academy, clean_topic)
-
-        resources: List[Dict] = []
-        for result in (video_future.result(), openstax_future.result(), khan_future.result()):
-            if result:
-                resources.append(result)
-
-    # Keep the exact A/L Biology topic in both the video title and search query.
-    # Video is a useful fallback, but should not displace the official NIE,
-    # OpenStax, or Khan Academy resources when all three are available.
-    # Never pad with a search page or unrelated generic tutorial. Returning
-    # fewer verified links is safer than presenting a weak recommendation.
-    deduplicated: List[Dict] = []
-    seen_urls = set()
-    for resource in resources:
-        url = str(resource.get("url", "")).strip()
-        if not url.startswith(("https://", "http://")) or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        deduplicated.append(resource)
-
-    logger.info(f"[WebScraper] Done for '{clean_topic}': {[r['source'] for r in deduplicated]}")
-    return deduplicated[:4]
+    video = find_youtube_video(clean_topic)
+    if not video or not is_youtube_video_url(str(video.get("url", ""))):
+        return []
+    return [{**video, "source": "YouTube"}]

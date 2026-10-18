@@ -1,8 +1,7 @@
 """
 Recommendation Agent — Identifies weak topics and returns:
 1. LLM-generated concept notes (bullet points) for each weak topic
-2. Specific, validated learning resource links scraped from the actual pages
-   (GFG article, TutorialsPoint tutorial, YouTube video — NOT search pages)
+2. Topic-matched YouTube video links only (never other websites or search pages)
 """
 import os
 import json
@@ -14,7 +13,7 @@ from dotenv import load_dotenv
 from app.graph.state import AssessmentState
 from app.services.llm_service import LlmService
 from app.services.rag_service import RagService
-from app.services.url_validator import build_resources
+from app.services.url_validator import build_resources, is_youtube_video_url
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -91,14 +90,16 @@ def _curated_resources(topic: str, resource_map: dict) -> list:
             matched_raw.extend(resources)
 
     structured = []
-    for r in matched_raw[:3]:
+    for r in matched_raw:
+        if not is_youtube_video_url(str(r.get("url", ""))):
+            continue
         lang = r.get("language", "english").lower()
         label = {"english": "English", "tamil": "Tamil", "sinhala": "Sinhala"}.get(lang, "English")
         structured.append({
             "label":  label,
             "title":  r.get("title", topic),
             "url":    r.get("url", ""),
-            "source": r.get("source", "GeeksforGeeks"),
+            "source": "YouTube",
         })
     return structured
 
@@ -273,10 +274,7 @@ def recommendation_agent(state: AssessmentState, fast: bool = False) -> dict:
             resources = curated
             logger.info(f"[RecommendationAgent] '{topic}': using curated resources (scrape skipped)")
         else:
-            # Priority 2: web scrape to find SPECIFIC article/video URLs
-            # — GFG: exact article via DDG site:geeksforgeeks.org search
-            # — TutorialsPoint: exact tutorial via DDG site:tutorialspoint.com search
-            # — YouTube: specific video ID from search results page JSON
+            # Priority 2: find a topic-matched direct YouTube video.
             logger.info(f"[RecommendationAgent] '{topic}': scraping specific resource URLs...")
             resources = resource_future.result() if resource_future else []
             if resource_executor:
@@ -292,7 +290,8 @@ def recommendation_agent(state: AssessmentState, fast: bool = False) -> dict:
             "score_ratio":   round(ratio, 2),
             "percentage":    round(ratio * 100, 1),
             "concept_notes": concept_notes,
-            "resources":     resources[:4],
+            "resources":     [{**r, "source": "YouTube"} for r in resources
+                              if is_youtube_video_url(str(r.get("url", "")))][:4],
         }
 
     topics_to_process = [*weak_topics, *enrichment_topics]

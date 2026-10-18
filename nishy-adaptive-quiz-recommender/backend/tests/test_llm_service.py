@@ -9,6 +9,17 @@ from app.services.llm_service import (
 
 
 class ModalApiContractTests(unittest.TestCase):
+    def test_truncated_question_does_not_return_nested_options_as_json(self):
+        raw = '{"question":"Which sugar?","options":{"1":"Glucose","2":"Starch"},"model_answer":"unfinished'
+        with self.assertRaises(ValueError):
+            QwenModalService._extract_json(raw)
+
+    @patch.object(QwenModalService, "call")
+    def test_json_generation_has_room_for_complete_schema(self, call):
+        call.return_value = '{"question":"Complete"}'
+        QwenModalService().call_json("Generate a question")
+        self.assertGreaterEqual(call.call_args.kwargs["max_new_tokens"], 1024)
+
     def test_accepts_complete_json_object_before_extra_closing_brace(self):
         raw = (
             '{"questions":[{"plan_index":1,"question":"Which sugar?",'

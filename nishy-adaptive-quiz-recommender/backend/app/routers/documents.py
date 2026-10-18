@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request
 from typing import List
 import os
 import re
@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from app.services.db_service import DbService
 from app.services.rag_service import RagService
 from app.services.ocr_service import OcrService
-from app.services.llm_service import LlmService
 from app.agents.ingestion_agent import SUPPORTED_FORMATS
 
 router = APIRouter()
@@ -81,9 +80,9 @@ class DocumentResponse(BaseModel):
     created_at: str
 
 @router.get("/", response_model=List[DocumentResponse])
-async def list_documents():
+async def list_documents(request: Request):
     db = DbService()
-    docs = db.get_all_documents()
+    docs = db.get_all_documents(request.state.user["id"])
     res = []
     for d in docs:
         topics = json.loads(d["topics"]) if isinstance(d["topics"], str) else d["topics"]
@@ -97,19 +96,25 @@ async def list_documents():
     return res
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(request: Request, file: UploadFile = File(...)):
     db = DbService()
     rag = RagService()
     ocr = OcrService()
-    llm = LlmService()
     
     document_id = str(uuid.uuid4())
-    upload_dir = Path(f"./data/uploads/{document_id}")
+    filename = Path((file.filename or "upload").replace("\\", "/")).name
+    ext = Path(filename).suffix.lstrip(".").lower()
+    if ext not in SUPPORTED_FORMATS:
+        raise HTTPException(400, "Unsupported document format.")
+    content = await file.read(int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024 + 1)
+    if len(content) > int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024:
+        raise HTTPException(413, "Document exceeds the upload size limit.")
+    upload_dir = Path(os.getenv("UPLOAD_DIR", "./data/uploads")) / document_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     
-    file_path = upload_dir / file.filename
+    file_path = upload_dir / filename
     with open(file_path, "wb") as f:
-        f.write(await file.read())
+        f.write(content)
         
     ext = Path(file_path).suffix.lstrip(".").lower()
     file_type = SUPPORTED_FORMATS.get(ext)
@@ -144,30 +149,14 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
         
-    # Extract basic topics to save in DB
-    full_text = "\n\n".join([c["text"] for c in chunks])
-    if len(full_text) > 25000:
-        full_text = full_text[:25000]
-        
-    prompt = f"""
-    Use only the uploaded material below. Extract 3-10 specific Biology topics
-    actually present in it; never return a generic topic such as "General".
-    Return ONLY valid JSON: {{"topics": ["Topic 1", "Topic 2"]}}
-    Material:
-    {full_text}
-    """
-    
-    try:
-        data = llm.call_json(prompt)
-        topics = [str(t).strip() for t in data.get("topics", []) if str(t).strip()]
-    except Exception:
-        topics = []
-    if not topics:
-        topics = _fallback_topics_from_content(chunks, file.filename)
+    # Question generation uses the actual chunks. Topic metadata can be
+    # extracted locally without holding upload open for remote inference.
+    topics = _fallback_topics_from_content(chunks, filename)
 
     doc_record = {
         "document_id": document_id,
-        "filename": file.filename,
+        "filename": filename,
+        "user_id": request.state.user["id"],
         "topics": json.dumps(topics),
         "chunk_count": len(chunks)
     }

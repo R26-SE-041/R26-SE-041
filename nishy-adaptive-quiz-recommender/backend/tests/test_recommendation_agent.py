@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import app.graph.graph  # noqa: F401
-from app.agents.recommendation_agent import _generate_concept_notes, recommendation_agent
+from app.agents.recommendation_agent import _curated_resources, _generate_concept_notes, recommendation_agent
 
 
 class RecallNotesTests(unittest.TestCase):
@@ -56,6 +56,18 @@ class RecallNotesTests(unittest.TestCase):
         self.assertEqual(result["weak_topics"], [])
         self.assertEqual(result["recommendations"][0]["recommendation_type"], "enrichment")
         self.assertEqual(result["recommendations"][0]["resources"][0]["source"], "YouTube")
+
+    def test_curated_resources_filter_before_limiting_and_ignore_source_labels(self):
+        resources = {"Cell": [
+            {"url": "https://openstax.org/biology"},
+            {"url": "https://wikipedia.org/wiki/Cell"},
+            {"url": "https://youtube.com.evil.example/watch?v=abcdefghijk"},
+            {"url": "https://youtu.be/abcdefghijk", "source": "Other"},
+        ]}
+        result = _curated_resources("Cell", resources)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["source"], "YouTube")
+        self.assertEqual(result[0]["url"], "https://youtu.be/abcdefghijk")
 
     def test_uses_question_source_chunks_and_requests_deep_notes(self):
         rag = Mock()

@@ -2,6 +2,7 @@
 Quiz Router — Get questions and submit answers.
 """
 import logging
+from concurrent.futures import Future
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from app.schemas.quiz import (
     AdvanceQuestionRequest,
@@ -23,6 +24,56 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 db = DbService()
 MCQ_OPTION_KEYS = {"1", "2", "3", "4", "5"}
+_retry_jobs: dict[str, Future] = {}
+
+
+def _retry_generation(session_id: str) -> None:
+    """Repair a failed setup from its saved material without resetting answers."""
+    from app.routers.session import _session_errors, _session_logs
+
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    try:
+        state = dict(graph.get_state(config).values)
+        state.update(error=None, retry_count=0)
+        graph.update_state(config, {"error": None, "retry_count": 0})
+        generated = quiz_agent(state)
+        graph.update_state(config, generated, as_node="quiz_generate")
+        combined = {**state, **generated}
+        index = int(combined.get("current_q_index", 0))
+        ready = len(combined.get("questions", [])) > index and not generated.get("error")
+        _session_logs[session_id] = combined.get("agent_logs", [])
+        if ready:
+            _session_errors.pop(session_id, None)
+            db.update_session_progress(session_id, combined.get("topics", []), len(combined.get("raw_chunks", [])))
+            db.update_session_status(session_id, "ready")
+        else:
+            _session_errors[session_id] = generated.get("error") or "Could not prepare this question. Please retry."
+            db.update_session_status(session_id, "error")
+    except Exception:
+        logger.exception("Quiz retry failed | session=%s", session_id)
+        _session_errors[session_id] = "Could not prepare this question. Please retry."
+        db.update_session_status(session_id, "error")
+
+
+@router.post("/{session_id}/retry-generation")
+def retry_question_generation(session_id: str) -> dict:
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    snapshot = get_graph().get_state({"configurable": {"thread_id": session_id}})
+    state = dict(snapshot.values if snapshot else {})
+    if not state:
+        raise HTTPException(status_code=409, detail="Study material is no longer available. Please start a new quiz.")
+    if len(state.get("questions", [])) > int(state.get("current_q_index", 0)):
+        db.update_session_status(session_id, "ready")
+        return {"status": "ready"}
+    previous_job = _retry_jobs.get(session_id)
+    if previous_job is not None and not previous_job.done():
+        return {"status": "processing"}
+    db.update_session_status(session_id, "processing")
+    _retry_jobs[session_id] = submit_session_work(session_id, _retry_generation, session_id)
+    return {"status": "processing"}
 
 
 def _continue_session_after_response(session_id: str, quiz_complete: bool) -> None:
@@ -39,6 +90,7 @@ def _continue_session_after_response(session_id: str, quiz_complete: bool) -> No
             provisional_report["recommendations_pending"] = True
             provisional["analytics_report"] = provisional_report
             graph.update_state(config, provisional)
+            db.record_report(session_id, provisional_report)
 
             enriched_state = {**state, **provisional}
             # Publish source-extractive notes before slower model expansion
@@ -58,6 +110,7 @@ def _continue_session_after_response(session_id: str, quiz_complete: bool) -> No
             completed_report["recommendations_pending"] = False
             completed["analytics_report"] = completed_report
             graph.update_state(config, {**recommendations, **completed})
+            db.record_report(session_id, completed_report)
         else:
             # Resume from the post-evaluation interrupt: adaptive -> generate.
             graph.invoke(None, config=config)
@@ -183,6 +236,7 @@ def submit_answer(session_id: str, req: SubmitAnswerRequest, background_tasks: B
         raise HTTPException(status_code=500, detail="No answer record found")
 
     last_answer = answers[-1]
+    db.record_attempt(session_id, last_answer)
     questions = final_state.get("questions", [])
     q_idx = final_state.get("current_q_index", 0)
     requested_questions = final_state.get("num_questions", 0)
@@ -296,6 +350,7 @@ def advance_open_ended_question(session_id: str, req: AdvanceQuestionRequest):
         f"**Detailed Explanation:**\n{model_answer}"
     ).strip()
     answers[last_index] = finalized
+    db.record_attempt(session_id, finalized)
 
     topic_scores = dict(state.get("topic_scores", {}))
     bloom_scores = dict(state.get("bloom_scores", {}))

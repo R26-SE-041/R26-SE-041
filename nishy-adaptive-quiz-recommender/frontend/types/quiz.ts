@@ -2,7 +2,7 @@
 
 export type ExamType = "mcq" | "fill_blank" | "structured" | "essay";
 export type DifficultyMode = "easy" | "medium" | "hard" | "adaptive";
-export type SessionStatus = "processing" | "ready" | "error";
+export type SessionStatus = "processing" | "ready" | "error" | "completed";
 export type BloomLevel =
   | "remember"
   | "understand"

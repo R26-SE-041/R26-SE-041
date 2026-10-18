@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import time
+from threading import Lock
 import httpx
 from dotenv import load_dotenv
 
@@ -27,7 +28,12 @@ MAX_NEW_TOKENS = int(os.getenv("MODAL_MAX_NEW_TOKENS", "180"))
 class QwenModalService:
     """HTTP client for the Modal-hosted Qwen + LoRA inference service."""
 
-    def __init__(self):
+    def __init__(self, generation_budget_sec: float | None = None):
+        # Quiz retries share one deadline; other callers retain their timeout.
+        self._deadline = (
+            time.monotonic() + generation_budget_sec
+            if generation_budget_sec is not None else None
+        )
         if not MODAL_ENDPOINT_URL:
             logger.error("MODAL_ENDPOINT_URL is not configured")
         else:
@@ -75,6 +81,8 @@ class QwenModalService:
         endpoint = self._require_endpoint()
         start = time.time()
         deadline = time.monotonic() + MODAL_REQUEST_TIMEOUT_SEC
+        if self._deadline is not None:
+            deadline = min(deadline, self._deadline)
         request_url = endpoint
         request_method = "POST"
         payload = {
@@ -124,7 +132,7 @@ class QwenModalService:
             payload = response.json()
         except httpx.TimeoutException as exc:
             raise RuntimeError(
-                f"Modal inference timed out after {MODAL_REQUEST_TIMEOUT_SEC:.0f}s. "
+                f"Modal inference timed out after {time.time() - start:.0f}s. "
                 "Check the Modal app logs and container status."
             ) from exc
         except httpx.HTTPStatusError as exc:
@@ -153,7 +161,10 @@ class QwenModalService:
             + "\n\nCRITICAL: Return ONLY valid JSON. "
             "No markdown, no code fences, no explanation."
         )
-        raw = self.call(full_prompt, max_new_tokens=max_new_tokens)
+        # JSON includes five choices and an explanation (or a full written
+        # answer). The short free-text default truncates that schema.
+        budget = max_new_tokens if max_new_tokens is not None else max(MAX_NEW_TOKENS, 1024)
+        raw = self.call(full_prompt, max_new_tokens=budget)
         return self._extract_json(raw)
 
     @staticmethod
@@ -176,7 +187,10 @@ class QwenModalService:
         # grounding validation still decide whether its contents are usable.
         decoder = json.JSONDecoder()
         for candidate in (text.strip(), clean):
-            for opening in (match.start() for match in re.finditer(r"\{", candidate)):
+            # Do not mistake a complete nested options object for a complete
+            # question when the outer response was truncated.
+            opening = candidate.find("{")
+            if opening >= 0:
                 try:
                     parsed, _ = decoder.raw_decode(candidate[opening:])
                 except json.JSONDecodeError:
@@ -210,6 +224,9 @@ class QwenModalService:
 class EmbeddingService:
     """Local sentence-transformers embeddings for RAG and grounding."""
 
+    _models: dict = {}
+    _models_lock = Lock()
+
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self._model = None
         self._model_name = model_name
@@ -217,10 +234,15 @@ class EmbeddingService:
 
     def _load(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
+            # RAG and grounding create short-lived services on every question.
+            # Load each model once per process, including concurrent sessions.
+            with self._models_lock:
+                if self._model_name not in self._models:
+                    from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self._model_name)
-            logger.info("sentence-transformers model loaded: %s", self._model_name)
+                    self._models[self._model_name] = SentenceTransformer(self._model_name)
+                    logger.info("sentence-transformers model loaded: %s", self._model_name)
+                self._model = self._models[self._model_name]
 
     def get_embedding(self, text: str) -> list[float]:
         self._load()

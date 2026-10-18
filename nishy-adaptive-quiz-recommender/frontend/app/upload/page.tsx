@@ -3,6 +3,7 @@
 import { useCallback, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AppHeader from "@/components/ui/AppHeader";
 import { startSession, getDocuments, uploadDocument } from "@/lib/api";
 import type { QuizConfig, ExamType, DifficultyMode, DocumentInfo } from "@/types/quiz";
 import {
@@ -134,26 +135,13 @@ export default function UploadPage() {
   ];
 
   return (
-    <main className="min-h-screen py-12 px-4">
-      {/* Nav */}
-      <nav className="flex items-center justify-between max-w-4xl mx-auto mb-12">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="brand-mark w-8 h-8 rounded-lg">
-            <span className="font-bold text-sm">AQ</span>
-          </div>
-          <span className="font-bold text-lg tracking-tight text-stone-900">
-            Adaptive<span className="text-orange-700">IQ</span>
-          </span>
-        </Link>
-        <Link href="/" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors">
-          <ArrowLeftIcon /> Back
-        </Link>
-      </nav>
+    <main className="workspace-page min-h-screen">
+      <AppHeader><Link href="/" className="editorial-link text-sm"><ArrowLeftIcon /> Back to home</Link></AppHeader>
 
-      <div className="max-w-4xl mx-auto">
+      <div className="workspace-content max-w-5xl mx-auto">
         <div className="mb-10 animate-[fadeIn_0.5s_ease-out]">
           <p className="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">Step 1 of 2</p>
-          <h1 className="text-4xl font-semibold tracking-tight text-stone-900 mb-3">
+          <h1 className="page-heading mb-4">
             Select or upload study material
           </h1>
           <p className="text-stone-500 text-lg">
@@ -161,27 +149,27 @@ export default function UploadPage() {
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl border border-orange-900/15 bg-orange-900/5 p-1.5">
+        <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
           <button
             type="button"
             onClick={() => setSubjectMode("al_bio")}
-            className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${subjectMode === "al_bio" ? "bg-orange-600 text-white shadow-sm" : "text-stone-900/55 hover:text-stone-900"}`}
+            className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${subjectMode === "al_bio" ? "bg-[var(--primary)] text-[var(--background)]" : "text-stone-900/55 hover:text-stone-900"}`}
           >
             A/L Biology
           </button>
           <button
             type="button"
             onClick={() => setSubjectMode("general")}
-            className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${subjectMode === "general" ? "bg-orange-600 text-white shadow-sm" : "text-stone-900/55 hover:text-stone-900"}`}
+            className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${subjectMode === "general" ? "bg-[var(--primary)] text-[var(--background)]" : "text-stone-900/55 hover:text-stone-900"}`}
           >
             General
           </button>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Library & Upload Zone */}
           <div className="space-y-6">
-            <div className="rounded-2xl border border-orange-900/15 bg-orange-900/5 p-6">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
               <label htmlFor="quiz-topic" className="mb-2 block text-sm font-semibold text-stone-900">
                 Topic (Optional)
               </label>
@@ -241,7 +229,7 @@ export default function UploadPage() {
 
 
             {/* Document Library List */}
-            <div className="rounded-2xl border border-orange-900/15 bg-orange-900/5 p-5 backdrop-blur-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 ">
               <h2 className="font-bold text-stone-900 mb-4">Your Library</h2>
               {loadingDocs ? (
                 <div className="text-stone-500 text-center py-4 text-sm animate-pulse">Loading documents...</div>
@@ -257,7 +245,7 @@ export default function UploadPage() {
                         key={doc.document_id}
                         onClick={() => toggleDocSelection(doc.document_id)}
                         className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                          isSelected ? "border-orange-500/50 bg-orange-500/10" : "border-orange-900/15 bg-orange-900/5 hover:border-orange-900/20"
+                          isSelected ? "border-orange-500/50 bg-orange-500/10" : "border-[var(--border)] bg-[var(--surface)] hover:border-orange-900/20"
                         }`}
                       >
                         <div className="mt-0.5"><FileIcon ext={ext} /></div>
@@ -267,12 +255,12 @@ export default function UploadPage() {
                             {doc.topics.slice(0, 2).map((t, i) => (
                               <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-orange-900/10 text-stone-900/70 truncate max-w-[100px]">{t}</span>
                             ))}
-                            {doc.topics.length > 2 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-900/5 text-stone-500">+{doc.topics.length - 2}</span>}
+                            {doc.topics.length > 2 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface)] text-stone-500">+{doc.topics.length - 2}</span>}
                           </div>
                         </div>
                         <div className="flex items-center justify-center w-5 h-5 mt-1 rounded border border-white/30 transition-colors"
-                             style={{ background: isSelected ? "#e06c4f" : "transparent", borderColor: isSelected ? "#e06c4f" : "rgba(0,0,0,0.3)" }}>
-                          {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                             style={{ background: isSelected ? "var(--primary)" : "transparent", borderColor: isSelected ? "var(--primary)" : "rgba(0,0,0,0.3)" }}>
+                          {isSelected && <svg className="w-3 h-3 text-[var(--background)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                         </div>
                       </div>
                     );
@@ -284,7 +272,7 @@ export default function UploadPage() {
 
           {/* Configuration Panel */}
           <div className="space-y-5">
-            <div className="rounded-2xl p-6 border border-orange-900/15 bg-orange-900/5 backdrop-blur-sm">
+            <div className="rounded-2xl p-6 border border-[var(--border)] bg-[var(--surface)] ">
               <h2 className="font-bold text-stone-900 mb-5 text-lg">Quiz Configuration</h2>
 
               {/* Exam Type */}
@@ -300,9 +288,9 @@ export default function UploadPage() {
                       onClick={() => setConfig((c) => ({ ...c, examType: t }))}
                       className="py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border"
                       style={{
-                        background: config.examType === t ? "rgba(224,108,79,0.25)" : "rgba(0,0,0,0.04)",
-                        borderColor: config.examType === t ? "rgba(224,108,79,0.6)" : "rgba(0,0,0,0.1)",
-                        color: config.examType === t ? "#9a4327" : "rgba(0,0,0,0.5)",
+                        background: config.examType === t ? "var(--canvas)" : "rgba(0,0,0,0.04)",
+                        borderColor: config.examType === t ? "var(--text)" : "rgba(0,0,0,0.1)",
+                        color: config.examType === t ? "var(--text)" : "var(--text-muted)",
                       }}
                     >
                       {t === "mcq" ? "MCQ" : t === "structured" ? "Structured" : "Essay"}
@@ -324,9 +312,9 @@ export default function UploadPage() {
                       onClick={() => setConfig((c) => ({ ...c, numQuestions: n }))}
                       className="py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border"
                       style={{
-                        background: config.numQuestions === n ? "rgba(224,108,79,0.25)" : "rgba(0,0,0,0.04)",
-                        borderColor: config.numQuestions === n ? "rgba(224,108,79,0.6)" : "rgba(0,0,0,0.1)",
-                        color: config.numQuestions === n ? "#9a4327" : "rgba(0,0,0,0.5)",
+                        background: config.numQuestions === n ? "var(--canvas)" : "rgba(0,0,0,0.04)",
+                        borderColor: config.numQuestions === n ? "var(--text)" : "rgba(0,0,0,0.1)",
+                        color: config.numQuestions === n ? "var(--text)" : "var(--text-muted)",
                       }}
                     >
                       {n}
@@ -348,8 +336,8 @@ export default function UploadPage() {
                       onClick={() => setConfig((c) => ({ ...c, difficultyMode: d.val }))}
                       className="w-full flex items-center justify-between p-3 rounded-xl border transition-all duration-200 text-left"
                       style={{
-                        background: config.difficultyMode === d.val ? "rgba(224,108,79,0.2)" : "rgba(0,0,0,0.03)",
-                        borderColor: config.difficultyMode === d.val ? "rgba(224,108,79,0.5)" : "rgba(0,0,0,0.05)",
+                        background: config.difficultyMode === d.val ? "var(--canvas)" : "rgba(0,0,0,0.03)",
+                        borderColor: config.difficultyMode === d.val ? "var(--text)" : "rgba(0,0,0,0.05)",
                       }}
                     >
                       <div>
@@ -383,7 +371,7 @@ export default function UploadPage() {
               className={`w-full btn-primary rounded-2xl py-4 ${submitting || (selectedDocIds.size === 0 && quizTopic.trim().length < 2) ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               <div className="relative flex items-center justify-center gap-3">
-                <span className="font-bold text-white text-lg">
+                <span className="font-bold text-[var(--background)] text-lg">
                   {submitting ? "Initializing Session..." : "Generate Quiz"}
                 </span>
                 {!submitting && <ArrowRightIcon className="h-5 w-5" />}

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from app.services.url_validator import build_resources
+from app.services.url_validator import build_resources, is_youtube_video_url
 
 
 class BiologyResourceTests(unittest.TestCase):
@@ -10,36 +10,34 @@ class BiologyResourceTests(unittest.TestCase):
 
     @patch("app.services.url_validator.find_youtube_video")
     @patch("app.services.url_validator.find_openstax_index_article")
-    @patch("app.services.url_validator.nie_biology_resource")
     @patch("app.services.url_validator._ddg_first_url")
-    def test_uses_only_biology_relevant_trusted_queries(self, search, nie, openstax, youtube):
-        search.side_effect = [
-            "https://www.khanacademy.org/science/biology/cell-structure",
-        ]
-        nie.return_value = {
-            "label": "English", "title": "NIE Biology", "source": "Sri Lanka NIE",
-            "url": "https://www.nie.lk/pdffiles/other/eGr12OM%20BioResoBook.pdf",
-        }
-        openstax.return_value = {
-            "label": "English", "title": "OpenStax Biology", "source": "OpenStax Biology",
-            "url": "https://openstax.org/books/biology-2e/pages/4-4-the-endomembrane-system",
-        }
+    def test_only_looks_up_youtube_and_returns_direct_video(self, search, openstax, youtube):
         youtube.return_value = {
-            "label": "English",
-            "title": "Sri Lankan GCE A Level Biology Golgi apparatus Tutorial — YouTube",
+            "label": "English", "title": "Golgi apparatus", "source": "YouTube",
             "url": "https://www.youtube.com/watch?v=abcdefghijk",
-            "source": "YouTube",
         }
+        self.assertEqual(build_resources("Golgi apparatus"), [youtube.return_value])
+        youtube.assert_called_once_with("Golgi apparatus")
+        search.assert_not_called()
+        openstax.assert_not_called()
 
-        resources = build_resources("Golgi apparatus")
+    @patch("app.services.url_validator.find_youtube_video", return_value=None)
+    def test_unavailable_video_has_no_other_website_fallback(self, youtube):
+        self.assertEqual(build_resources("Golgi apparatus"), [])
 
-        self.assertEqual([resource["source"] for resource in resources], [
-            "YouTube", "OpenStax Biology", "Khan Academy"
-        ])
-        queries = " ".join(call.kwargs["query"] for call in search.call_args_list)
-        self.assertIn("biology", queries.casefold())
-        self.assertIn("Golgi apparatus", queries)
-        self.assertNotIn("GeeksforGeeks", str(resources))
+    def test_video_url_allowlist_blocks_other_sites_and_lookalike_hosts(self):
+        for url in (
+            "https://youtube.com.evil.example/watch?v=abcdefghijk",
+            "https://www.youtube.com/results?search_query=biology",
+            "https://openstax.org/books/biology",
+            "https://evil.example/youtube.com/watch?v=abcdefghijk",
+            "https://user:pass@youtube.com/watch?v=abcdefghijk",
+            "https://youtube.com/watch?v=short",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(is_youtube_video_url(url))
+        self.assertTrue(is_youtube_video_url("https://youtu.be/abcdefghijk"))
+        self.assertTrue(is_youtube_video_url("https://www.youtube.com/watch?v=abcdefghijk"))
 
     @patch("app.services.url_validator.httpx.Client")
     def test_does_not_return_a_youtube_search_page_when_scraping_fails(self, client):

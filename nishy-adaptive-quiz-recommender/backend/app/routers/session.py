@@ -11,7 +11,7 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form, Body
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, UploadFile, File, Form, Body
 from app.schemas.session import StartSessionResponse, SessionStatusResponse, CreateSessionRequest
 from app.services.db_service import DbService
 from app.graph.graph import get_graph
@@ -135,6 +135,7 @@ def _run_setup_phase(session_id: str, state: AssessmentState):
 async def start_session(
     request: CreateSessionRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,
 ):
     """
     Unified endpoint: create session using existing document_ids.
@@ -151,12 +152,18 @@ async def start_session(
     if topic and not request.document_ids and request.exam_type != "mcq":
         raise HTTPException(status_code=400, detail="Topic-only quiz generation currently supports MCQ questions.")
 
+    user_id = http_request.state.user["id"]
+    if request.document_ids:
+        docs = db.get_documents(request.document_ids)
+        if len(docs) != len(set(request.document_ids)) or any(d.get("user_id") != user_id for d in docs):
+            raise HTTPException(404, "One or more study documents were not found.")
     session_id = str(uuid.uuid4())
 
     # Persist to DB
     db.create_session({
+        "title":                topic or "Document practice",
         "session_id":           session_id,
-        "student_id":           request.student_id,
+        "student_id":           user_id,
         "exam_type":            request.exam_type,
         "num_questions":        request.num_questions,
         "difficulty_mode":      request.difficulty_mode,
@@ -168,7 +175,7 @@ async def start_session(
 
     # Pass document_ids into state instead of file paths
     state = _initial_state(
-        session_id, request.student_id, request.exam_type,
+        session_id, user_id, request.exam_type,
         request.num_questions, request.difficulty_mode, request.time_limit_min,
         request.document_ids, request.subject, topic or None,
     )

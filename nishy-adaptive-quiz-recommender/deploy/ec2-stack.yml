@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nishy Adaptive Quiz EC2 host with Docker, HTTPS ingress and browser terminal access.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues: [t3.small, t3.medium, t3.large]
+    Description: t3.medium provides 4 GiB RAM for local embeddings. AWS usage is billable.
+  LatestAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  ReleaseBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireDeploymentArchives
+            Status: Enabled
+            ExpirationInDays: 7
+  Network:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.41.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: nishy-quiz}]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: {Ref: Network}
+      InternetGatewayId: {Ref: InternetGateway}
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: {Ref: Network}
+      CidrBlock: 10.41.1.0/24
+      MapPublicIpOnLaunch: true
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: {Ref: Network}
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: {Ref: RouteTable}
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: {Ref: InternetGateway}
+  SubnetRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: {Ref: PublicSubnet}
+      RouteTableId: {Ref: RouteTable}
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS and ACME HTTP; API port is internal only.
+      VpcId: {Ref: Network}
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+  SessionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadQuizRuntimeConfiguration
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/nishy-quiz/backend-env
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  Fn::Sub: ${ReleaseBucket.Arn}/releases/*
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [{Ref: SessionRole}]
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: [InternetRoute, SubnetRoute]
+    Properties:
+      ImageId: {Ref: LatestAmi}
+      InstanceType: {Ref: InstanceType}
+      IamInstanceProfile: {Ref: InstanceProfile}
+      SubnetId: {Ref: PublicSubnet}
+      SecurityGroupIds: [{Ref: WebSecurityGroup}]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: {VolumeSize: 30, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      Tags: [{Key: Name, Value: nishy-adaptive-quiz-api}]
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y docker git
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fSL --retry 3 https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          curl -fSL --retry 3 https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.linux-amd64 -o /usr/local/lib/docker/cli-plugins/docker-buildx
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+          usermod -aG docker ec2-user
+          systemctl enable --now amazon-ssm-agent
+          docker compose version
+  PublicIp:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties:
+      Domain: vpc
+  IpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: {Fn::GetAtt: [PublicIp, AllocationId]}
+      InstanceId: {Ref: Instance}
+
+Outputs:
+  ReleaseBucket:
+    Description: Private source archives, automatically expired after seven days.
+    Value: {Ref: ReleaseBucket}
+  InstanceId:
+    Value: {Ref: Instance}
+  ElasticIp:
+    Description: Point your quiz API domain's DNS A record to this address.
+    Value: {Ref: PublicIp}
+  BrowserTerminal:
+    Description: EC2 Console > instance > Connect > Session Manager.
+    Value:
+      Fn::Sub: https://${AWS::Region}.console.aws.amazon.com/systems-manager/session-manager/${Instance}?region=${AWS::Region}

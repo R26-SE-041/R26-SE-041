@@ -274,8 +274,8 @@ class RagService:
     def merge_collections(self, target_collection_id: str, source_collection_ids: List[str]) -> int:
         """Copy all chunks from multiple source collections into a target collection.
 
-        Re-embeds the documents instead of fetching stored embeddings, which is
-        more reliable across ChromaDB versions and avoids empty-embedding errors.
+        Reuse upload-time embeddings, falling back to local encoding when an
+        older collection cannot return usable vectors.
         """
         target = self.client.get_or_create_collection(
             name=target_collection_id,
@@ -286,9 +286,11 @@ class RagService:
         for src_id in source_collection_ids:
             try:
                 src = self.client.get_collection(name=src_id)
-                # Fetch documents and metadata only — re-embed locally to avoid
-                # ChromaDB embedding-fetch failures on some versions.
-                data = src.get(include=["documents", "metadatas"])
+                try:
+                    data = src.get(include=["documents", "metadatas", "embeddings"])
+                except Exception:
+                    data = src.get(include=["documents", "metadatas"])
+                stored_vectors = data.get("embeddings")
                 if not data["ids"]:
                     logger.warning(f"Collection '{src_id}' exists but has no documents")
                     continue
@@ -311,7 +313,18 @@ class RagService:
                     new_ids = [batch_ids[j] for j in new_mask]
                     new_docs = [batch_docs[j] for j in new_mask]
                     new_meta = [batch_meta[j] for j in new_mask]
-                    embeddings = self.embed.get_batch_embeddings(new_docs)
+                    vector_indexes = [i + j for j in new_mask]
+                    if (
+                        stored_vectors is not None
+                        and len(stored_vectors) == len(ids)
+                        and all(
+                            stored_vectors[j] is not None and len(stored_vectors[j]) > 0
+                            for j in vector_indexes
+                        )
+                    ):
+                        embeddings = [list(stored_vectors[j]) for j in vector_indexes]
+                    else:
+                        embeddings = self.embed.get_batch_embeddings(new_docs)
                     target.add(
                         ids=new_ids,
                         embeddings=embeddings,

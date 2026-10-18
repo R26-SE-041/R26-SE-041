@@ -1,0 +1,3 @@
+Typography reference: https://www.anthropic.com/
+Public webfont declarations: https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/css/ant-brand.shared.0836b103a.min.css
+Retrieved 2026-10-16 for the requested local Nishy design reference.

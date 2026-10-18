@@ -1,0 +1,11 @@
+*
+!requirements.txt
+!app/
+!app/**
+!scripts/
+!scripts/migrate.py
+!scripts/import_sqlite.py
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.pyc

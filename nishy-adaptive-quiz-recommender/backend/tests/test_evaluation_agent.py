@@ -71,7 +71,7 @@ class HintSafetyTests(unittest.TestCase):
         self.assertNotIn("answer is", hint.casefold())
         self.assertFalse(_is_repetitive_or_malformed(hint))
 
-    def test_uses_safe_fallback_after_three_rejected_outputs(self):
+    def test_easy_hint_uses_notes_without_consulting_answer_generators(self):
         llm = Mock()
         llm.call.return_value = "Choose option 2."
         rag = Mock()
@@ -82,7 +82,9 @@ class HintSafetyTests(unittest.TestCase):
 
         hint = _generate_hint(llm, rag, QUESTION, 2, "collection")
 
-        self.assertEqual(llm.call.call_count, 3)
+        llm.call.assert_not_called()
+        rag.retrieve.assert_not_called()
+        self.assertIn("notes", hint)
         self.assertFalse(_reveals_mcq_answer(hint, QUESTION))
 
 

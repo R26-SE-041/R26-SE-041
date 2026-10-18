@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { advanceQuestion, getSessionStatus, getCurrentQuestion, submitAnswer } from "@/lib/api";
+import AppHeader from "@/components/ui/AppHeader";
+import { advanceQuestion, getSessionStatus, getCurrentQuestion, submitAnswer, retryQuestionGeneration } from "@/lib/api";
 import type {
   SessionStatusResponse,
   Question,
@@ -70,82 +71,47 @@ function BloomBadge({ level }: { level: string }) {
 }
 
 // ── Processing screen ────────────────────────────────────────────
-function ProcessingScreen({ status }: { status: SessionStatusResponse | null }) {
+function ProcessingScreen({ status, onRetry }: { status: SessionStatusResponse | null; onRetry: () => void }) {
   const isReady = status?.status === "ready";
   const isError = status?.status === "error";
-  const isTopicSession = status?.is_topic_session === true;
-  const steps = isTopicSession ? [
-    { id: "quiz", label: `Generating questions on "${status?.topics_detected?.[0] || 'Topic'}"...`, done: isReady }
-  ] : [
-    { id: "upload",    label: "Files uploaded",                        done: true },
-    { id: "ingest",    label: "Extracting text chunks",                done: isReady || (status?.chunk_count ?? 0) > 0 },
-    { id: "knowledge", label: "Identifying topics",                    done: isReady || (status?.topics_detected?.length ?? 0) > 0 },
-    { id: "quiz",      label: "Generating questions with Qwen2.5-7B", done: isReady },
-  ];
-  if (isError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="mb-6 flex justify-center">
-            <XCircleIcon className="w-16 h-16 text-red-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-red-700 mb-3">Setup Failed</h1>
-          <p className="text-stone-500 text-sm mb-6">{status?.message}</p>
-          <a href="/upload" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #e06c4f, #cc5234)" }}><ArrowLeftIcon /> Try Again</a>
-        </div>
-      </div>
-    );
-  }
+  const topicSession = status?.is_topic_session === true;
+  const steps = topicSession
+    ? [{ label: "Preparing your topic questions", done: isReady }]
+    : [
+      { label: "Study material selected", done: true },
+      { label: "Reading your material", done: isReady || (status?.chunk_count ?? 0) > 0 },
+      { label: "Finding the key concepts", done: isReady || (status?.topics_detected?.length ?? 0) > 0 },
+      { label: "Preparing your questions", done: isReady },
+    ];
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="max-w-md w-full text-center">
-        <div className="relative w-24 h-24 mx-auto mb-8">
-          <div className="absolute inset-0 rounded-full border-4 border-orange-600/20" />
-          <div className={`absolute inset-0 rounded-full border-4 border-transparent border-t-violet-500 ${isReady ? "" : "animate-spin"}`} style={{ animationDuration: "1.2s" }} />
-          <div className="absolute inset-3 rounded-full flex items-center justify-center">
-            {isReady
-              ? <CheckCircleIcon className="w-9 h-9 text-emerald-600" />
-              : <ZapIcon className="w-9 h-9 text-orange-600" />}
-          </div>
+    <main className="min-h-screen">
+      <AppHeader><Link href="/upload" className="editorial-link text-sm">Choose material <ArrowRightIcon /></Link></AppHeader>
+      <section className="status-panel animate-fade-in" aria-live="polite">
+        <p className="section-label mb-6">Your adaptive quiz</p>
+        <div className="mb-6">
+          {isError ? <AlertTriangleIcon className="w-8 h-8 text-[var(--warning)]" /> : <span className="block w-8 h-8 rounded-full border-2 border-[var(--border)] border-t-[var(--text)] animate-spin" />}
         </div>
-        <h1 className="text-2xl font-bold text-stone-900 mb-2">{isReady ? "Almost ready!" : (isTopicSession ? "Generating your quiz" : "Processing your documents")}</h1>
-        <p className="text-stone-500 text-sm mb-8">{status?.message ?? "Initializing agents..."}</p>
-        <div className="space-y-3 text-left">
-          {steps.map((step) => (
-            <div key={step.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-              style={{ background: step.done ? "rgba(52,211,153,0.08)" : "rgba(0,0,0,0.03)", borderColor: step.done ? "rgba(52,211,153,0.2)" : "rgba(0,0,0,0.08)" }}>
-              <span>
-                {step.done
-                  ? <CheckIcon className="w-5 h-5 text-emerald-600" />
-                  : <ClockIcon className="w-5 h-5 text-stone-400" />}
-              </span>
-              <span className={`text-sm font-medium ${step.done ? "text-emerald-700" : "text-stone-500"}`}>{step.label}</span>
-              {!step.done && <span className="ml-auto text-xs text-stone-400 animate-pulse">running...</span>}
-            </div>
-          ))}
-        </div>
-        {status?.topics_detected && status.topics_detected.length > 0 && (
-          <div className="mt-6 text-left">
-            <p className="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">Topics detected</p>
-            <div className="flex flex-wrap gap-2">
-              {status.topics_detected.slice(0, 6).map((t) => (
-                <span key={t} className="px-2.5 py-1 rounded-full text-xs bg-orange-600/15 text-orange-700 border border-orange-600/25">{t}</span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+        <h1 className="page-heading mb-5">{isError ? "Let?s try that again." : isReady ? "You?re ready to begin." : "A little preparation. A better challenge."}</h1>
+        <p className="text-[var(--text-muted)] text-base leading-relaxed mb-8">{isError ? status?.message : "We?re preparing questions from your chosen material. Your quiz will appear here when it?s ready."}</p>
+        {isError ? <div className="flex flex-wrap gap-3">
+          <button type="button" className="btn-primary" onClick={onRetry}><RefreshIcon /> Retry this quiz</button>
+          <Link href="/upload" className="btn-secondary">Choose material</Link>
+        </div> : <div className="border-t border-[var(--border)]">
+          {steps.map((step) => <div key={step.label} className="flex items-center justify-between gap-4 py-4 border-b border-[var(--border)] text-sm">
+            <span>{step.label}</span>{step.done ? <CheckIcon className="w-4 h-4 text-[var(--success)]" /> : <span className="text-[var(--text-dim)] text-xs">In progress</span>}
+          </div>)}
+        </div>}
+      </section>
+    </main>
   );
 }
 
 // ── Hint level badge — attempt 1=Hard, 2=Medium, 3=Easy ─────────
 function HintLevelBadge({ attempts }: { attempts: number }) {
   const levels: Record<number, { label: string; color: string; desc: string }> = {
-    1: { label: "Hard Hint",   color: "var(--danger)", desc: "A conceptual prompt to guide deeper reasoning" },
-    2: { label: "Medium Hint", color: "var(--warning)", desc: "Focused concept explanation" },
-    3: { label: "Easy Hint",   color: "var(--success)", desc: "Step-by-step walkthrough" },
+    1: { label: "Hard Hint",   color: "var(--danger)", desc: "Connect ideas and test your assumptions" },
+    2: { label: "Medium Hint", color: "var(--warning)", desc: "Build your own reasoning with a little guidance" },
+    3: { label: "Easy Hint",   color: "var(--success)", desc: "Revisit your notes, then try independently" },
   };
   const info = levels[attempts] ?? levels[1];
   return (
@@ -212,14 +178,14 @@ function FeedbackCard({
       <div className="relative w-full rounded-2xl p-6 border"
         style={{
           background: result.is_correct
-            ? "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.1))"
+            ? "var(--surface)"
             : canTryAgain
-              ? "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.08))"
-              : "linear-gradient(135deg, rgba(239,68,68,0.12), rgba(220,38,38,0.08))",
+              ? "var(--surface)"
+              : "var(--surface)",
           borderColor: result.is_correct
             ? "rgba(52,211,153,0.3)"
             : canTryAgain ? "rgba(251,191,36,0.3)" : "rgba(248,113,113,0.3)",
-          backdropFilter: "blur(16px)",
+
         }}>
 
         {/* Header */}
@@ -267,7 +233,7 @@ function FeedbackCard({
               </p>
             )}
             {finalExplanation && (
-              <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
+              <div className="rounded-xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                 <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">
                   {isOpenEnded ? "Model answer" : "Explanation"}
                 </p>
@@ -288,7 +254,7 @@ function FeedbackCard({
               </p>
             )}
             {finalExplanation && (
-              <div className="rounded-xl bg-orange-900/5 border border-orange-900/15 px-4 py-3">
+              <div className="rounded-xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                 <p className="text-stone-500 text-xs font-bold uppercase tracking-wide mb-1">
                   {isOpenEnded ? "Model answer" : "Explanation"}
                 </p>
@@ -302,8 +268,8 @@ function FeedbackCard({
         {canTryAgain && !isRetrying && (
           <div className="mt-5">
             <button id="btn-try-again" onClick={onTryAgain}
-              className="w-full py-3 rounded-xl font-bold text-stone-900 transition-all duration-200"
-              style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", boxShadow: "0 4px 20px rgba(245,158,11,0.3)" }}>
+              className="w-full py-3 rounded-xl font-bold text-[var(--background)] transition-all duration-200"
+              style={{ background: "var(--primary)", boxShadow: "none" }}>
               <span className="flex items-center justify-center gap-2">
                 Try Again <RefreshIcon className="w-4 h-4" />
               </span>
@@ -322,7 +288,7 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
   return (
     <div className="opacity-90">
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-900/5 text-stone-500 border border-orange-900/15">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[var(--surface)] text-stone-500 border border-[var(--border)]">
           <TagIcon className="w-3 h-3" /> {question.topic}
         </span>
         <BloomBadge level={question.bloom_level} />
@@ -331,7 +297,7 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
           <LockIcon className="w-3 h-3" /> Reviewed
         </span>
       </div>
-      <p className={`text-stone-900 text-xl font-semibold leading-relaxed mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
+      <p className={`question-stem mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
       {opts && (
         <div className="space-y-3">
           {shuffledKeys.map((origKey, idx) => {
@@ -346,9 +312,9 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
             let bg = "rgba(0,0,0,0.03)";
             let border = "rgba(0,0,0,0.08)";
             let labelBg = "rgba(0,0,0,0.06)";
-            let labelColor = "rgba(0,0,0,0.5)";
-            if (isAnswerKey) { bg = "rgba(52,211,153,0.1)"; border = "rgba(52,211,153,0.3)"; labelBg = "rgba(52,211,153,0.2)"; labelColor = "#34d399"; }
-            else if (userPicked) { bg = "rgba(239,68,68,0.1)"; border = "rgba(239,68,68,0.3)"; labelBg = "rgba(239,68,68,0.2)"; labelColor = "#f87171"; }
+            let labelColor = "var(--text-muted)";
+            if (isAnswerKey) { bg = "rgba(52,211,153,0.1)"; border = "rgba(52,211,153,0.3)"; labelBg = "rgba(52,211,153,0.2)"; labelColor = "var(--success)"; }
+            else if (userPicked) { bg = "rgba(239,68,68,0.1)"; border = "rgba(239,68,68,0.3)"; labelBg = "rgba(239,68,68,0.2)"; labelColor = "var(--danger)"; }
             return (
               <div key={origKey} className="flex items-center gap-4 px-5 py-4 rounded-xl border" style={{ background: bg, borderColor: border }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0" style={{ background: labelBg, color: labelColor }}>{displayKey}</span>
@@ -369,7 +335,7 @@ function PreviousQuestionView({ record }: { record: AnsweredRecord }) {
         </div>
       )}
       {!opts && (
-        <div className="rounded-xl px-5 py-4 border border-orange-900/15 bg-orange-900/5">
+        <div className="rounded-xl px-5 py-4 border border-[var(--border)] bg-[var(--surface)]">
           <p className="text-xs font-bold uppercase tracking-wide text-stone-400 mb-2">Your answer</p>
           <p className="text-sm text-stone-900/80 leading-relaxed whitespace-pre-line">
             {record.selectedDisplayKey || "(no answer submitted)"}
@@ -390,9 +356,10 @@ function NavBtn({ id, disabled, onClick, children, className = "" }: { id: strin
     <button id={id} disabled={disabled} onClick={onClick}
       className={`px-5 py-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 border ${className}`}
       style={{
-        background: disabled ? "rgba(0,0,0,0.02)" : "rgba(0,0,0,0.06)",
-        borderColor: disabled ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.12)",
-        color: disabled ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.7)",
+        background: disabled ? "var(--surface-soft)" : "var(--surface)",
+        borderColor: "var(--border)",
+        color: disabled ? "var(--text-dim)" : "var(--text)",
+        opacity: disabled ? .55 : 1,
         cursor: disabled ? "not-allowed" : "pointer",
       }}>
       {children}
@@ -434,7 +401,10 @@ export default function QuizPage() {
     try {
       const status = await getSessionStatus(sessionId);
       setSessionStatus(status);
-      if (status.status === "ready") {
+      if (status.status === "completed") {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        router.replace(`/quiz/${sessionId}/results`);
+      } else if (status.status === "ready") {
         if (pollingRef.current) clearInterval(pollingRef.current);
         const q = await getCurrentQuestion(sessionId);
         setQuestion(q);
@@ -446,11 +416,24 @@ export default function QuizPage() {
     } catch {
       setError("Could not connect to server. Is the backend running?");
     }
-  }, [sessionId]);
+  }, [sessionId, router]);
+
+  const retrySetup = async () => {
+    setError("");
+    setSessionStatus((previous) => previous ? { ...previous, status: "processing", message: "Preparing your quiz again?" } : previous);
+    try {
+      await retryQuestionGeneration(sessionId);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = setInterval(pollStatus, 1000);
+      await pollStatus();
+    } catch (err) {
+      setSessionStatus((previous) => previous ? { ...previous, status: "error", message: err instanceof Error ? err.message : "Please try again." } : previous);
+    }
+  };
 
   useEffect(() => {
     pollStatus();
-    pollingRef.current = setInterval(pollStatus, 3000);
+    pollingRef.current = setInterval(pollStatus, 1000);
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [pollStatus]);
 
@@ -562,9 +545,9 @@ export default function QuizPage() {
     // common case, then keep trying patiently for a few minutes instead of
     // flashing a scary "session may still be processing" error while the
     // backend is still legitimately working.
-    const fastDelays = [800, 1500, 2500, 3500, 5000, 7000, 8000];
-    const steadyDelayMs = 5000;
-    const maxSteadyPolls = 30; // ~2.5 more minutes after the fast ramp
+    const fastDelays = [250, 500, 750, 1000, 1000, 1000, 1000];
+    const steadyDelayMs = 1000;
+    const maxSteadyPolls = 150; // Allow slower extraction without slowing readiness detection.
     let lastErr: unknown;
     for (let i = 0; i < fastDelays.length + maxSteadyPolls; i++) {
       try {
@@ -585,7 +568,7 @@ export default function QuizPage() {
 
 
   // ── Render: still loading ────────────────────────────────────
-  if (!question) return <ProcessingScreen status={sessionStatus} />;
+  if (!question) return <ProcessingScreen status={sessionStatus} onRetry={retrySetup} />;
 
   const isViewingHistory = viewIndex >= 0;
   const isLive = viewIndex === -1;
@@ -598,28 +581,16 @@ export default function QuizPage() {
   const displayedQNum = isViewingHistory ? history[viewIndex].question.q_index + 1 : question.q_index + 1;
 
   return (
-    <main className="min-h-screen py-8 px-4">
-      <div className="max-w-3xl mx-auto">
+    <main className="quiz-page min-h-screen">
+      <AppHeader><Link href="/upload" className="editorial-link text-sm">New quiz <ArrowRightIcon /></Link></AppHeader>
+      <div className="quiz-content max-w-3xl mx-auto">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="brand-mark w-7 h-7 rounded-lg">
-              <span className="font-bold text-xs">AQ</span>
-            </div>
-            <span className="font-bold text-base text-stone-900">AdaptiveIQ</span>
-          </Link>
-          <span className="text-sm text-stone-500">
-            {isViewingHistory
-              ? <span className="text-orange-700/60">Reviewing Q{displayedQNum}</span>
-              : `Question ${question.q_index + 1} of ${question.total_questions}`}
-          </span>
-        </div>
+        <div className="quiz-section-label"><span className="section-label">{isViewingHistory ? `Reviewing question ${displayedQNum}` : `Question ${question.q_index + 1} of ${question.total_questions}`}</span><span className="section-label">Your practice</span></div>
 
         {/* Progress bar */}
         <div className="w-full h-1.5 rounded-full bg-orange-900/10 mb-8 overflow-hidden">
           <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${progress}%`, background: "linear-gradient(90deg, #d8653b, #ad7b54)" }} />
+            style={{ width: `${progress}%`, background: "var(--accent)" }} />
         </div>
 
         {/* Review banner */}
@@ -641,18 +612,21 @@ export default function QuizPage() {
             <>
               {/* Meta */}
               <div className="flex items-center gap-3 mb-6 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-900/5 text-stone-500 border border-orange-900/15">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[var(--surface)] text-stone-500 border border-[var(--border)]">
                   <TagIcon className="w-3 h-3" /> {question.topic}
                 </span>
                 <BloomBadge level={question.bloom_level} />
                 <DifficultyBadge score={question.difficulty} />
-                {question.is_flagged && (
+                {question.grounding_status === "topic_model" && (
+                <span className="badge-cyan">Syllabus practice</span>
+              )}
+              {question.is_flagged && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/25">
                     <AlertTriangleIcon className="w-3 h-3" /> Low grounding
                   </span>
                 )}
               </div>
-              <p className={`text-stone-900 text-xl font-semibold leading-relaxed mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
+              <p className={`question-stem mb-8 ${question.q_type === "structured" || question.q_type === "essay" ? "whitespace-pre-line" : ""}`}>{question.question}</p>
 
               {/* MCQ options — shuffled display */}
               {question.q_type === "mcq" && question.options && (
@@ -668,13 +642,13 @@ export default function QuizPage() {
                         aria-pressed={selected}
                         className="w-full text-left flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-200"
                         style={{
-                          background: selected ? "rgba(216,101,59,0.12)" : "rgba(255,252,246,0.64)",
-                          borderColor: selected ? "rgba(216,101,59,0.55)" : "rgba(97,70,52,0.14)",
-                          transform: selected ? "translateX(2px)" : "translateX(0)",
+                          background: selected ? "var(--canvas)" : "var(--surface)",
+                          borderColor: selected ? "var(--text)" : "var(--border)",
+
                           cursor: (result && !isRetrying) ? "default" : "pointer",
                         }}>
                         <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
-                          style={{ background: selected ? "#d8653b" : "rgba(97,70,52,0.07)", color: selected ? "#fffaf3" : "rgba(53,45,39,0.62)" }}>
+                          style={{ background: selected ? "var(--primary)" : "rgba(97,70,52,0.07)", color: selected ? "var(--background)" : "var(--text-muted)" }}>
                           {displayKey}
                         </span>
                         <span className={`text-sm font-medium ${selected ? "text-stone-900" : "text-stone-900/70"}`}>{opt}</span>
@@ -704,7 +678,7 @@ export default function QuizPage() {
               {/* Essay / structured */}
               {(question.q_type === "structured" || question.q_type === "essay") && (
                 <textarea id="essay-answer" placeholder="Type your answer here..."
-                  className="w-full min-h-[160px] rounded-xl px-4 py-3 text-stone-900 placeholder-white/30 border border-orange-900/15 bg-orange-900/5 backdrop-blur-sm outline-none focus:border-orange-600/60 text-sm leading-relaxed resize-none transition-all duration-200"
+                  className="w-full min-h-[160px] rounded-xl px-4 py-3 text-stone-900 placeholder-white/30 border border-[var(--border)] bg-[var(--surface)]  outline-none focus:border-orange-600/60 text-sm leading-relaxed resize-none transition-all duration-200"
                   value={selectedDisplayKey ?? ""}
                   onChange={(e) => setSelectedDisplayKey(e.target.value)} disabled={!!result && !isRetrying} />
               )}
@@ -736,10 +710,11 @@ export default function QuizPage() {
           <div className="flex items-center gap-3 mb-4">
             <NavBtn id="btn-prev-question" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}><ArrowLeftIcon /> Prev</NavBtn>
             <button id="btn-submit-answer" onClick={handleSubmit} disabled={!selectedDisplayKey || submitting}
-              className="flex-1 py-4 rounded-xl font-bold text-white text-base transition-all duration-200"
+              className="flex-1 py-4 rounded-xl font-bold text-[var(--background)] text-base transition-all duration-200"
               style={{
-                background: !selectedDisplayKey || submitting ? "rgba(0,0,0,0.06)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
-                boxShadow: selectedDisplayKey && !submitting ? "0 4px 20px rgba(224,108,79,0.4)" : "none",
+                background: !selectedDisplayKey || submitting ? "var(--canvas)" : "var(--primary)",
+                color: !selectedDisplayKey || submitting ? "var(--text-dim)" : "var(--background)",
+                boxShadow: "none",
                 cursor: !selectedDisplayKey || submitting ? "not-allowed" : "pointer",
               }}>
               {submitting ? (
@@ -765,12 +740,12 @@ export default function QuizPage() {
           <div className="flex items-center gap-3 mb-4">
             <NavBtn id="btn-prev-after" disabled={history.length === 0} onClick={() => setViewIndex(history.length - 1)}><ArrowLeftIcon /> Prev</NavBtn>
             <button id="btn-next-question" onClick={handleNextQuestion} disabled={waitingForNext}
-              className="flex-1 py-4 rounded-xl font-bold text-white text-base transition-all duration-200"
+              className="flex-1 py-4 rounded-xl font-bold text-[var(--background)] text-base transition-all duration-200"
               style={{
                 background: waitingForNext
                   ? "rgba(0,0,0,0.15)"
-                  : result?.quiz_complete ? "linear-gradient(135deg, #059669, #0891b2)" : "linear-gradient(135deg, #e06c4f, #cc5234)",
-                boxShadow: waitingForNext ? "none" : `0 4px 20px ${result?.quiz_complete ? "rgba(5,150,105,0.3)" : "rgba(224,108,79,0.4)"}`,
+                  : result?.quiz_complete ? "var(--primary)" : "var(--primary)",
+                boxShadow: "none",
                 cursor: waitingForNext ? "not-allowed" : "pointer",
               }}>
               {waitingForNext ? (
@@ -798,9 +773,9 @@ export default function QuizPage() {
               {[1, 2, 3].map((n) => (
                 <div key={n} className="w-1.5 h-1.5 rounded-full" style={{
                   background:
-                    question.difficulty < 0.33 && n === 1 ? "#34d399"
-                      : question.difficulty >= 0.33 && question.difficulty < 0.66 && n <= 2 ? "#fbbf24"
-                        : question.difficulty >= 0.66 && n <= 3 ? "#f87171"
+                    question.difficulty < 0.33 && n === 1 ? "var(--success)"
+                      : question.difficulty >= 0.33 && question.difficulty < 0.66 && n <= 2 ? "var(--warning)"
+                        : question.difficulty >= 0.66 && n <= 3 ? "var(--danger)"
                           : "rgba(0,0,0,0.1)",
                 }} />
               ))}

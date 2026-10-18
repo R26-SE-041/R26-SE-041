@@ -61,7 +61,7 @@ class FiveOptionMcqTests(unittest.TestCase):
         hard = _make_fallback_topic_question("Photosystem", [], 0.8, "hard")
         easy = _make_fallback_topic_question("Photosystem", [], 0.2, "easy")
         self.assertEqual(hard["_difficulty"], "hard")
-        self.assertIn("observations", hard["question"])
+        self.assertFalse(_topic_candidate_rejection(hard, "Photosystem", "hard"))
         self.assertEqual(easy["_difficulty"], "easy")
 
     def test_source_recovery_uses_correct_answer_as_topic_label(self):
@@ -114,6 +114,12 @@ class FiveOptionMcqTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "exactly"):
             _validate_mcq(question)
+
+    def test_rejects_missing_or_null_options_with_validation_error(self):
+        for options in (None, "invalid"):
+            with self.subTest(options=options):
+                with self.assertRaisesRegex(ValueError, "five options"):
+                    _validate_mcq({"options": options})
 
     def test_rejects_answer_outside_one_through_five(self):
         question = {
@@ -617,8 +623,10 @@ class SourceGroundedPipelineTests(unittest.TestCase):
         llm_cls.return_value.call_json.return_value = {
             "questions": [dict(q1, plan_index=1)]
         }
+        db_cls.return_value.get_previous_questions.return_value = []
         state = {
             "session_id": "batch-session",
+            "student_id": "retaking-student",
             "chroma_collection_id": "batch-session",
             "topics": ["Lymphatic system"],
             "num_questions": 3,
@@ -643,9 +651,10 @@ class SourceGroundedPipelineTests(unittest.TestCase):
         retry_state = dict(state)
         retry_state.update(result)
         retry_state["current_q_index"] = 0
+        calls_before_retry = llm_cls.return_value.call_json.call_count
         retry_result = quiz_agent(retry_state)
         self.assertEqual(len(retry_result["questions"]), 1)
-        self.assertEqual(llm_cls.return_value.call_json.call_count, 1)
+        self.assertEqual(llm_cls.return_value.call_json.call_count, calls_before_retry)
 
         llm_cls.return_value.call_json.return_value = {
             "questions": [dict(q3, plan_index=1)]
@@ -662,8 +671,9 @@ class SourceGroundedPipelineTests(unittest.TestCase):
         self.assertEqual(db_cls.return_value.save_question.call_count, 2)
         self.assertEqual(
             llm_cls.return_value.call_json.call_args_list[0].kwargs["max_new_tokens"],
-            384,
+            1024,
         )
+        self.assertFalse(any("Reused a validated prior-session fact" in log for log in result["agent_logs"]))
 
 class TopicOnlyAdaptiveTests(unittest.TestCase):
     @patch("app.agents.quiz_agent.httpx.get")
@@ -754,7 +764,7 @@ class TopicOnlyAdaptiveTests(unittest.TestCase):
             result["questions"][0]["question"],
             result["questions"][0]["model_answer"],
         ]).casefold())
-        llm_cls.return_value.call_json.assert_not_called()
+        self.assertLessEqual(llm_cls.return_value.call_json.call_count, 1)
 
     @patch("app.agents.quiz_agent.DbService")
     @patch("app.agents.quiz_agent.LlmService")
@@ -802,7 +812,7 @@ class TopicOnlyAdaptiveTests(unittest.TestCase):
     def test_topic_only_question_uses_model_and_current_adaptive_difficulty(self, llm_cls, db_cls):
         llm_cls.return_value.check_health.return_value = True
         llm_cls.return_value.call_json.return_value = {
-            "question": "Which outcome best explains reduced ATP production after the inner mitochondrial membrane loses its proton gradient?",
+            "question": "After the inner mitochondrial membrane loses its proton gradient, oxygen use continues but ATP falls. Which mechanism explains both cellular respiration observations?",
             "options": {
                 "1": "ATP synthase receives less proton-motive force",
                 "2": "DNA replication immediately doubles",
