@@ -4,6 +4,7 @@ import { ArrowRight, X } from "lucide-react-native";
 import { useAccount } from "./AuthProvider";
 import { signIn, signOut, signUp } from "@/lib/auth";
 import { fonts } from "@/theme";
+import ToolkitBrand from "./ToolkitBrand";
 import { loadAccountActivity, type AccountEvent } from "@/lib/history";
 
 export default function AccountModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -51,6 +52,7 @@ export default function AccountModal({ visible, onClose }: { visible: boolean; o
       <View accessibilityViewIsModal style={styles.card}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close account dialog" onPress={onClose} style={styles.close}><X size={22} color="#141413" /></Pressable>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+          <View style={{ alignItems: "flex-start", paddingBottom: 28 }}><ToolkitBrand /></View>
           <Text style={styles.overline}>YOUR SINHALA OCR ACCOUNT</Text>
           <Text accessibilityRole="header" style={styles.title}>{account.user ? "Your account." : mode === "signin" ? "Welcome back." : "A place for your words."}</Text>
           {account.user ? <>

@@ -26,7 +26,7 @@ export default function RootLayout({
       <body className="antialiased min-h-screen">
         <div className="paper-background fixed inset-0 pointer-events-none z-0" aria-hidden="true" />
         <ThemeToggle />
-        <div className="relative z-10"><AuthProvider><ToolkitNavigation componentName="AdaptiveIQ" />{children}</AuthProvider></div>
+        <div className="relative z-10"><ToolkitNavigation componentName="AdaptiveIQ" /><AuthProvider>{children}</AuthProvider></div>
       </body>
     </html>
   );
