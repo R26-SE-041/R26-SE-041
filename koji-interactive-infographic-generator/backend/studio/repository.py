@@ -243,7 +243,9 @@ class Repository:
     def list_chats(self,user_id,before=None,before_id="",query="",mode="",since=None,trashed=False,category=""):
         pattern="%"+query+"%"
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""select c.*, latest.id as latest_generation_id, latest.metadata as generation_metadata,
+            cur.execute("""select c.*, latest.id as latest_generation_id,
+                jsonb_build_object('sketchMetadata',latest.metadata->'sketchMetadata',
+                    'generationMetadata',latest.metadata->'generationMetadata') as generation_metadata,
                 latest.metadata->'anatomyAnnotations' as annotations,
                 coalesce(latest.thumbnail_path,latest.image_path) as preview_path,
                 coalesce(latest.metadata->>'mode',
