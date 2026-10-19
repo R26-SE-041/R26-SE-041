@@ -65,6 +65,18 @@ class RepositoryIntegrationTests(unittest.TestCase):
         self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"My viva drawing")
         self.assertEqual(self.repo.list_chats(self.other,query="eye"),[])
 
+    def test_image_subject_titles_replace_automatic_prompts_and_keep_manual_names(self):
+        chat_id, generation_id = str(uuid4()), str(uuid4())
+        prompt = "Please generate an image of a red fox in a forest"
+        self.repo.append_chat_event(self.owner,chat_id,"image-prompt","prompt",{"mode":"general","prompt":prompt})
+        self.repo.save_history(self.owner,generation_id,{"chatId":chat_id,"mode":"general","prompt":prompt},"test/image.png")
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"A red fox in a forest")
+        self.repo.append_chat_event(self.owner,chat_id,"image-result","image",{"prompt":prompt,"title":"A red fox in a forest"},generation_id)
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"A red fox in a forest")
+        self.repo.rename_chat(self.owner,chat_id,"My forest demo")
+        self.repo.append_chat_event(self.owner,chat_id,"next-result","image",{"prompt":prompt,"title":"A red fox"},generation_id)
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"My forest demo")
+
     def test_output_ratings_save_change_and_remain_private_for_every_agent(self):
         from shared.db import _FEEDBACK_AGENTS
         for agent in _FEEDBACK_AGENTS:

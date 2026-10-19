@@ -32,6 +32,7 @@ def test_average_output_is_accepted_without_spending_on_another_image():
     assert count == 1
     assert metadata["evaluationRetries"] == 0
     assert metadata["chatId"] == "original-chat"
+    assert metadata["title"] == "Heart"
     assert image == "image-1"
 
 

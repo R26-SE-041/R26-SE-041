@@ -1,4 +1,18 @@
-from studio.titles import display_chat_title, sketch_title
+from studio.titles import display_chat_title, generation_title, prompt_title, sketch_title
+
+
+def test_image_titles_use_subject_anatomy_or_a_short_prompt_without_model_calls():
+    assert generation_title({"mode":"general","prompt":"Please generate an image of a red fox in a forest"}) == "A red fox in a forest"
+    assert generation_title({"mode":"general","generationMetadata":{"subject":"DNA molecule"}}) == "DNA molecule"
+    assert generation_title({"mode":"anatomy","prompt":"Create a detailed diagram","anatomy":{"organ":"human_heart"}}) == "Human heart"
+    assert len(prompt_title("Generate a detailed image of " + "a beautiful forest " * 20)) <= 64
+
+
+def test_existing_image_defaults_get_titles_and_custom_names_are_preserved():
+    metadata = {"prompt":"Please generate an image of a red fox in a forest"}
+    for title in ["New conversation", metadata["prompt"]]:
+        assert display_chat_title({"mode":"general","title":title,"generation_metadata":metadata})["title"] == "A red fox in a forest"
+    assert display_chat_title({"mode":"general","title":"My forest demo","generation_metadata":metadata})["title"] == "My forest demo"
 
 
 def test_subject_title_uses_existing_recognition_and_preserves_acronyms():

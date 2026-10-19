@@ -215,8 +215,8 @@ class Pipeline:
         if job["kind"] == "sketch":
             record.update(sketchStrokes=p["sketch"]["strokes"],sketchMetadata=metadata,
                 sketchStrength=p["sketch"]["control_strength"])
-            from studio.titles import sketch_title
-            record["title"] = sketch_title(metadata)
+        from studio.titles import generation_title
+        record["title"] = generation_title(record)
         if not self.repo.heartbeat(job):
             raise RuntimeError("Worker lease lost")
         self.repo.save_history(str(job["user_id"]),generation_id,record,image_path,thumbnail_path=thumbnail_path)

@@ -222,9 +222,9 @@ class Repository:
         title = str(data.get("title") or data.get("prompt") or data.get("question") or "New conversation").strip()[:80] or "New conversation"
         cur.execute("""insert into koji_chats(user_id,id,title) values(%s,%s,%s)
             on conflict(user_id,id) do update set updated_at=now(),
-                title=case when koji_chats.title='New conversation' and %s
+                title=case when (koji_chats.title='New conversation' or koji_chats.title=%s) and %s
                     then excluded.title else koji_chats.title end
-            where koji_chats.deleted_at is null""", (user_id,chat_id,title,kind=="image" and bool(data.get("title"))))
+            where koji_chats.deleted_at is null""", (user_id,chat_id,title,str(data.get("prompt") or "").strip()[:80],kind=="image" and bool(data.get("title"))))
         if cur.rowcount != 1:
             raise ValueError("Restore this creation from the Recycle Bin before continuing")
         cur.execute("""insert into koji_chat_events(user_id,id,chat_id,kind,generation_id,data,created_at)
@@ -245,6 +245,8 @@ class Repository:
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""select c.*, latest.id as latest_generation_id,
                 jsonb_build_object('sketchMetadata',latest.metadata->'sketchMetadata',
+                    'prompt',latest.metadata->>'prompt','enhancedPrompt',latest.metadata->>'enhancedPrompt',
+                    'anatomy',latest.metadata->'anatomy',
                     'generationMetadata',latest.metadata->'generationMetadata') as generation_metadata,
                 latest.metadata->'anatomyAnnotations' as annotations,
                 coalesce(latest.thumbnail_path,latest.image_path) as preview_path,
