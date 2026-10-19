@@ -57,6 +57,16 @@ class JobContractTests(unittest.TestCase):
         self.assertEqual(required_services({"kind":"sketch"}),{"sketch"})
 
 class OwnershipApiTests(unittest.TestCase):
+    def test_unauthenticated_requests_cannot_clear_feedback(self):
+        app.dependency_overrides.clear()
+        try:
+            with patch("studio.main.repo") as repo:
+                response = self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output"})
+                self.assertEqual(response.status_code,401)
+                repo.clear_feedback.assert_not_called()
+        finally:
+            app.dependency_overrides[require_user] = lambda: USER_B
+
     def test_feedback_deselection_uses_authenticated_owner_and_only_selected_output(self):
         with patch("studio.main.repo") as repo:
             repo.clear_feedback.return_value = {"status":"removed"}

@@ -9,6 +9,7 @@ import { useModel } from "./modelResources.web";
 import { ModelGalleryProps, useSavedModels } from "./useSavedModels";
 import ModelLighting from "./ModelLighting";
 import { configureModelRenderer } from "./configureModelRenderer";
+import HistoryCardMenu from "./HistoryCardMenu";
 
 function ViewportUpdates({ active }: { active: boolean }) {
   const invalidate = useThree(state => state.invalidate);
@@ -41,7 +42,6 @@ function ModelCard({ model, index, props }: { model: SavedModel; index: number; 
     return () => observer.disconnect();
   }, []);
   const { scene, error, retry } = useModel(model, !props.trashed && (index < 6 || (props.active && nearby)));
-  const button = { minHeight: 40, paddingHorizontal: 12, justifyContent: "center" as const, borderRadius: 8, backgroundColor: colors.surfaceSoft };
   return <div ref={track} style={{ border: `1px solid ${colors.border}`, background: colors.surface, borderRadius: 12, padding: 12, minWidth: 0 }}>
     {scene ? <ModelView data-drag-surface="true" id={`model-preview-${index}`} visible={props.active && nearby} index={index + 1} style={{ height: 260, width: "100%", borderRadius: 8, touchAction: "none", userSelect: "none", cursor: "grab" }}>
       <PerspectiveCamera makeDefault position={[0, .7, 4]} fov={45} />
@@ -52,13 +52,12 @@ function ModelCard({ model, index, props }: { model: SavedModel; index: number; 
       {error ? <><Text accessibilityRole="alert" style={{ color: colors.danger, textAlign: "center" }}>{error}</Text><Pressable accessibilityRole="button" onPress={retry}><Text style={{ color: colors.text }}>Retry display</Text></Pressable></> : <><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>{props.trashed ? "Model preserved in Recycle Bin" : "Preparing saved model…"}</Text></>}
     </View>}
     <View style={{ paddingTop: 12, gap: 10 }}>
-      <Text numberOfLines={2} style={{ color: colors.text, fontSize: 17, fontWeight: "600", minHeight: 44 }}>{model.title}</Text>
-      <Text style={{ color: colors.textMuted, fontSize: 12 }}>Drag or touch to rotate · Pinch to zoom</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {!props.trashed && <Pressable accessibilityRole="button" style={button} onPress={() => props.onOpen(model)}><Text style={{ color: colors.text }}>Open creation</Text></Pressable>}
-        {props.trashed ? <Pressable accessibilityRole="button" style={button} onPress={() => props.onRestore(model)}><Text style={{ color: colors.text }}>Restore</Text></Pressable> : <Pressable accessibilityRole="button" accessibilityLabel={`Rename ${model.title}`} style={button} onPress={() => props.onRename(model)}><Text style={{ color: colors.text }}>Rename</Text></Pressable>}
-        <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${model.title}`} style={button} onPress={() => props.onDelete(model)}><Text style={{ color: colors.danger }}>{props.trashed ? "Delete permanently" : "Delete"}</Text></Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Text numberOfLines={2} style={{ color: colors.text, fontSize: 17, fontWeight: "600", minHeight: 44, flex: 1 }}>{model.title}</Text>
+        <HistoryCardMenu title={model.title} disabled={props.busy} trashed={props.trashed} onOpen={() => props.onOpen(model)}
+          onContinue={props.onContinue ? () => props.onContinue!(model) : undefined} onRename={() => props.onRename(model)} onDelete={() => props.onDelete(model)} onRestore={() => props.onRestore(model)} />
       </View>
+      <Text style={{ color: colors.textMuted, fontSize: 12 }}>Drag or touch to rotate · Pinch to zoom</Text>
     </View>
   </div>;
 }

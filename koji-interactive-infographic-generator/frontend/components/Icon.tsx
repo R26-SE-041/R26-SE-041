@@ -13,6 +13,7 @@ export type IconName =
   | "close"
   | "log-out"
   | "message-plus"
+  | "more"
   | "pencil"
   | "eraser"
   | "undo"
@@ -66,6 +67,7 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "close" && <Path {...common} d="m6 6 12 12M18 6 6 18" />}
       {name === "log-out" && <><Path {...common} d="M9 4H4v16h5M9 12h12m-4-4 4 4-4 4" /></>}
       {name === "message-plus" && <><Path {...common} d="M21 11v6a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h8M19 2v6m-3-3h6" /></>}
+      {name === "more" && <>{[5, 12, 19].map(cx => <Circle key={cx} cx={cx} cy={12} r={1.5} fill={color} />)}</>}
       {name === "pencil" && <><Path {...common} d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>}
       {name === "eraser" && <><Path {...common} d="m14 3 7 7-10 10H6l-4-4L14 3Zm-7 8 7 7M11 20h11" /></>}
       {name === "undo" && <><Path {...common} d="M3 10h11a6 6 0 0 1 0 12" /><Polyline {...common} points="7 6 3 10 7 14" /></>}

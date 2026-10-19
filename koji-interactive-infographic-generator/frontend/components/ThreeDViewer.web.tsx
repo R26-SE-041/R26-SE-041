@@ -34,7 +34,7 @@ export default function ThreeDViewer(props: ModelSource & { sizeKb?: number; act
         <Pressable accessibilityRole="button" onPress={download}><Text style={{ color: colors.text }}>Download GLB</Text></Pressable>
       </View>
     </View>
-    <div data-drag-surface="true" style={{ height: 480, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas, touchAction: "none", userSelect: "none" }}>
+    <div data-drag-surface="true" style={{ display: "flex", flexDirection: "column", height: 480, borderRadius: 8, overflow: "hidden", backgroundColor: colors.canvas, touchAction: "none", userSelect: "none" }}>
       {error ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 }}><Text accessibilityRole="alert" style={{ color: colors.danger, textAlign: "center" }}>{error}</Text><Pressable accessibilityRole="button" onPress={retry}><Text style={{ color: colors.text }}>Retry model display</Text></Pressable></View>
         : scene ? <Canvas frameloop={props.active === false ? "never" : rotate ? "always" : "demand"} dpr={[1, 1.5]} camera={{ position: [0, .8, 4], fov: 45 }} onCreated={({ gl }) => configureModelRenderer(gl)}>
           <ModelLighting /><Model scene={scene} rotate={rotate} /><OrbitControls enablePan={false} minDistance={1.5} maxDistance={8} />
