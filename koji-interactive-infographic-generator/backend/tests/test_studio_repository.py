@@ -51,6 +51,20 @@ class RepositoryIntegrationTests(unittest.TestCase):
     def payload(self,**changes):
         return {"request_id":str(uuid4()),"kind":"generate","prompt":"heart","mode":"general",**changes}
 
+    def test_sketch_subject_names_legacy_history_and_preserves_custom_renames(self):
+        chat_id, generation_id = str(uuid4()), str(uuid4())
+        self.repo.append_chat_event(self.owner,chat_id,"sketch-prompt","prompt",{"mode":"sketch"})
+        self.repo.save_history(self.owner,generation_id,
+            {"chatId":chat_id,"mode":"sketch","sketchMetadata":{"subject":"human eye"}},"test/image.png")
+        self.assertEqual(self.repo.list_chats(self.owner,query="eye")[0]["title"],"Human eye")
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"New conversation")
+        self.repo.append_chat_event(self.owner,chat_id,"sketch-image","image",{"title":"Human eye"},generation_id)
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"Human eye")
+        self.repo.rename_chat(self.owner,chat_id,"My viva drawing")
+        self.repo.append_chat_event(self.owner,chat_id,"next-image","image",{"title":"Another subject"},generation_id)
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"My viva drawing")
+        self.assertEqual(self.repo.list_chats(self.other,query="eye"),[])
+
     def test_output_ratings_save_change_and_remain_private_for_every_agent(self):
         from shared.db import _FEEDBACK_AGENTS
         for agent in _FEEDBACK_AGENTS:

@@ -215,11 +215,13 @@ class Pipeline:
         if job["kind"] == "sketch":
             record.update(sketchStrokes=p["sketch"]["strokes"],sketchMetadata=metadata,
                 sketchStrength=p["sketch"]["control_strength"])
+            from studio.titles import sketch_title
+            record["title"] = sketch_title(metadata)
         if not self.repo.heartbeat(job):
             raise RuntimeError("Worker lease lost")
         self.repo.save_history(str(job["user_id"]),generation_id,record,image_path,thumbnail_path=thumbnail_path)
         self.repo.append_chat_event(str(job["user_id"]),record["chatId"],generation_id+":image","image",
-            {"mode":p["mode"],"prompt":record["prompt"],"enhancedPrompt":final_prompt,
+            {"mode":p["mode"],"title":record.get("title"),"prompt":record["prompt"],"enhancedPrompt":final_prompt,
              "jobId":generation_id,"generationMetadata":metadata},generation_id)
         self.repo.update_job(job,generation_id=generation_id)
         label_job_id = None

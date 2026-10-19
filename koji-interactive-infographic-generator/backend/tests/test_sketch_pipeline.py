@@ -22,6 +22,8 @@ def test_cloud_sketch_preserves_quality_and_strength_without_anatomy_validation(
     assert record["enhancedPayload"]["route"] == "generic"
     assert record["sketchStrength"] == .85
     assert record["sketchMetadata"]["control_strength"] == .68
+    assert record["title"] == "Human eye"
+    assert repo.append_chat_event.call_args.args[4]["title"] == "Human eye"
     assert record["evaluationRetries"] == 1
     assert record["evaluationWarning"] == "Inspect proportions"
     assert storage.upload.call_args.args[1] == "coloured-eye"
