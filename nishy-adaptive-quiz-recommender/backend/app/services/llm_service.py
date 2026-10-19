@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import time
+from collections import OrderedDict
 from threading import Lock
 import httpx
 from dotenv import load_dotenv
@@ -23,10 +24,24 @@ MODAL_ENDPOINT_URL = os.getenv(
 MODAL_API_KEY = os.getenv("MODAL_API_KEY", "").strip()
 MODAL_REQUEST_TIMEOUT_SEC = float(os.getenv("MODAL_REQUEST_TIMEOUT_SEC", "45"))
 MAX_NEW_TOKENS = int(os.getenv("MODAL_MAX_NEW_TOKENS", "180"))
+MODAL_HEALTH_CACHE_SEC = float(os.getenv("MODAL_HEALTH_CACHE_SEC", "30"))
+MODAL_FAILURE_COOLDOWN_SEC = float(os.getenv("MODAL_FAILURE_COOLDOWN_SEC", "30"))
+EMBEDDING_CACHE_SIZE = max(0, int(os.getenv("EMBEDDING_CACHE_SIZE", "2048")))
 
 
 class QwenModalService:
     """HTTP client for the Modal-hosted Qwen + LoRA inference service."""
+
+    # Process-local, endpoint-specific state. A web health response establishes
+    # reachability only; inference failures must override that positive result.
+    _endpoint_status: dict[str, tuple[float, bool]] = {}
+    _status_lock = Lock()
+
+    @classmethod
+    def _remember_status(cls, healthy: bool) -> None:
+        ttl = MODAL_HEALTH_CACHE_SEC if healthy else MODAL_FAILURE_COOLDOWN_SEC
+        with cls._status_lock:
+            cls._endpoint_status[MODAL_ENDPOINT_URL] = (time.monotonic() + ttl, healthy)
 
     def __init__(self, generation_budget_sec: float | None = None):
         # Quiz retries share one deadline; other callers retain their timeout.
@@ -56,7 +71,11 @@ class QwenModalService:
         return MODAL_ENDPOINT_URL
 
     def check_health(self) -> bool:
-        """Return whether the configured Modal generation endpoint is reachable."""
+        """Check API reachability, respecting a short inference-failure cooldown."""
+        with self._status_lock:
+            cached = self._endpoint_status.get(MODAL_ENDPOINT_URL)
+            if cached is not None and time.monotonic() < cached[0]:
+                return cached[1]
         try:
             endpoint = self._require_endpoint()
             health_endpoint = (
@@ -71,8 +90,11 @@ class QwenModalService:
             )
             response.raise_for_status()
             payload = response.json()
-            return payload.get("status") == "ok" or bool(str(payload.get("response", "")).strip())
+            healthy = payload.get("status") == "ok" or bool(str(payload.get("response", "")).strip())
+            self._remember_status(healthy)
+            return healthy
         except Exception as exc:
+            self._remember_status(False)
             logger.error("[ModalHealthCheck] %s", exc)
             return False
 
@@ -131,22 +153,27 @@ class QwenModalService:
             response.raise_for_status()
             payload = response.json()
         except httpx.TimeoutException as exc:
+            self._remember_status(False)
             raise RuntimeError(
                 f"Modal inference timed out after {time.time() - start:.0f}s. "
                 "Check the Modal app logs and container status."
             ) from exc
         except httpx.HTTPStatusError as exc:
+            self._remember_status(False)
             detail = exc.response.text[:500]
             raise RuntimeError(
                 f"Modal inference returned HTTP {exc.response.status_code}: {detail}"
             ) from exc
         except (httpx.HTTPError, ValueError) as exc:
+            self._remember_status(False)
             raise RuntimeError(f"Could not call Modal inference endpoint: {exc}") from exc
 
         text = payload.get("response")
         if not isinstance(text, str) or not text.strip():
+            self._remember_status(False)
             raise RuntimeError("Modal inference returned an empty or invalid 'response' value")
 
+        self._remember_status(True)
         logger.info(
             "Modal inference completed in %.1fs | len=%d",
             time.time() - start,
@@ -226,6 +253,8 @@ class EmbeddingService:
 
     _models: dict = {}
     _models_lock = Lock()
+    _vectors: OrderedDict = OrderedDict()
+    _vectors_lock = Lock()
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self._model = None
@@ -245,21 +274,41 @@ class EmbeddingService:
                 self._model = self._models[self._model_name]
 
     def get_embedding(self, text: str) -> list[float]:
-        self._load()
-        return self._model.encode(text, normalize_embeddings=True).tolist()
+        return self.get_batch_embeddings([text])[0]
 
     def get_query_embedding(self, text: str) -> list[float]:
         return self.get_embedding(text)
 
     def get_batch_embeddings(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        # Include the model in the key; copy vectors on return so callers cannot
+        # mutate a cached value. Cache only embeddings, never generated quizzes.
+        found = {}
+        with self._vectors_lock:
+            for text in dict.fromkeys(texts):
+                key = (self._model_name, text)
+                if key in self._vectors:
+                    found[text] = self._vectors[key]
+                    self._vectors.move_to_end(key)
+        missing = [text for text in dict.fromkeys(texts) if text not in found]
+        if not missing:
+            return [list(found[text]) for text in texts]
         self._load()
         vecs = self._model.encode(
-            texts,
+            missing,
             normalize_embeddings=True,
             batch_size=32,
             show_progress_bar=False,
         )
-        return [v.tolist() for v in vecs]
+        with self._vectors_lock:
+            for text, vector in zip(missing, vecs):
+                value = tuple(vector.tolist())
+                found[text] = value
+                self._vectors[(self._model_name, text)] = value
+            while len(self._vectors) > EMBEDDING_CACHE_SIZE:
+                self._vectors.popitem(last=False)
+        return [list(found[text]) for text in texts]
 
 
 LlmService = QwenModalService

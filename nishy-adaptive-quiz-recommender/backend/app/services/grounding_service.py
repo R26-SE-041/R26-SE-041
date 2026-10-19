@@ -55,20 +55,16 @@ class GroundingService:
         if not source_chunks or not generated_text.strip():
             return 0.0
 
-        # Embed generated text
-        gen_embedding = np.array(self.embed.get_query_embedding(generated_text))
-
-        # Embed source chunks and compute similarities
-        similarities = []
-        for chunk in source_chunks:
-            if not chunk.strip():
-                continue
-            chunk_embedding = np.array(self.embed.get_embedding(chunk))
-            sim = self._cosine_similarity(gen_embedding, chunk_embedding)
-            similarities.append(sim)
-
-        if not similarities:
+        sources = [chunk for chunk in source_chunks if chunk.strip()]
+        if not sources:
             return 0.0
+        # One batch for cache misses instead of one model invocation per chunk.
+        vectors = self.embed.get_batch_embeddings([generated_text, *sources])
+        gen_embedding = np.array(vectors[0])
+        similarities = [
+            self._cosine_similarity(gen_embedding, np.array(vector))
+            for vector in vectors[1:]
+        ]
 
         max_sim = float(max(similarities))
         logger.debug(f"Grounding score: {max_sim:.3f} (threshold={self.threshold})")

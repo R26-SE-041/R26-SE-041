@@ -1,5 +1,29 @@
 # Nishy adaptive quiz deployment
 
+## Latency update status — 19 October 2026
+
+The existing Modal app `nishy-qwen-adaptive-quiz` was redeployed successfully.
+Its web `/health` returned HTTP 200 with the expected base model and adapter.
+The release retains A10G, permits at most one GPU container, sets minimum
+containers to zero, reduces the idle window to 120 seconds, and adds complete-JSON
+stopping and a generation time limit. No GPU inference/warm-up was performed.
+
+The EC2 backend latency changes are **pending execution in Session Manager**;
+this workstation has no configured AWS CLI/SSH access. Run the full contents of
+`artifacts/latency-update-20261019.sh` in the existing instance's Session Manager
+terminal. The generated script includes only five source files, checks its payload
+checksum, backs up existing code and backend.env, sets the runtime question budget
+to 15 seconds, rebuilds/replaces only the API container, and checks local HTTP
+health/readiness. Failure triggers restoration of the previous source, runtime
+environment and Docker image. It does not modify databases, volumes, Caddy, or
+the SSM parameter. Preserve the same non-secret runtime overrides in
+`/nishy-quiz/backend-env` before any later refresh from that parameter.
+
+Local verification: 128 backend tests passed; packaged source matches the tested
+files, embedded Python parses, and the shell script passes `bash -n`. The backend
+release is not complete until the script reports `BACKEND LATENCY UPDATE SUCCESSFUL`
+and the running application's behavior is verified.
+
 Deployment date: 18 October 2026.
 
 | Resource | Location |

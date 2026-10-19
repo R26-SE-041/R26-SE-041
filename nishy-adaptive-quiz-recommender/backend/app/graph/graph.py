@@ -5,6 +5,8 @@ Builds and compiles the multi-agent assessment workflow.
 import logging
 import os
 import sqlite3
+import time
+from functools import wraps
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -21,6 +23,19 @@ from app.agents.error_handler import error_handler_node
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_DB_PATH = os.getenv("CHECKPOINT_DB_PATH", "./db/checkpoints.db")
+
+
+def _timed_setup_node(node):
+    @wraps(node)
+    def run(state):
+        started = time.perf_counter()
+        result = node(state)
+        elapsed = time.perf_counter() - started
+        entry = f"[Timing] {node.__name__}={elapsed:.3f}s"
+        logger.info("%s | session=%s", entry, state.get("session_id"))
+        result["agent_logs"] = list(result.get("agent_logs", state.get("agent_logs", []))) + [entry]
+        return result
+    return run
 
 
 def route_after_ingestion(state: AssessmentState) -> str:
@@ -91,8 +106,8 @@ def build_graph() -> any:
     builder = StateGraph(AssessmentState)
 
     # ── Register all agent nodes ───────────────────
-    builder.add_node("ingestion",       ingestion_agent)
-    builder.add_node("knowledge",       knowledge_agent)
+    builder.add_node("ingestion",       _timed_setup_node(ingestion_agent))
+    builder.add_node("knowledge",       _timed_setup_node(knowledge_agent))
     builder.add_node("quiz_generate",   quiz_agent)
     builder.add_node("evaluation",      evaluation_agent)
     builder.add_node("adaptive",        adaptive_agent)

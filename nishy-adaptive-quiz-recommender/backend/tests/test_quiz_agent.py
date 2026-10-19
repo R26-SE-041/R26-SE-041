@@ -760,10 +760,12 @@ class TopicOnlyAdaptiveTests(unittest.TestCase):
         self.assertIsNone(result.get("error"))
         self.assertEqual(result["questions"][0]["topic"], "Lipids")
         self.assertEqual(result["questions"][0]["difficulty"], 0.8)
-        self.assertIn("lipid", " ".join([
+        # The curated pool also tests fatty-acid tails and cholesterol without
+        # necessarily spelling out "lipid" in the randomly selected stem.
+        self.assertRegex(" ".join([
             result["questions"][0]["question"],
             result["questions"][0]["model_answer"],
-        ]).casefold())
+        ]).casefold(), r"\b(?:lipid\w*|fatty[- ]acid\w*|cholesterol|triglyceride\w*)\b")
         self.assertLessEqual(llm_cls.return_value.call_json.call_count, 1)
 
     @patch("app.agents.quiz_agent.DbService")

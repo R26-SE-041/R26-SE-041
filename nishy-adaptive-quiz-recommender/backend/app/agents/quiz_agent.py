@@ -7,6 +7,7 @@ import os
 import random
 import re
 import uuid
+import time
 from functools import lru_cache
 from difflib import SequenceMatcher
 from typing import List, Optional, Tuple
@@ -1310,6 +1311,14 @@ def _source_fallback_open_ended(
     }
 
 
+def _session_source_chunks(state: AssessmentState, rag: RagService, limit: int) -> List[dict]:
+    """Reuse ingestion's session snapshot; old checkpoints can still read Chroma."""
+    chunks = state.get("raw_chunks")
+    if chunks:
+        return chunks[:limit]
+    return rag.get_source_chunks(state["chroma_collection_id"], limit=limit)
+
+
 def _sequential_quiz_agent(state: AssessmentState) -> dict:
     """Retrieve before generation, validate against that retrieval, and fail closed."""
     logger.info("[QuizAgent] Starting | session=%s | q_index=%s", state["session_id"], state.get("current_q_index", 0))
@@ -1366,7 +1375,7 @@ def _sequential_quiz_agent(state: AssessmentState) -> dict:
     service_error = ""
     queries = _retrieval_queries(topic, diff_label, bloom)
     source_seeds = [
-        chunk for chunk in rag.get_source_chunks(state["chroma_collection_id"], limit=50)
+        chunk for chunk in _session_source_chunks(state, rag, limit=50)
         if len(str(chunk.get("text", "")).strip()) >= MIN_CHUNK_TEXT_LEN
     ]
     random.shuffle(source_seeds)
@@ -2979,7 +2988,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
 
     source_chunks = [
         chunk
-        for chunk in rag.get_source_chunks(state["chroma_collection_id"], limit=200)
+        for chunk in _session_source_chunks(state, rag, limit=200)
         if len(str(chunk.get("text", "")).strip()) >= MIN_CHUNK_TEXT_LEN
         and str(chunk.get("source", "")).strip()
     ]
@@ -3361,9 +3370,20 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
 
 
 def quiz_agent(state: AssessmentState) -> dict:
-    """Use whole-quiz batch generation for MCQs; retain other exam workflows."""
-    if state.get("requested_topic") and not state.get("document_ids"):
-        return _topic_only_mcq_agent(state)
-    if state.get("exam_type", "mcq") == "mcq":
-        return _batch_mcq_quiz_agent(state)
-    return _sequential_quiz_agent(state)
+    """Generate at the live difficulty and expose time-to-question for diagnosis."""
+    started = time.perf_counter()
+    try:
+        if state.get("requested_topic") and not state.get("document_ids"):
+            result = _topic_only_mcq_agent(state)
+        elif state.get("exam_type", "mcq") == "mcq":
+            result = _batch_mcq_quiz_agent(state)
+        else:
+            result = _sequential_quiz_agent(state)
+        elapsed = time.perf_counter() - started
+        result["agent_logs"] = list(result.get("agent_logs", state.get("agent_logs", []))) + [
+            f"[Timing] quiz_generate={elapsed:.3f}s | q_index={state.get('current_q_index', 0)}"
+        ]
+        return result
+    finally:
+        logger.info("[Timing] quiz_generate=%.3fs | session=%s | q_index=%s",
+                    time.perf_counter() - started, state.get("session_id"), state.get("current_q_index", 0))
