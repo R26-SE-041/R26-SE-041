@@ -7,6 +7,7 @@ import { THREED_IMAGE_TYPES, validateThreeDImage } from "./threeDSource";
 import { useStudioSession } from "./studioAuth";
 import StudioSessionPanel from "./components/StudioSessionPanel";
 import AuthScreen from "./components/AuthScreen";
+import LearnXHomeLink from "./components/LearnXHomeLink";
 import EditorialHeadline from "./components/EditorialHeadline";
 import JobsPanel from "./components/JobsPanel";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -1369,7 +1370,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               <View style={styles.topBar}>
                 <View style={styles.brandRow}>
                   <View style={styles.brandMark}><Text style={styles.brandMarkText}>L</Text></View>
-                  <Text style={styles.brand}>learnX</Text>
+                  <LearnXHomeLink color={colors.text} />
                 </View>
                 <View style={styles.headerActions}>
                 <Pressable
