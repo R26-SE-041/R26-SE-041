@@ -160,6 +160,7 @@ class ChatPatch(BaseModel):
     title: str = Field(min_length=1, max_length=80)
 
 class HistoryImport(BaseModel):
+    snapshot_interactions: bool = False
     model_config = ConfigDict(extra="forbid")
     legacy_id: str = Field(min_length=1, max_length=160)
     created_at: str = Field(max_length=80)

@@ -134,6 +134,22 @@ class OwnershipApiTests(unittest.TestCase):
             repo.patch_history.assert_called_once_with(USER_B,generation_id,{"anatomyAnnotations":[],"annotationsEdited":True})
 
 class WorkflowRegressionTests(unittest.TestCase):
+    def test_label_version_keeps_answer_snapshot_without_reassigning_original_events(self):
+        from studio.schemas import HistoryImport
+        from studio.main import import_history
+        answers = [{"id":"original-question","answer":"Saved answer"}]
+        with patch("studio.main.repo") as repo, patch("studio.main.Storage"):
+            repo.get_history.return_value = None
+            result = import_history(HistoryImport(legacy_id="new-label-version", created_at="2026-10-19T00:00:00Z",
+                metadata={"mode":"general","chatId":"original-chat","interactions":answers},
+                image_base64="aW1hZ2U=", snapshot_interactions=True), USER_A)
+            saved = repo.save_history.call_args.args
+            self.assertEqual(saved[1], result["id"])
+            self.assertEqual(saved[2]["chatId"], "original-chat")
+            self.assertEqual(saved[2]["interactions"], answers)
+            repo.append_interaction.assert_not_called()
+            repo.patch_history.assert_not_called()
+
     def test_bad_history_cursor_is_rejected_before_database_access(self):
         app.dependency_overrides[require_user] = lambda: USER_A
         try:

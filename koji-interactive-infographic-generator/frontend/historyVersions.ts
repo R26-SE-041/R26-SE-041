@@ -17,7 +17,7 @@ export async function saveAnnotationVersion(id: string, annotations: NonNullable
   if (cloud) {
     const { imageBase64, imageUrl: _imageUrl, glbBase64: _glbBase64, glbUrl: _glbUrl, ...metadata } = source;
     const imported = await studioRequest<{ id: string }>("/studio/import", { method: "POST", body: JSON.stringify({
-      legacy_id: newId, created_at: createdAt, image_base64: imageBase64,
+      legacy_id: newId, created_at: createdAt, image_base64: imageBase64, snapshot_interactions: true,
       metadata: { ...metadata, chatId, anatomyAnnotations: annotations },
     }) });
     version = await getCloudHistory(imported.id);

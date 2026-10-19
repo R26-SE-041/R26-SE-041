@@ -341,8 +341,11 @@ def import_history(body: HistoryImport,user_id: str=Depends(require_user)):
     repo.save_history(user_id,generation_id,metadata,path,created_at=body.created_at,thumbnail_path=thumbnail_path)
     repo.append_chat_event(user_id,metadata.get("chatId") or generation_id,generation_id+":image","image",
         {"mode":metadata.get("mode"),"prompt":metadata.get("prompt"),"enhancedPrompt":metadata.get("enhancedPrompt")},generation_id)
-    for interaction in metadata.get("interactions",[]):
-        repo.append_interaction(user_id,generation_id,interaction)
+    # A copied version retains its answer snapshot. The original conversation
+    # events keep their IDs and ownership; do not reassign or duplicate them.
+    if not body.snapshot_interactions:
+        for interaction in metadata.get("interactions",[]):
+            repo.append_interaction(user_id,generation_id,interaction)
     if body.glb_base64:
         glb_path = storage.upload(f"{user_id}/{generation_id}/model.glb",body.glb_base64,"model/gltf-binary")
         repo.patch_history(user_id,generation_id,{},glb_path=glb_path)

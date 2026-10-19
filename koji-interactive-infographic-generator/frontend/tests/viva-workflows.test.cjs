@@ -43,6 +43,7 @@ test('label edits append a new cloud version and never patch or replace the save
   assert.equal(calls[0].method, 'POST');
   assert.equal(calls[0].body.metadata.chatId, original.chatId);
   assert.equal(calls[0].body.image_base64, original.imageBase64);
+  assert.equal(calls[0].body.snapshot_interactions, true);
   assert.equal(calls[0].body.metadata.imageBase64, undefined);
   assert.equal(calls[0].body.metadata.interactions[0].answer, 'saved answer');
   assert.equal(original.version, 3);
