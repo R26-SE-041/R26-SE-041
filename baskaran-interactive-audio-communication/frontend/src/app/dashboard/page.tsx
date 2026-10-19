@@ -157,9 +157,7 @@ export default function DashboardPage() {
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span className="font-semibold text-sm tracking-tight" style={{ color: 'var(--c-ink)' }}>
-              VoiceLearn AI
-            </span>
+            <span className="font-semibold text-sm tracking-tight" style={{ color: 'var(--c-ink)' }}>VoiceLearn AI</span>
           </div>
 
           {/* Center: Processing badge */}

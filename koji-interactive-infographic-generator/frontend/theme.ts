@@ -3,6 +3,7 @@ import { Platform, StyleSheet } from "react-native";
 import WebInteractionStyles from "./components/WebInteractionStyles";
 import { layout } from "./designTokens";
 export { layout } from "./designTokens";
+import ToolkitNavigation from "./components/ToolkitNavigation";
 
 export type ThemeMode = "dark" | "light";
 
@@ -82,7 +83,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mode,
     toggleTheme: () => setMode((current) => current === "dark" ? "light" : "dark"),
   }), [mode]);
-  return React.createElement(ThemeContext.Provider, { value }, React.createElement(WebInteractionStyles, { colors: value.colors, mode }), children);
+  return React.createElement(ThemeContext.Provider, { value },
+    React.createElement(WebInteractionStyles, { colors: value.colors, mode }),
+    React.createElement(ToolkitNavigation, { componentName: "Visual Studio", background: value.colors.background, color: value.colors.text, border: value.colors.border }),
+    children);
 }
 
 export const useAppTheme = () => useContext(ThemeContext);

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AuthProvider from "@/components/auth/AuthProvider";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import ToolkitNavigation from "@/components/ui/ToolkitNavigation";
 
 export const metadata: Metadata = {
   title: "AdaptiveIQ | AI-Powered Quiz Generator",
@@ -25,7 +26,7 @@ export default function RootLayout({
       <body className="antialiased min-h-screen">
         <div className="paper-background fixed inset-0 pointer-events-none z-0" aria-hidden="true" />
         <ThemeToggle />
-        <div className="relative z-10"><AuthProvider>{children}</AuthProvider></div>
+        <div className="relative z-10"><ToolkitNavigation componentName="AdaptiveIQ" /><AuthProvider>{children}</AuthProvider></div>
       </body>
     </html>
   );

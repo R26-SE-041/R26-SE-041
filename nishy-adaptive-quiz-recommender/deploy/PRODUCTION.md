@@ -1,5 +1,40 @@
 # Nishy adaptive quiz deployment
 
+## Latency update status — 19 October 2026
+
+The existing Modal app `nishy-qwen-adaptive-quiz` was redeployed successfully.
+Its web `/health` returned HTTP 200 with the expected base model and adapter.
+The release retains A10G, permits at most one GPU container, sets minimum
+containers to zero, reduces the idle window to 120 seconds, and adds complete-JSON
+stopping and a generation time limit. No GPU inference/warm-up was performed.
+
+The EC2 latency release `9409e61` was deployed successfully through Systems
+Manager command `c02ecca6-ecbf-49df-8b30-5c6a7a8fdd3c`. All five running source
+files were checked against the local release hashes. Public HTTPS `/ready`
+returned HTTP 200 from EC2, with the expected Vercel origin in the CORS response.
+The local `/health` and PostgreSQL `/ready` checks passed. The API container is
+healthy; databases, uploads, volumes and Caddy were preserved. Rollback files
+are stored in `/opt/nishy-quiz/latency-backup-q12B1yjv`.
+
+The runtime question budget is now 15 seconds. Embedding preloading, the bounded
+embedding cache and the 30-second health cache/failure cooldown are enabled.
+These settings were also synchronized into the existing encrypted
+`/nishy-quiz/backend-env` parameter (version 4), preserving its credentials and
+encryption key. Startup logs measured local embedding initialization at 6.764
+seconds before application startup completed.
+
+Vercel production redeployment `dpl_Bf82eJcmvV4THx9gQBJZsdUgwyw3` reached `READY`
+and serves `https://nishy-adaptive-quiz.vercel.app`. This rebuild uses the existing
+frontend source and inherited production settings; the performance code changes
+are in the backend and Modal service. The homepage and sign-in page returned
+HTTP 200. The frontend production build also passed locally.
+
+Validation: 128 backend tests passed; packaged source matches the tested files,
+embedded Python parses, and the release script passes `bash -n`. A separate SSM
+verification command, `9f6b1285-c8fb-4fef-8733-07e3a6f4b8d1`, confirmed running
+source hashes, public HTTPS readiness, CORS and embedding startup. No paid GPU
+inference/warm-up or complete live quiz was run for this latency release.
+
 Deployment date: 18 October 2026.
 
 | Resource | Location |
@@ -23,9 +58,12 @@ docker compose logs --tail=100 api caddy
 tail -n 100 /var/log/nishy-deploy.log
 ```
 
-Production allows a 120-second question-generation budget so the existing
-Modal GPU service can cold-start. The API returns the session immediately and
-the frontend polls for readiness while generation runs in the background.
+Production uses a shared 15-second question-generation budget. The API returns
+the session immediately and the frontend polls while generation runs in the
+background. A cold GPU can still exceed this budget and invoke existing validated
+recovery. For a presentation, explicitly warm the deployed model once shortly
+before starting; see `backend/scripts/warm_modal.py`. That optional action consumes
+Modal credits and is not an automatic keep-alive.
 
 The restricted PostgreSQL login owns only the `nishy_quiz` schema. Its runtime
 environment is stored in SSM Parameter Store as SecureString

@@ -1,9 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { modules, type Page } from '../navigation';
 import Icon from '../features/visual/components/Icon';
 import { fonts, webTransition } from '../theme';
-import { Button, Card, colors, styles } from '../ui';
+import { colors, styles } from '../ui';
 
 export default function Dashboard({ name, open }: { name: string; open: (page: Page) => void }) {
   const { width } = useWindowDimensions();
@@ -13,7 +13,6 @@ export default function Dashboard({ name, open }: { name: string; open: (page: P
       <Text accessibilityRole="header" style={[styles.title, { fontSize: width > 700 ? 54 : 36, lineHeight: width > 700 ? 62 : 44 }]}>A little curiosity.{'\n'}A deeper understanding.</Text>
       <Text style={[styles.subtitle, { maxWidth: 560, fontSize: 15, lineHeight: 25 }]}>Welcome{name ? `, ${name}` : ''}. Make sense of a concept, find your next question, or see your study material in a new light.</Text>
     </View>
-    <Card style={{ backgroundColor: colors.soft, padding: 26 }}><View style={[styles.row, { gap: 24 }]}><View style={{ flex: 1, minWidth: 180, gap: 8 }}><Text style={styles.label}>WHERE WOULD YOU LIKE TO BEGIN?</Text><Text style={[styles.heading, { fontSize: 27, lineHeight: 35 }]}>Follow your curiosity.</Text><Text style={styles.subtitle}>Start with a biology concept. Explore it visually, then go a little deeper.</Text></View><Button label="Open visual studio ↗" onPress={() => open('visual')} /></View></Card>
     <View style={[styles.row, { paddingTop: 14 }]}><Text style={styles.heading}>Four ways to understand.</Text><View style={{ flex: 1 }} /><Text style={[styles.subtitle, { fontSize: 12 }]}>Your learning toolkit</Text></View>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>{modules.map((module, index) => <Pressable key={module.id} accessibilityRole="button" accessibilityLabel={`Open ${module.label}`} onPress={() => open(module.id)} style={state => ({ flexBasis: width >= 1000 ? '47%' : '100%', flexGrow: 1, minWidth: 0, borderWidth: 1, borderColor: 'hovered' in state && state.hovered ? '#C8C4B8' : colors.line, backgroundColor: 'hovered' in state && state.hovered ? '#FDFCFA' : colors.surface, borderRadius: 12, opacity: state.pressed ? 0.8 : 1, ...webTransition })}>
       <View style={{ padding: 26, gap: 16, height: '100%' }}>
@@ -24,6 +23,6 @@ export default function Dashboard({ name, open }: { name: string; open: (page: P
         <Text style={{ fontFamily: fonts.body, color: colors.accentHover, fontSize: 13, marginTop: 'auto', paddingTop: 4 }}>Open workspace ↗</Text>
       </View>
     </Pressable>)}</View>
-    <Text style={[styles.subtitle, { textAlign: 'center', fontSize: 11, paddingTop: 16 }]}>Thoughtful tools. Your own pace. · BioLearnX</Text>
+    <Text style={[styles.subtitle, { textAlign: 'center', fontSize: 11, paddingTop: 16 }]}>Thoughtful tools. Your own pace. · LearnX</Text>
   </View>;
 }

@@ -6,8 +6,8 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={diagonal ? 'M6 18 18 6M6 6h12v12' : 'M4 12h16m-6-6 6 6-6 6'}/></svg>;
 }
 
-function Illustration({ kind = 'visual', hero = false }: { kind?: ComponentId; hero?: boolean }) {
-  return <svg className={hero ? 'biology-drawing' : 'tool-drawing'} viewBox="0 0 440 300" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+function Illustration({ kind = 'visual' }: { kind?: ComponentId }) {
+  return <svg className="tool-drawing" viewBox="0 0 440 300" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
     {kind === 'visual' ? <>
       <path d="M106 73C145 24 264 31 322 77c65 52 63 133-2 175-49 31-147 22-203-11C51 202 55 127 106 73Z"/>
       <path d="M115 82c48-43 137-36 194 2 57 38 58 115 3 154-54 33-136 15-184-11-54-32-63-99-13-145Z" opacity=".45"/>
@@ -51,7 +51,7 @@ export default function Launcher() {
   const page = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = 'BioLearnX — A deeper understanding';
+    document.title = 'LearnX — A deeper understanding';
     setHistory(readHistory());
     const sync = () => setHistory(readHistory());
     window.addEventListener('storage', sync);
@@ -79,7 +79,7 @@ export default function Launcher() {
     <style>{dashboardCss}</style>
     <a className="skip-link" href="#main">Skip to main content</a>
     <header className="site-header"><div className="header-inner">
-      <a className="wordmark" href="#overview" aria-label="BioLearnX home" onClick={closeMenu}>BIOLEARN<span className="wordmark-x">X</span></a>
+      <a className="wordmark" href="#overview" aria-label="LearnX home" onClick={closeMenu}>LEARN<span className="wordmark-x">X</span></a>
       <button className="menu-toggle" aria-expanded={menuOpen} aria-controls="primary-nav" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} onClick={()=>setMenuOpen(!menuOpen)}><span/ ><span/></button>
       <nav id="primary-nav" className={menuOpen ? 'header-nav is-open' : 'header-nav'} aria-label="Main navigation" onKeyDown={e=>{if(e.key==='Escape') { closeMenu(); page.current?.querySelector<HTMLButtonElement>('.menu-toggle')?.focus(); }}}>
         <a href="#toolkit" onClick={closeMenu}>Learning tools</a><a href="#approach" onClick={closeMenu}>Our approach</a><a href="https://learnx-research.vercel.app/" target="_blank" rel="noopener noreferrer" onClick={closeMenu}>Research <Arrow diagonal/></a><a className="button button-dark" href="#toolkit" onClick={closeMenu}>Start learning <Arrow/></a>
@@ -89,16 +89,11 @@ export default function Launcher() {
     <main id="main">
       <section id="overview" className="introduction page-width">
         <div className="intro-title"><p className="eyebrow intro-eyebrow">BIOLOGY, IN EVERY DIMENSION</p><h1>Tools for <a href="#toolkit">curious minds</a>.<br/>A deeper understanding.</h1></div>
-        <div className="intro-copy"><p>There is more than one way to understand biology. Explore it visually, talk it through, put it into practice, and make it your own.</p><span className="project-caption">BioLearnX · G.C.E. A/L Biology</span></div>
-      </section>
-
-      <section className="feature-panel page-width" aria-labelledby="feature-title" data-reveal>
-        <div className="feature-copy"><span className="eyebrow">INTERACTIVE VISUAL LEARNING</span><h2 id="feature-title">See the bigger picture.<br/>Explore the little details.</h2><p>From the structure of a cell to the systems that sustain life. Turn a question into something you can see, explore, and understand.</p><a className="button button-outline" {...link(components[0])}>Explore Visual Studio <Arrow diagonal/></a></div>
-        <div className="feature-art"><span className="figure-label">FIG. 01 — A CLOSER LOOK</span><Illustration hero/><span className="figure-caption">Small discoveries. Deeper connections.</span></div>
+        <div className="intro-copy"><p>There is more than one way to understand biology. Explore it visually, talk it through, put it into practice, and make it your own.</p><span className="project-caption">LearnX · G.C.E. A/L Biology</span></div>
       </section>
 
       <section id="toolkit" className="toolkit page-width" data-reveal>
-        <div className="section-heading"><div><span className="eyebrow">THE BIOLEARNX TOOLKIT</span><h2>Four ways to follow your curiosity.</h2></div><label className="tool-search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input type="search" aria-label="Find a learning tool" placeholder="Find a learning tool" value={query} onChange={e=>setQuery(e.target.value)}/>{query && <button aria-label="Clear search" onClick={()=>setQuery('')}>×</button>}</label></div>
+        <div className="section-heading"><div><span className="eyebrow">THE LEARNX TOOLKIT</span><h2>Four ways to follow your curiosity.</h2></div><label className="tool-search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input type="search" aria-label="Find a learning tool" placeholder="Find a learning tool" value={query} onChange={e=>setQuery(e.target.value)}/>{query && <button aria-label="Clear search" onClick={()=>setQuery('')}>×</button>}</label></div>
         <p className="search-result-count" role="status">{query ? `${visible.length} ${visible.length===1?'tool':'tools'} found` : 'Choose where you would like to begin.'}</p>
         <div className="tool-grid">{visible.map(c=><a className={`tool-card tool-${c.id}`} key={c.id} {...link(c)} aria-label={`Open ${c.name} in a new tab`}>
           <div className="card-top"><span className="eyebrow">{c.number} / {c.mode}</span><Arrow diagonal/></div><div className="card-illustration"><Illustration kind={c.id}/></div><div className="card-content"><h3>{c.name}</h3><p>{c.description}</p><ul className="capabilities">{c.features.map(f=><li key={f}>{f}</li>)}</ul></div><div className="card-bottom"><span>Open workspace <Arrow diagonal/></span><small>{history[c.id] ? 'Previously opened' : 'Opens in a new tab'}</small></div>
@@ -112,6 +107,6 @@ export default function Launcher() {
       <section className="closing page-width" data-reveal><span className="eyebrow">{recent ? 'PICK UP YOUR CURIOSITY' : 'YOUR NEXT DISCOVERY'}</span><h2>{recent ? `A little more ${recent.verb.toLowerCase()==='practice'?'practice':recent.id==='notes'?'clarity':recent.id==='audio'?'conversation':'perspective'}?` : 'Understanding starts with a question.'}</h2><p>{recent ? `Your most recently opened workspace is ${recent.name}.` : 'Four complementary tools. One place to begin.'}</p>{recent ? <a className="button button-dark" {...link(recent)}>Return to {recent.name} <Arrow diagonal/></a> : <a className="button button-dark" href="#toolkit">Explore the toolkit <Arrow/></a>}</section>
     </main>
 
-    <footer id="footer" className="site-footer"><div className="page-width"><div className="footer-grid"><div className="footer-intro"><a className="wordmark" href="#overview" aria-label="BioLearnX home">BIOLEARN<span className="wordmark-x">X</span></a><p>Learning, in every dimension.</p></div><div><h2>Learning tools</h2>{components.map(c=><a key={c.id} {...link(c)}>{c.name}<Arrow diagonal/></a>)}</div><div><h2>Explore</h2><a href="#approach">Our approach</a><a href="https://learnx-research.vercel.app/" target="_blank" rel="noopener noreferrer">Research project<Arrow diagonal/></a><a href="#toolkit">Start learning</a></div><div className="footer-project"><h2>BioLearnX</h2><p>A multimodal framework for personalized biology learning.</p><span>R26-SE-041<br/>SLIIT Research Project</span></div></div><div className="footer-base"><span>BioLearnX · {new Date().getFullYear()}</span><span>Built for curiosity. Designed for understanding.</span><a href="#overview">Back to top ↑</a></div></div></footer>
+    <footer id="footer" className="site-footer"><div className="page-width"><div className="footer-grid"><div className="footer-intro"><a className="wordmark" href="#overview" aria-label="LearnX home">LEARN<span className="wordmark-x">X</span></a><p>Learning, in every dimension.</p></div><div><h2>Learning tools</h2>{components.map(c=><a key={c.id} {...link(c)}>{c.name}<Arrow diagonal/></a>)}</div><div><h2>Explore</h2><a href="#approach">Our approach</a><a href="https://learnx-research.vercel.app/" target="_blank" rel="noopener noreferrer">Research project<Arrow diagonal/></a><a href="#toolkit">Start learning</a></div><div className="footer-project"><h2>LearnX</h2><p>A multimodal framework for personalized biology learning.</p><span>R26-SE-041<br/>SLIIT Research Project</span></div></div><div className="footer-base"><span>LearnX · {new Date().getFullYear()}</span><span>Built for curiosity. Designed for understanding.</span><a href="#overview">Back to top ↑</a></div></div></footer>
   </div>;
 }

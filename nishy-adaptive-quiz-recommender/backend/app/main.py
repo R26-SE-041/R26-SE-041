@@ -4,6 +4,8 @@ Adaptive AI Assessment Platform — SLIIT FYP
 """
 import os
 import logging
+import asyncio
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +30,12 @@ async def lifespan(app: FastAPI):
     from app.graph.graph import get_graph
     get_graph()
     logger.info("✅ LangGraph compiled and ready")
+    if os.getenv("PRELOAD_EMBEDDINGS", "true").lower() == "true":
+        from app.services.llm_service import EmbeddingService
+        started = time.perf_counter()
+        logger.info("Loading local embeddings before accepting quiz requests...")
+        await asyncio.to_thread(EmbeddingService().get_embedding, "Biology assessment readiness")
+        logger.info("[Timing] embedding_startup=%.3fs", time.perf_counter() - started)
     yield
     logger.info("👋 Shutting down...")
 

@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { editorialWebStyles } from "@/lib/web-style";
 import AuthProvider from "@/components/AuthProvider";
 import { useAppTheme } from "@/theme";
+import ToolkitNavigation from "@/components/ToolkitNavigation";
 
 export default function RootLayout() {
   const { colors, isDark } = useAppTheme();
@@ -26,6 +27,7 @@ export default function RootLayout() {
   }, []);
   return (
     <AuthProvider><View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ToolkitNavigation componentName="Sinhala OCR" background={colors.background} color={colors.text} border={colors.border} />
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
