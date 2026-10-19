@@ -154,6 +154,48 @@ class DocumentRetakeTests(unittest.TestCase):
     @patch("app.agents.quiz_agent.GroundingService")
     @patch("app.agents.quiz_agent.RagService")
     @patch("app.agents.quiz_agent.LlmService")
+    def test_failed_health_probe_attempts_generation_when_recovery_is_exhausted(self, llm, rag, grounding, db):
+        chunk = {
+            "chunk_id": "pigment", "source": "biology.pdf", "page": 1,
+            "text": "Chlorophyll absorbs light energy during photosynthesis. Chlorophyll a occurs in the reaction centres of photosystems.",
+        }
+        slot = {"concept": "Photosynthesis", "concept_focus": chunk["text"], "source_chunk_id": "pigment"}
+        candidate = {
+            "question": "Which pigment absorbs light energy during photosynthesis?",
+            "options": {"1": "Chlorophyll", "2": "Haemoglobin", "3": "Melanin", "4": "Keratin", "5": "Collagen"},
+            "correct_answer": "1", "model_answer": "Chlorophyll absorbs light energy during photosynthesis.",
+        }
+        rag.return_value.get_source_chunks.return_value = [chunk]
+        rag.return_value.retrieve.return_value = [chunk]
+        llm.return_value.check_health.return_value = False
+        audit = {"grounding_score": .9, "grounding_status": "grounded", "evidence_chunk_id": "pigment"}
+        with patch("app.agents.quiz_agent.build_concept_plan", return_value=[slot]), \
+             patch("app.agents.quiz_agent._source_fallback_mcq", return_value=None), \
+             patch("app.agents.quiz_agent.reviewed_source_candidates", return_value=[]), \
+             patch("app.agents.quiz_agent._embedding_grounding_audit", return_value=audit):
+            for outcome in ("valid", "duplicate", "malformed", "offline"):
+                with self.subTest(outcome=outcome):
+                    llm.return_value.call_json.reset_mock()
+                    db.return_value.save_question.reset_mock()
+                    llm.return_value.call_json.side_effect = RuntimeError("offline") if outcome == "offline" else None
+                    llm.return_value.call_json.return_value = {} if outcome == "malformed" else copy.deepcopy(candidate)
+                    db.return_value.get_previous_questions.return_value = [candidate] if outcome == "duplicate" else []
+                    paper_state = state("easy", "Photosynthesis", documents=True)
+                    paper_state["quiz_blueprint"] = [copy.deepcopy(slot)]
+                    result = quiz_agent(paper_state)
+                    llm.return_value.call_json.assert_called_once()
+                    if outcome == "valid":
+                        self.assertIsNone(result.get("error"))
+                        self.assertEqual(result["questions"][0]["difficulty"], .2)
+                        db.return_value.save_question.assert_called_once()
+                    else:
+                        self.assertTrue(result.get("error"))
+                        db.return_value.save_question.assert_not_called()
+
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.GroundingService")
+    @patch("app.agents.quiz_agent.RagService")
+    @patch("app.agents.quiz_agent.LlmService")
     def test_unkeyed_paper_has_reviewed_recovery_when_model_and_embedding_gate_fail(self, llm, rag, grounding, db):
         chunk = {"chunk_id": "exam", "text": "Which statements about the human lymphatic system are correct? Lymphatic vessels bear valves, and lymph nodes contain immune cells.", "source": "exam.pdf", "page": 1, "distance": .05}
         rag.return_value.get_source_chunks.return_value = [chunk]

@@ -1,5 +1,24 @@
 # Nishy adaptive quiz deployment
 
+## Question generation recovery release — 19 October 2026
+
+Deployed the tested quiz agent to the existing EC2 backend through SSM command
+`86726094-fafa-439a-b408-ec2e865000b6`. The running source SHA-256 is
+`97bab536371d8c645a4fbd4f1825cd27ca9026d5739325e2e438c842a9c2ce09`.
+The container passed `/health` and PostgreSQL `/ready`; its source hash matches
+the local tested file. A failed health probe now allows a generation attempt
+within the existing deadline when validated recovery candidates are exhausted.
+Rollback files: `/opt/nishy-quiz/generation-fix-backup-YVwZ1Cwh`.
+
+Vercel production deployment `dpl_Dy76Eh789nn13YnfaTRQFnoLHbM6` reached `READY`.
+It includes corrected apostrophes in the quiz preparation and error screen.
+Validation before release: 67 backend tests and the frontend TypeScript check
+passed. No live quiz generation or GPU warm-up was performed for this release.
+The production quiz URL returned HTTP 200 and its JavaScript bundle contains the
+corrected heading. Public `/ready` and production CORS passed after one transient
+HTTP 503 caused by PostgreSQL connection pool exhaustion; server logs also
+confirmed recovery. Pool exhaustion remains an operational issue to monitor.
+
 ## Latency update status — 19 October 2026
 
 The existing Modal app `nishy-qwen-adaptive-quiz` was redeployed successfully.

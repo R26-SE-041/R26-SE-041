@@ -3325,6 +3325,35 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         if absolute_index not in generated_by_index:
             try_reviewed_recovery(local_index)
 
+    # A short health probe can time out while the inference endpoint is still
+    # usable. Prefer fast recovery, but do not let that probe alone prevent all
+    # generation for concepts outside the recovery bank. Reuse the same client
+    # so this final attempt remains inside the original generation deadline.
+    if not endpoint_warm:
+        for local_index, slot in enumerate(pending_slots, start=1):
+            absolute_index = len(existing_questions) + local_index - 1
+            if absolute_index in generated_by_index:
+                continue
+            chunks = _slot_chunks(rag, state["chroma_collection_id"], slot, source_map)
+            if not chunks:
+                continue
+            try:
+                candidate = llm.call_json(
+                    _targeted_mcq_prompt(
+                        slot, chunks, blueprint,
+                        [*accepted_candidates, *historical_questions[:30]],
+                        active_difficulty,
+                        rejection_by_index.get(absolute_index, ""),
+                        state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
+                    ),
+                    max_new_tokens=1024,
+                )
+                if validate_for_slot(local_index, candidate):
+                    logs.append(f"[QuizAgent] Generated Q{absolute_index + 1} despite failed health probe")
+            except Exception as exc:
+                logs.append(f"[QuizAgent] Generation after failed health probe failed: {exc}")
+                break
+
     if len(generated_by_index) != len(pending_slots):
         missing = [
             str(index + 1)

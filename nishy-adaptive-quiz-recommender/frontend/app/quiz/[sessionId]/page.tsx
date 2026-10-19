@@ -91,8 +91,8 @@ function ProcessingScreen({ status, onRetry }: { status: SessionStatusResponse |
         <div className="mb-6">
           {isError ? <AlertTriangleIcon className="w-8 h-8 text-[var(--warning)]" /> : <span className="block w-8 h-8 rounded-full border-2 border-[var(--border)] border-t-[var(--text)] animate-spin" />}
         </div>
-        <h1 className="page-heading mb-5">{isError ? "Let?s try that again." : isReady ? "You?re ready to begin." : "A little preparation. A better challenge."}</h1>
-        <p className="text-[var(--text-muted)] text-base leading-relaxed mb-8">{isError ? status?.message : "We?re preparing questions from your chosen material. Your quiz will appear here when it?s ready."}</p>
+        <h1 className="page-heading mb-5">{isError ? "Let's try that again." : isReady ? "You're ready to begin." : "A little preparation. A better challenge."}</h1>
+        <p className="text-[var(--text-muted)] text-base leading-relaxed mb-8">{isError ? status?.message : "We're preparing questions from your chosen material. Your quiz will appear here when it's ready."}</p>
         {isError ? <div className="flex flex-wrap gap-3">
           <button type="button" className="btn-primary" onClick={onRetry}><RefreshIcon /> Retry this quiz</button>
           <Link href="/upload" className="btn-secondary">Choose material</Link>
