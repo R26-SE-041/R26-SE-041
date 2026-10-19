@@ -18,6 +18,9 @@ sdist/
 develop-eggs/
 .installed.cfg
 lib/
+# Keep the quiz frontend's TypeScript source library in Git.
+!/nishy-adaptive-quiz-recommender/frontend/lib/
+!/nishy-adaptive-quiz-recommender/frontend/lib/*.ts
 lib64/
 MANIFEST
 
