@@ -84,7 +84,7 @@ export default function AnnotationEditor({ imageBase64, aspectRatio = 1, annotat
   return <View onLayout={event => setSize(event.nativeEvent.layout)} style={{ width: "100%", aspectRatio, backgroundColor: "white", position: "relative" }}>
     <Image source={{ uri: "data:image/png;base64," + imageBase64 }} style={StyleSheet.absoluteFill} resizeMode="contain" />
     <AnatomyOverlay annotations={draft} selectedStructureId={selected} />
-    <View accessibilityLabel="Label editing canvas" accessibilityHint="Click a label to rename it. Drag a label or arrow to move it. Double tap empty space to add a label." {...responder.panHandlers} style={StyleSheet.absoluteFill} />
+    <View {...{ dataSet: { dragSurface: "true" } }} accessibilityLabel="Label editing canvas" accessibilityHint="Click a label to rename it. Drag a label or arrow to move it. Double tap empty space to add a label." {...responder.panHandlers} style={StyleSheet.absoluteFill} />
     {item && geometry && <TextInput key={item.structure_id} autoFocus selectTextOnFocus accessibilityLabel="Label name" value={item.label} maxLength={80}
       onChangeText={label => update(latest.current.map(value => value.structure_id === item.structure_id ? { ...value, label, user_edited: true } : value))}
       onBlur={finishName} onSubmitEditing={finishName} returnKeyType="done"

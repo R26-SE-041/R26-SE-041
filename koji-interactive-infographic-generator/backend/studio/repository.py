@@ -17,6 +17,12 @@ def connection():
         conn.close()
 
 class Repository:
+    def clear_feedback(self,user_id,agent_name,output_id):
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("delete from agent_feedback where auth_user_id=%s and agent_name=%s and output_id=%s",
+                (user_id,agent_name,output_id))
+        return {"status":"removed"}
+
     def save_feedback(self,user_id,data):
         with connection() as conn,conn.cursor() as cur:
             cur.execute("""insert into agent_feedback

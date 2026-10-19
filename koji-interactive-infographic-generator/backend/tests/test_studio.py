@@ -57,6 +57,14 @@ class JobContractTests(unittest.TestCase):
         self.assertEqual(required_services({"kind":"sketch"}),{"sketch"})
 
 class OwnershipApiTests(unittest.TestCase):
+    def test_feedback_deselection_uses_authenticated_owner_and_only_selected_output(self):
+        with patch("studio.main.repo") as repo:
+            repo.clear_feedback.return_value = {"status":"removed"}
+            response = self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output"})
+            self.assertEqual(response.status_code,200)
+            repo.clear_feedback.assert_called_once_with(USER_B,"image-agent","chosen-output")
+            self.assertEqual(self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output","user_id":USER_A}).status_code,422)
+
     def test_completed_model_link_does_not_download_large_assets_on_cpu_api(self):
         generation_id = str(uuid4())
         with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:

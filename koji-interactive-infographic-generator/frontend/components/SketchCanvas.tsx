@@ -108,7 +108,7 @@ export default function SketchCanvas({ strokes, onChange, disabled = false, prev
       {button("Redo", "redo", () => { onChange([...strokes, redo[redo.length - 1]]); setRedo(redo.slice(0, -1)); }, !redo.length)}
       {button("Clear", "trash", () => { onChange([]); setRedo([]); }, !strokes.length)}
     </View>}
-    <View {...inputProps} accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: colors.border, overflow: "hidden", borderRadius: 8, touchAction: "none", ...(Platform.OS === "web" && editable ? { cursor: tool === "eraser" ? "none" : "crosshair" } : {}) } as any}
+    <View {...inputProps} {...(Platform.OS === "web" ? { dataSet: { dragSurface: "true" } } : {})} accessibilityLabel="Drawing canvas" style={{ width: "100%", aspectRatio: 1, backgroundColor: "white", borderWidth: 1, borderColor: colors.border, overflow: "hidden", borderRadius: 8, touchAction: "none", ...(Platform.OS === "web" && editable ? { cursor: tool === "eraser" ? "none" : "crosshair" } : {}) } as any}
       onLayout={(event) => { size.current = event.nativeEvent.layout.width; }}>
       <Svg pointerEvents="none" width="100%" height="100%" viewBox="0 0 1024 1024">
         <Rect width={1024} height={1024} fill="white" />

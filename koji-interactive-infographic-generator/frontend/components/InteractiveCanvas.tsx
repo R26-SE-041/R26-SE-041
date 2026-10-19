@@ -327,6 +327,7 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
 
       {!editingLabels && <View
+        {...{ dataSet: { dragSurface: "true" } }}
         {...panResponder.panHandlers}
         onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
         style={[styles.canvas, { aspectRatio }]}

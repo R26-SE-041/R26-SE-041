@@ -19,11 +19,14 @@ class Annotation(BaseModel):
     source: Literal["automatic", "manual"] = "automatic"
 
 
-class OutputFeedback(BaseModel):
+class FeedbackTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    session_id: str = Field(min_length=1, max_length=128)
     agent_name: Literal["prompt-agent", "prompt-anatomy", "prompt-generic", "image-agent", "interactive-agent", "eval-agent", "threed-agent"]
     output_id: str = Field(min_length=1, max_length=128)
+
+
+class OutputFeedback(FeedbackTarget):
+    session_id: str = Field(min_length=1, max_length=128)
     rating: Literal[-1, 1]
     reason_codes: list[str] = Field(default_factory=list, max_length=8)
     comment: str | None = Field(default=None, max_length=2000)

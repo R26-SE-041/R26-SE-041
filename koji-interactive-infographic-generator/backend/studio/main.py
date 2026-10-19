@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from studio.repository import Repository
 from studio.storage import Storage
-from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback
+from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback, FeedbackTarget
 from studio.pipeline import configured_endpoints, required_services
 from studio.modal_accounts import routing_endpoints
 from studio.documents import Documents, MAX_PDF_BYTES, filename_for_upload, public_document
@@ -118,6 +118,11 @@ def save_output_feedback(body: OutputFeedback,user_id: str=Depends(require_user)
         raise HTTPException(404,"Output feedback not found") from None
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from None
+
+
+@app.delete("/feedback")
+def clear_output_feedback(body: FeedbackTarget,user_id: str=Depends(require_user)):
+    return repo.clear_feedback(user_id,body.agent_name,body.output_id)
 
 @app.post("/studio/jobs",status_code=202)
 def start_job(body: JobRequest,user_id: str=Depends(require_user)):

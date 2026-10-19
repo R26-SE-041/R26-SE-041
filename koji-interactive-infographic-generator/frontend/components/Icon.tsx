@@ -48,10 +48,11 @@ interface IconProps {
   name: IconName;
   size?: number;
   strokeWidth?: number;
+  filled?: boolean;
 }
 
-export default function Icon({ color = "currentColor", name, size = 18, strokeWidth = 2 }: IconProps) {
-  const common = { fill: "none", stroke: color, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth };
+export default function Icon({ color = "currentColor", name, size = 18, strokeWidth = 2, filled = false }: IconProps) {
+  const common = { fill: filled && (name === "thumb-up" || name === "thumb-down") ? color : "none", stroke: color, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth };
   return (
     <Svg accessible={false} focusable={false} height={size} viewBox="0 0 24 24" width={size}>
       {name === "activity" && <Path {...common} d="M3 12h4l2.5-7 5 14 2.5-7h4" />}

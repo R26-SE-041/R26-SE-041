@@ -43,7 +43,7 @@ function ModelCard({ model, index, props }: { model: SavedModel; index: number; 
   const { scene, error, retry } = useModel(model, !props.trashed && (index < 6 || (props.active && nearby)));
   const button = { minHeight: 40, paddingHorizontal: 12, justifyContent: "center" as const, borderRadius: 8, backgroundColor: colors.surfaceSoft };
   return <div ref={track} style={{ border: `1px solid ${colors.border}`, background: colors.surface, borderRadius: 12, padding: 12, minWidth: 0 }}>
-    {scene ? <ModelView id={`model-preview-${index}`} visible={props.active && nearby} index={index + 1} style={{ height: 260, width: "100%", borderRadius: 8, touchAction: "none", cursor: "grab" }}>
+    {scene ? <ModelView data-drag-surface="true" id={`model-preview-${index}`} visible={props.active && nearby} index={index + 1} style={{ height: 260, width: "100%", borderRadius: 8, touchAction: "none", userSelect: "none", cursor: "grab" }}>
       <PerspectiveCamera makeDefault position={[0, .7, 4]} fov={45} />
       <color attach="background" args={[colors.canvas]} /><ModelLighting />
       <primitive object={scene} dispose={null} />
