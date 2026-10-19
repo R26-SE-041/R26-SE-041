@@ -47,18 +47,18 @@ export default function App() {
   return <View {...webData({ workspace: 'true' })} style={{ flex: 1, backgroundColor: colors.bg, flexDirection: wide ? 'row' : 'column' }}>
     <WebTheme />
     {wide && <View style={{ width: 232, borderRightWidth: 1, borderColor: colors.line, padding: 20, backgroundColor: colors.sidebar, gap: 30 }}>
-      <View style={styles.row}><Icon name="sun" size={27} color={colors.accent} /><Text style={{ fontFamily: fonts.heading, fontSize: 25, color: colors.ink }}>BioLearnX</Text></View>
+      <View style={styles.row}><Icon name="sun" size={27} color={colors.accent} /><Text style={{ fontFamily: fonts.heading, fontSize: 25, color: colors.ink }}>LearnX</Text></View>
       <View style={{ gap: 14 }}><Text style={[styles.label, { paddingHorizontal: 12 }]}>YOUR WORKSPACE</Text>
         <View style={{ gap: 4 }}>{nav.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: page === item.id }} onPress={() => open(item.id)} style={state => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, minHeight: 44, borderRadius: 8, backgroundColor: page === item.id ? colors.soft : ('hovered' in state && state.hovered ? '#ECEAE2' : 'transparent'), ...webTransition })}>
           <Icon name={item.icon} size={18} color={page === item.id ? colors.accent : colors.muted} /><Text style={{ fontFamily: fonts.body, color: page === item.id ? colors.ink : colors.muted, fontWeight: page === item.id ? '600' : '400', fontSize: 13 }}>{item.label}</Text>
         </Pressable>)}</View>
       </View>
       <View style={{ flex: 1 }} />
-      <View style={{ gap: 12, borderTopWidth: 1, borderColor: colors.line, paddingTop: 20 }}><Text style={styles.subtitle}>A little curiosity.{'\n'}A deeper understanding.</Text><Text style={[styles.label, { fontSize: 9 }]}>BIOLEARNX · R26-SE-041</Text></View>
+      <View style={{ gap: 12, borderTopWidth: 1, borderColor: colors.line, paddingTop: 20 }}><Text style={styles.subtitle}>A little curiosity.{'\n'}A deeper understanding.</Text><Text style={[styles.label, { fontSize: 9 }]}>LEARNX · R26-SE-041</Text></View>
     </View>}
     <View style={{ flex: 1, minWidth: 0 }}>
       <View style={{ paddingHorizontal: wide ? 36 : 18, paddingVertical: 14, minHeight: 72, borderBottomWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Text style={[styles.subtitle, { fontSize: 12 }]}>{wide ? 'Workspace  /  ' + nav.find(v => v.id === page)?.label : 'BioLearnX'}</Text><View style={{ flex: 1 }} />
+        <Text style={[styles.subtitle, { fontSize: 12 }]}>{wide ? 'Workspace  /  ' + nav.find(v => v.id === page)?.label : 'LearnX'}</Text><View style={{ flex: 1 }} />
         <Text numberOfLines={1} style={[styles.subtitle, { fontSize: 12, maxWidth: wide ? 260 : 110 }]}>{preview && !session ? 'Preview workspace' : session?.user.email}</Text>
         <Button label={session ? 'Sign out' : 'Sign in'} secondary onPress={async () => { if (auth && session) { const { error } = await auth.auth.signOut({ scope: 'local' }); if (error) { setNotice(error.message); return; } } setPreview(false); setPage('home'); setNotice(''); }} />
       </View>

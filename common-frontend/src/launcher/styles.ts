@@ -20,8 +20,13 @@ export const dashboardCss = `
   .page-width, .header-inner { width: min(100% - 112px, 1440px); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 20; background: #f0eee6f5; backdrop-filter: blur(12px); }
   .header-inner { display: flex; justify-content: space-between; align-items: center; min-height: 92px; gap: 40px; }
-  .wordmark { font-family: var(--sans); font-size: 26px; line-height: 1; font-weight: 800; letter-spacing: -.9px; display: inline-flex; align-items: center; }
-  .wordmark-x { display: inline-block; font-weight: 400; margin-left: 1px; transform: skew(-11deg); }
+  .wordmark { position: relative; font-family: var(--sans); font-size: 26px; line-height: 1; font-weight: 800; letter-spacing: -.9px; display: inline-flex; align-items: center; }
+  .wordmark::after { content: ''; position: absolute; left: 0; right: 0; bottom: -7px; height: 2px; background: var(--clay); transform: scaleX(0); transform-origin: left; transition: transform 320ms cubic-bezier(.2,.65,.3,1); }
+  .wordmark-x { display: inline-block; font-weight: 400; margin-left: 1px; transform: skew(-11deg); transition: transform 320ms cubic-bezier(.2,.65,.3,1), color 220ms ease; }
+  .wordmark:is(:hover, :focus-visible)::after { transform: scaleX(1); }
+  .wordmark:is(:hover, :focus-visible) .wordmark-x { color: var(--clay); transform: translate(3px,-2px) rotate(12deg) skew(-11deg); }
+  .footer-grid .wordmark:hover { text-decoration: none; }
+  @media(prefers-reduced-motion:reduce) { .wordmark:is(:hover, :focus-visible) .wordmark-x { transform: skew(-11deg); } }
   .header-nav { display: flex; align-items: center; gap: 32px; }
   .header-nav > a { font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
   .header-nav > a:not(.button):hover { text-decoration: underline; }
@@ -51,7 +56,7 @@ export const dashboardCss = `
   .figure-label { align-self: flex-start; font-size: 10px; letter-spacing: 1.4px; color: #686155; }
   .biology-drawing { width: 100%; max-width: 510px; height: auto; margin: 30px auto 20px; }
   .figure-caption { font: italic 16px/1.4 var(--serif); color: #686155; }
-  .toolkit { padding-block: 110px 90px; }
+  .toolkit { padding-block: 0 90px; }
   .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
   .section-heading .eyebrow { color: var(--muted); margin-bottom: 14px; }
   .section-heading h2 { font-size: 28px; font-weight: 600; line-height: 1.25; letter-spacing: -.7px; }
@@ -61,7 +66,7 @@ export const dashboardCss = `
   .tool-search input::-webkit-search-cancel-button { display: none; }
   .tool-search button { background: none; border: 0; color: var(--muted); font-size: 20px; padding: 0 3px; line-height: 1; }
   .search-result-count { color: var(--muted); font-size: 13px; margin-block: 18px 32px !important; }
-  .tool-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+  .tool-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); grid-auto-rows: 1fr; gap: 24px; }
   .tool-card { background: var(--ivory); border-radius: 12px; display: flex; flex-direction: column; padding: 27px 32px 0; transition: background 220ms ease; overflow: hidden; }
   .tool-card:hover { background: #e9e6dc; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #686760; }
