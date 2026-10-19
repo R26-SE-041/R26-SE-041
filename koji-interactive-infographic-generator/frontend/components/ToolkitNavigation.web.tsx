@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, type CSSProperties } from "react";
-
-const toolkitHome = "https://biolearnx-dashboard.vercel.app/";
+import LearnXHomeLink from "./LearnXHomeLink";
 
 /** Shared toolkit navigation; never reads or changes learning/session state. */
 export default function ToolkitNavigation({ componentName, background = "var(--background, #f0eee6)", color = "var(--text, #141413)", border = "var(--border, #d6d3c9)" }: {
@@ -10,7 +9,7 @@ export default function ToolkitNavigation({ componentName, background = "var(--b
 }) {
   const [showTop, setShowTop] = useState(false);
   const scroller = useRef<HTMLElement | null>(null);
-  const homeLink = useRef<HTMLAnchorElement>(null);
+  const navigation = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let frame = 0;
@@ -47,10 +46,10 @@ export default function ToolkitNavigation({ componentName, background = "var(--b
     const target = scroller.current;
     if (!target?.isConnected) { setShowTop(false); return; }
     target.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-    homeLink.current?.focus({ preventScroll: true });
+    navigation.current?.querySelector<HTMLAnchorElement>("a")?.focus({ preventScroll: true });
   };
 
-  return <div className="lx-toolkit-bar" style={{ "--lx-bg": background, "--lx-ink": color, "--lx-border": border } as CSSProperties}>
+  return <div ref={navigation} className="lx-toolkit-bar" style={{ "--lx-bg": background, "--lx-ink": color, "--lx-border": border } as CSSProperties}>
     <style>{`
       .lx-toolkit-bar { box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; gap: 20px; min-height: 48px; padding: 10px 24px; background: var(--lx-bg); color: var(--lx-ink); border-bottom: 1px solid var(--lx-border); font-family: Arial, Helvetica, sans-serif; }
       .lx-toolkit-home { cursor: pointer; user-select: none; -webkit-user-select: none; position: relative; display: inline-flex; align-items: center; color: inherit; text-decoration: none; font-size: 18px; line-height: 1; font-weight: 800; letter-spacing: -.6px; }
@@ -65,7 +64,7 @@ export default function ToolkitNavigation({ componentName, background = "var(--b
       @media(max-width: 480px) { .lx-toolkit-bar { padding-inline: 20px; gap: 14px; } .lx-toolkit-component { padding-left: 14px; } }
       @media(prefers-reduced-motion: reduce) { .lx-toolkit-home::after, .lx-toolkit-x { transition: none; } .lx-toolkit-home:is(:hover, :focus-visible) .lx-toolkit-x { transform: skew(-11deg); } }
     `}</style>
-    <a ref={homeLink} className="lx-toolkit-home" href={toolkitHome} aria-label="LearnX home — all learning tools">Learn<span className="lx-toolkit-x">X</span></a>
+    <LearnXHomeLink color={color} size={18} />
     <span className="lx-toolkit-component">{componentName}</span>
     {showTop && <button type="button" className="lx-back-top" onClick={backToTop} aria-label="Back to top">Back to top <span aria-hidden="true">↑</span></button>}
   </div>;

@@ -16,14 +16,13 @@ function load(file, dependencies = {}) {
 const element = (type, props, ...children) => ({ type, props: { ...props, children } });
 const react = { createElement: element };
 
-test('studio branding keeps its typography while linking to the shared toolkit home', () => {
+test('studio uses the dashboard wordmark while linking to the shared toolkit home', () => {
   const Brand = load('components/StudioBrand.tsx', {
     react, 'react-native': { Text: 'Text', View: 'View' }, './LearnXHomeLink': 'HomeLink',
     '../theme': { displayFont: 'Studio Display', useAppTheme: () => ({ colors: { text: '#141413' } }) },
   }).default;
   const full = Brand({});
   assert.equal(full.props.children[0].type, 'HomeLink');
-  assert.equal(full.props.children[0].props.fontFamily, 'Studio Display');
   assert.equal(full.props.children[1].props.children[0], 'Visual learning studio');
   assert.equal(Brand({ compact: true }).props.children[1], false);
   const Link = load('components/LearnXHomeLink.web.tsx', { react }).default;
@@ -31,7 +30,9 @@ test('studio branding keeps its typography while linking to the shared toolkit h
   assert.equal(link.props.href, 'https://biolearnx-dashboard.vercel.app/');
   assert.equal(link.props.draggable, false);
   assert.equal(link.props.style.userSelect, 'none');
-  assert.equal(link.props.style.fontFamily, 'Studio Display');
+  assert.equal(link.props.style.fontFamily, 'Arial, Helvetica, sans-serif');
+  assert.equal(link.props.style.fontWeight, 800);
+  assert.equal(link.props.children[0], 'LEARN');
   assert.equal(link.props.children[1].props.className, 'lx-toolkit-x');
 });
 
