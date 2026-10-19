@@ -216,6 +216,11 @@ docker-compose.override.yml
 # =============================================================================
 # Miscellaneous
 # =============================================================================
+# Local thesis tooling and review artifacts
+/.thesis-review-deps/
+/thesis-review/
+/BioLearnX_Common_Final_Thesis_Report_Updated.docx
+
 .history/
 .sass-cache/
 *.pid
