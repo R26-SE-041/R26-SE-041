@@ -108,6 +108,7 @@ for path in ('health', 'ready'):
         result = json.load(response)
         assert response.status == 200, path
         print(path + ': ' + result['status'])
+import app.graph.graph  # Match the API startup import order before importing agents.
 from app.services.llm_service import EmbeddingService
 from app.agents.quiz_agent import _session_source_chunks
 assert os.environ.get('QUIZ_GENERATION_BUDGET_SEC') == '15'
