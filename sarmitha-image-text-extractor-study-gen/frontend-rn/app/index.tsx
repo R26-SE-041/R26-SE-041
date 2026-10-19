@@ -70,7 +70,10 @@ export default function HomeScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <View nativeID="site-header" style={[styles.headerOuter, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingHorizontal: gutter }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Sinhala OCR, back to top" onPress={() => scroll.current?.scrollTo({ y: 0, animated: false })}><Text style={[styles.brand, { fontSize: mobile ? 21 : 24 }]}>SINHALA OCR</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="LearnX Sinhala OCR, back to top" onPress={() => scroll.current?.scrollTo({ y: 0, animated: false })}>
+            <Text {...{ dataSet: { learnxLogo: 'true' } }} style={[styles.brand, { fontSize: mobile ? 21 : 24, alignSelf: 'flex-start', overflow: 'visible' }]}>Learn<Text {...{ dataSet: { learnxLogoX: 'true' } }}>X</Text></Text>
+            <Text style={[styles.brand, { fontSize: 10, marginTop: 10 }]}>SINHALA OCR</Text>
+          </Pressable>
           <View style={styles.headerActions}>
             {desktop && <View style={styles.navigation}><Nav label="Workspace" onPress={() => goTo("workspace")} /><Nav label="How it works" onPress={() => goTo("how")} /><Nav label="Languages" onPress={() => goTo("languages")} /></View>}
             <Pressable accessibilityRole="button" onPress={() => account.enabled ? account.user ? setHistoryOpen(true) : setAccountOpen(true) : goTo("workspace")} style={({ pressed }) => [styles.headerCta, pressed && styles.pressed]}><Text style={styles.headerCtaText}>{account.loading ? "Loading…" : account.enabled ? account.user ? "My history" : "Sign in" : mobile ? "Get started" : "Try Sinhala OCR"}</Text>{!mobile && <ArrowUpRight size={16} color={colors.surface} />}</Pressable>

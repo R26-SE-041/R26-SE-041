@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import type { SessionMessage, TranscribeResponse } from '@/types'
 import { askDocument, saveHistory, saveHistoryAudio, synthesizeSpeech } from '@/lib/api'
 import Link from 'next/link'
+import { LearnXBrand } from '@/components/ui/LearnXBrand'
 import { useRouter } from 'next/navigation'
 
 export default function DashboardPage() {
@@ -157,9 +158,7 @@ export default function DashboardPage() {
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span className="font-semibold text-sm tracking-tight" style={{ color: 'var(--c-ink)' }}>
-              VoiceLearn AI
-            </span>
+            <span style={{ color: 'var(--c-ink)' }}><LearnXBrand /></span>
           </div>
 
           {/* Center: Processing badge */}
