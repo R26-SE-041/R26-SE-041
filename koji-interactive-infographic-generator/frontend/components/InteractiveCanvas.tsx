@@ -330,7 +330,9 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
         {...{ dataSet: { dragSurface: "true" } }}
         {...panResponder.panHandlers}
         onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
-        style={[styles.canvas, { aspectRatio }]}
+        // Cap width instead of height so the image and normalized overlays keep
+        // the same aspect ratio, including on wide screens and portrait images.
+        style={[styles.canvas, { aspectRatio, maxWidth: 720 * aspectRatio }]}
       >
         <Image
           accessibilityLabel="Interactive educational image"
@@ -474,7 +476,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
   modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   modeButtonTextActive: { color: colors.text },
-  canvas: { width: "100%", minHeight: 200, maxHeight: 720, backgroundColor: colors.canvas, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  canvas: { width: "100%", alignSelf: "center", backgroundColor: colors.canvas, borderRadius: 8, overflow: "hidden" },
   pointMarker: { position: "absolute", width: 32, height: 32, borderRadius: 16, marginLeft: -16, marginTop: -16, backgroundColor: colors.markerFill, borderWidth: 3, borderColor: "#fff" },
   boxMarker: { position: "absolute", borderWidth: 3, borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
   boxDrawing: { borderColor: colors.cyan, borderStyle: "dashed", backgroundColor: colors.accentSoft },
