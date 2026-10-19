@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from uuid import uuid4
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor
+from studio.titles import display_chat_title
 
 @contextmanager
 def connection():
@@ -16,6 +17,12 @@ def connection():
         conn.close()
 
 class Repository:
+    def clear_feedback(self,user_id,agent_name,output_id):
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("delete from agent_feedback where auth_user_id=%s and agent_name=%s and output_id=%s",
+                (user_id,agent_name,output_id))
+        return {"status":"removed"}
+
     def save_feedback(self,user_id,data):
         with connection() as conn,conn.cursor() as cur:
             cur.execute("""insert into agent_feedback
@@ -170,7 +177,7 @@ class Repository:
     def save_history(self, user_id, generation_id, metadata, image_path, created_at=None, thumbnail_path=None):
         with connection() as conn, conn.cursor() as cur:
             cur.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (user_id,))
-            cur.execute("select count(*) from koji_generations where user_id=%s and metadata->>'chatId'=%s",(user_id,metadata.get("chatId")))
+            cur.execute("select count(*) from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s",(user_id,metadata.get("chatId")))
             metadata = {**metadata,"version":cur.fetchone()[0]+1}
             cur.execute("""insert into koji_generations(id,user_id,metadata,image_path,created_at,thumbnail_path)
                 values(%s,%s,%s,%s,coalesce(%s::timestamptz,now()),%s) on conflict(id) do nothing""",(generation_id,user_id,Json(metadata),image_path,created_at,thumbnail_path))
@@ -218,10 +225,12 @@ class Repository:
                     {"annotations":labels,"source":"automatic"},generation_id)
 
     def _chat_event(self, cur, user_id, chat_id, event_id, kind, data, generation_id=None, created_at=None):
-        title = str(data.get("prompt") or data.get("question") or "New conversation").strip()[:80] or "New conversation"
+        title = str(data.get("title") or data.get("prompt") or data.get("question") or "New conversation").strip()[:80] or "New conversation"
         cur.execute("""insert into koji_chats(user_id,id,title) values(%s,%s,%s)
-            on conflict(user_id,id) do update set updated_at=now()
-            where koji_chats.deleted_at is null""", (user_id,chat_id,title))
+            on conflict(user_id,id) do update set updated_at=now(),
+                title=case when (koji_chats.title='New conversation' or koji_chats.title=%s) and %s
+                    then excluded.title else koji_chats.title end
+            where koji_chats.deleted_at is null""", (user_id,chat_id,title,str(data.get("prompt") or "").strip()[:80],kind=="image" and bool(data.get("title"))))
         if cur.rowcount != 1:
             raise ValueError("Restore this creation from the Recycle Bin before continuing")
         cur.execute("""insert into koji_chat_events(user_id,id,chat_id,kind,generation_id,data,created_at)
@@ -241,6 +250,10 @@ class Repository:
         pattern="%"+query+"%"
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""select c.*, latest.id as latest_generation_id,
+                jsonb_build_object('sketchMetadata',latest.metadata->'sketchMetadata',
+                    'prompt',latest.metadata->>'prompt','enhancedPrompt',latest.metadata->>'enhancedPrompt',
+                    'anatomy',latest.metadata->'anatomy',
+                    'generationMetadata',latest.metadata->'generationMetadata') as generation_metadata,
                 latest.metadata->'anatomyAnnotations' as annotations,
                 coalesce(latest.thumbnail_path,latest.image_path) as preview_path,
                 coalesce(latest.metadata->>'mode',
@@ -264,11 +277,11 @@ class Repository:
                 and (%s='' or coalesce(latest.metadata->>'mode',
                     (select e.data->>'mode' from koji_chat_events e where e.user_id=c.user_id
                      and e.chat_id=c.id and e.kind='prompt' order by e.created_at desc,e.id desc limit 1),'general')=%s)
-                and (%s='' or c.title ilike %s or exists(select 1 from koji_chat_events e
+                and (%s='' or c.title ilike %s or coalesce(latest.metadata->'sketchMetadata'->>'subject',latest.metadata->'generationMetadata'->>'subject','') ilike %s or exists(select 1 from koji_chat_events e
                     where e.user_id=c.user_id and e.chat_id=c.id and
                     (e.data->>'prompt' ilike %s or e.data->>'question' ilike %s or e.data->>'answer' ilike %s)))
-                order by c.updated_at desc,c.id desc limit 50""",(user_id,trashed,before,before,before_id,since,since,category,category,mode,mode,query,pattern,pattern,pattern,pattern))
-            return [dict(row) for row in cur.fetchall()]
+                order by c.updated_at desc,c.id desc limit 50""",(user_id,trashed,before,before,before_id,since,since,category,category,mode,mode,query,pattern,pattern,pattern,pattern,pattern))
+            return [display_chat_title(dict(row)) for row in cur.fetchall()]
 
     def list_models(self,user_id,before=None,before_id="",query="",trashed=False):
         with connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as cur:

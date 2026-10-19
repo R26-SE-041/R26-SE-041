@@ -5,7 +5,9 @@ import { listHistory } from "../historyStorage";
 
 export interface ModelGalleryProps {
   enabled: boolean; active: boolean; query: string; trashed: boolean;
+  busy?: boolean;
   onOpen: (model: SavedModel) => void;
+  onContinue?: (model: SavedModel) => void;
   onRename: (model: SavedModel) => void;
   onDelete: (model: SavedModel) => void;
   onRestore: (model: SavedModel) => void;

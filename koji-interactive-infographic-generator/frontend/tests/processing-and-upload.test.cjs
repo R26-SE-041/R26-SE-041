@@ -52,7 +52,8 @@ function studio({ cloud = true, canceled = false, invalid = false, modelLinkFail
   const dependencies = {
     react, 'react-native': native,
     './processing': processing, './threeDSource': source,
-    './theme': { useAppTheme: () => ({ colors: {} }), makeSharedStyles: () => ({}) },
+    './usePullToRefresh': () => 0,
+    './theme': { useAppTheme: () => ({ colors: {} }), makeSharedStyles: () => ({}), layout: load('designTokens.ts').layout },
     './config': { THREED_AGENT_URL: 'https://test-3d', STUDIO_API_URL: cloud ? '/studio-api' : '' },
     './components/FeedbackControls': { createOutputId: kind => kind + '-fixture' },
     'expo-document-picker': { getDocumentAsync: async () => canceled ? { canceled: true } : {
@@ -87,8 +88,23 @@ function studio({ cloud = true, canceled = false, invalid = false, modelLinkFail
     return find(node.props?.children, predicate);
   }
   const button = label => find(render(), node => node.props?.label === label)?.props;
-  return { button, calls };
+  const resume = item => find(render(), node => node.props?.active !== undefined && typeof node.props?.onResume === 'function').props.onResume(item);
+  const changePrompt = text => find(render(), node => node.props?.accessibilityLabel === 'Your prompt').props.onChangeText(text);
+  return { button, calls, resume, changePrompt };
 }
+
+test('editing a resumed image creates its next generation inside the original chat', async () => {
+  const app = studio();
+  const original = { id: 'saved-image', chatId: 'original-chat', mode: 'general', prompt: 'First prompt', enhancedPrompt: 'First prompt', imageBase64: 'SAVED', speedMode: 'fast' };
+  app.resume(original);
+  app.changePrompt('A revised prompt');
+  await app.button('Generate Image').onPress();
+  const request = app.calls.find(call => call[0] === 'job')[1];
+  assert.equal(request.chat_id, 'original-chat');
+  assert.equal(request.prompt, 'A revised prompt');
+  assert.equal(original.imageBase64, 'SAVED');
+  assert.equal(original.prompt, 'First prompt');
+});
 
 test('device image can be converted without first generating an image and uses its own cloud source', async () => {
   const app = studio();

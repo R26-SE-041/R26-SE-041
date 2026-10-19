@@ -1,18 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getHistoryRevision, isHistoryFresh, subscribeHistory } from "../historyActivity";
-import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { cloudEnabled, getCloudHistory, SavedModel, studioRequest } from "../studioClient";
 import { trashConversation, restoreConversation, purgeConversation, GenerationHistoryItem, listHistory, loadHistoryItem, syncLocalHistory, updateHistoryItem } from "../historyStorage";
 import { CreationSummary, creationTitle, conversationEvents, dateGroup, filterArchive, localSummaries, modeLabel } from "../historyView";
 import ModelGallery from "./ModelGallery";
 import ArchiveDialog from "./ArchiveDialog";
+import HistoryCardMenu from "./HistoryCardMenu";
 import HistoryImagePreview from "./HistoryImagePreview";
 import { headingFont, makeSharedStyles, useAppTheme } from "../theme";
 import Icon from "./Icon";
-import AnatomyOverlay from "./AnatomyOverlay";
 import ThreeDViewer from "./ThreeDViewer";
 import ImageDownloadControls from "./ImageDownloadControls";
 import PdfEvidence from "./PdfEvidence";
+import StructuredAnswer from "./StructuredAnswer";
 import type { GenerationInteraction } from "../historyStorage";
 import type { AnatomyAnnotation } from "../App";
 
@@ -40,7 +41,6 @@ export default function CreationArchive({ active = true, onResume }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [hasMoreEvents, setHasMoreEvents] = useState(false);
-  const [menu, setMenu] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<CreationSummary | null>(null);
   const [renaming, setRenaming] = useState<CreationSummary | null>(null);
   const [title, setTitle] = useState("");
@@ -132,11 +132,11 @@ export default function CreationArchive({ active = true, onResume }: Props) {
   const open = useCallback(async (item: CreationSummary, resume = false, background = false) => {
     const version = ++openVersion.current;
     const startedRevision = getHistoryRevision();
-    setBusy(true); setError(null); setMenu(null);
+    setBusy(true); setError(null);
     if (!resume && !background) { setSelected(item); setCreation(null); setEvents([]); setVersionsOpen(false); setDetailsOpen(false); }
     try {
       let [full, turns] = await Promise.all([
-        item.generationId ? (item.source === "cloud" ? getCloudHistory(item.generationId, item.modelEvent) : item.versions?.length ? loadHistoryItem(item.versions[item.versions.length - 1]) : listHistory().then(rows => rows.find(row => row.id === item.generationId) || null)) : Promise.resolve(null),
+        item.generationId ? (item.source === "cloud" ? getCloudHistory(item.generationId, item.modelEvent) : item.versions?.length ? loadHistoryItem(item.versions[item.versions.length - 1]) : listHistory().then(rows => { const stored = rows.find(version => version.id === item.generationId); return stored ? loadHistoryItem(stored) : null; })) : Promise.resolve(null),
         item.source === "cloud" ? studioRequest<SavedEvent[]>(`/studio/chats/${encodeURIComponent(item.id)}/events`) : Promise.resolve([]),
       ]);
       // Older API releases lack list previews; saved image events still allow
@@ -172,7 +172,7 @@ export default function CreationArchive({ active = true, onResume }: Props) {
       if (trash) await purgeConversation(item.id, item.source === "cloud");
       else await trashConversation(item.id, item.source === "cloud");
       if (selected?.id === item.id) { setSelected(null); setCreation(null); }
-      setItems(previous => previous.filter(row => row.id !== item.id)); setDeleting(null); setMenu(null);
+      setItems(previous => previous.filter(row => row.id !== item.id)); setDeleting(null);
       await refresh();
       setNotice(trash ? "Creation permanently deleted." : "Moved to Recycle Bin. You can restore it there.");
     });
@@ -188,10 +188,13 @@ export default function CreationArchive({ active = true, onResume }: Props) {
     const item = renaming;
     await action(async () => {
       if (item.source === "cloud") await studioRequest(`/studio/chats/${encodeURIComponent(item.id)}`, { method: "PATCH", body: JSON.stringify({ title: title.trim() }) });
-      else for (const version of item.versions || []) await updateHistoryItem(version.id, { title: title.trim() });
+      else {
+        const versions = item.versions ?? (await listHistory()).filter(version => (version.chatId || version.id) === item.id);
+        for (const version of versions) await updateHistoryItem(version.id, { title: title.trim() });
+      }
       setItems(previous => previous.map(row => row.id === item.id ? { ...row, title: title.trim() } : row));
       if (selected?.id === item.id) setSelected({ ...selected, title: title.trim() });
-      setRenaming(null); setMenu(null); setNotice("Title updated.");
+      setRenaming(null); setNotice("Title updated.");
     });
   };
   const loadOlderEvents = async () => {
@@ -222,7 +225,7 @@ export default function CreationArchive({ active = true, onResume }: Props) {
   return <View onLayout={event => setArchiveWidth(event.nativeEvent.layout.width)} style={{ gap: 18 }}>
     <View style={[row, { justifyContent: "space-between" }]}>
       <View style={{ flex: 1 }}><Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 34 }}>{trash ? "Recycle Bin" : "Your creations"}</Text><Text style={{ color: colors.textMuted, marginTop: 6 }}>{trash ? "Restore deleted creations, or permanently remove them." : "Images, conversations and versions, together."}</Text></View>
-      <Pressable accessibilityRole="button" disabled={busy || loading} style={button} onPress={() => { requestVersion.current++; openVersion.current++; setItems([]); setQuery(""); setHasMore(false); setLoading(true); setRenaming(null); setError(null); setTrash(!trash); setSelected(null); setCreation(null); setDeleting(null); setMenu(null); setNotice(null); }}><Text style={text}>{trash ? "Back to creations" : "Recycle Bin"}</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={busy || loading} style={button} onPress={() => { requestVersion.current++; openVersion.current++; setItems([]); setQuery(""); setHasMore(false); setLoading(true); setRenaming(null); setError(null); setTrash(!trash); setSelected(null); setCreation(null); setDeleting(null); setNotice(null); }}><Text style={text}>{trash ? "Back to creations" : "Recycle Bin"}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Refresh history" disabled={busy || loading} style={button} onPress={() => void refresh()}><Icon name="refresh" color={colors.text} size={18} /></Pressable>
     </View>
     {error && <View style={shared.error}><Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text><Pressable accessibilityRole="button" style={button} onPress={() => selected ? void open(selected) : void refresh()}><Text style={text}>Retry</Text></Pressable></View>}
@@ -231,15 +234,15 @@ export default function CreationArchive({ active = true, onResume }: Props) {
     {renaming && <ArchiveDialog title="Rename creation" busy={busy} onClose={() => setRenaming(null)}><TextInput autoFocus accessibilityLabel="Creation title" value={title} onChangeText={setTitle} onSubmitEditing={() => { if (!busy && title.trim()) void rename(); }} maxLength={80} editable={!busy} style={{ ...text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }} />{error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}<View style={row}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => setRenaming(null)}><Text style={text}>Cancel</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !title.trim()} style={button} onPress={() => void rename()}><Text style={text}>{busy ? "Saving…" : "Save title"}</Text></Pressable></View></ArchiveDialog>}
     {!selected && <View accessibilityRole="tablist" style={row}>{([['images','Images & labels'],['sketch','Sketches'],['models','3D models']] as const).map(([id,label]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: category === id }} onPress={() => changeCategory(id)} style={[button, { borderWidth: 1, borderColor: category === id ? colors.text : colors.border, backgroundColor: category === id ? colors.accentSoft : colors.surface }]}><Text style={{ ...text, fontWeight: category === id ? "700" : "400" }}>{label}</Text></Pressable>)}</View>}
     {!selected && <TextInput accessibilityLabel="Search creations" placeholder="Search your creations…" placeholderTextColor={colors.textDim} value={query} onChangeText={setQuery} maxLength={100} style={{ ...text, padding: 14, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface }} />}
-    <View style={{ display: category === "models" && !selected ? "flex" : "none" }}><ModelGallery enabled={visited || active} active={active && category === "models" && !selected} query={query} trashed={trash}
-      onOpen={model => void open(modelSummary(model))} onRename={model => { setRenaming(modelSummary(model)); setTitle(model.title); setError(null); }} onDelete={model => { setDeleting(modelSummary(model)); setError(null); }} onRestore={model => void restore(modelSummary(model))} /></View>
+    <View style={{ display: category === "models" && !selected ? "flex" : "none" }}><ModelGallery enabled={visited || active} active={active && category === "models" && !selected} query={query} trashed={trash} busy={busy}
+      onOpen={model => void open(modelSummary(model))} onContinue={onResume ? model => void open(modelSummary(model), true) : undefined} onRename={model => { setRenaming(modelSummary(model)); setTitle(model.title); setError(null); }} onDelete={model => { setDeleting(modelSummary(model)); setError(null); }} onRestore={model => void restore(modelSummary(model))} /></View>
     {selected ? <>
-      <Pressable accessibilityRole="button" disabled={busy} style={[button, { alignSelf: "flex-start" }]} onPress={() => { openVersion.current++; setSelected(null); setCreation(null); setMenu(null); setNotice(null); }}><Text style={text}>← Back to creations</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={busy} style={[button, { alignSelf: "flex-start" }]} onPress={() => { openVersion.current++; setSelected(null); setCreation(null); setNotice(null); }}><Text style={text}>← Back to creations</Text></Pressable>
       <View style={[shared.card, { gap: 18 }]}>
         <View style={[row, { justifyContent: "space-between" }]}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 28 }}>{selected.title}</Text><Text style={{ color: colors.textMuted, marginTop: 5 }}>{modeLabel(selected.mode)} · {new Date(selected.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</Text></View>{creation && onResume && <Pressable accessibilityRole="button" disabled={busy} style={[button, shared.primaryButton]} onPress={() => onResume(creation)}><Text style={shared.buttonText}>Continue</Text></Pressable>}</View>
         {busy && <ActivityIndicator color={colors.primary} />}
         {creation && <>
-          <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", aspectRatio: 1, backgroundColor: "white", borderRadius: 8, overflow: "hidden" }}><Image source={{ uri: creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl }} resizeMode="contain" style={{ width: "100%", height: "100%" }} /><AnatomyOverlay annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
+          <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", borderRadius: 8, overflow: "hidden" }}><HistoryImagePreview key={creation.id} uri={creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl!} assetKey={creation.imageKey || creation.id} annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
           <ImageDownloadControls imageBase64={creation.imageBase64} annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} organ={(creation.anatomy as { organ?: string })?.organ} />
           {(creation.glbBase64 || creation.glbUrl) && <ThreeDViewer glbBase64={creation.glbBase64} modelUrl={creation.glbUrl} modelKey={creation.modelKey || creation.id} sizeKb={creation.glbSizeKb} active={active} />}
         </>}
@@ -248,8 +251,8 @@ export default function CreationArchive({ active = true, onResume }: Props) {
         <Text accessibilityRole="header" style={{ ...text, fontWeight: "600" }}>Conversation</Text>
         {hasMoreEvents && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void loadOlderEvents()}><Text style={text}>Load earlier messages</Text></Pressable>}
         {!events.some(event => event.kind === "prompt") && creation?.prompt && <Text selectable style={text}>{creation.prompt}</Text>}
-        {conversationEvents(events).map(event => <View key={event.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text style={{ color: colors.textDim, fontSize: 12 }}>{new Date(event.createdAt).toLocaleString()}</Text><Text selectable style={text}>{event.data.question || event.data.prompt || event.data.message}</Text>{event.data.answer && <Text selectable style={text}>{event.data.answer}</Text>}<PdfEvidence sources={event.data.sources} grounding={event.data.grounding} />{event.data.error && <Text style={{ color: colors.danger }}>{event.data.error}</Text>}</View>)}
-        {selected.source === "local" && (creation?.interactions || []).map(turn => <View key={turn.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text selectable style={{ ...text, fontWeight: "600" }}>{turn.question || "Explore selected region"}</Text><Text selectable style={text}>{turn.answer || turn.error || "Answer pending"}</Text><PdfEvidence sources={turn.sources} grounding={turn.grounding} /></View>)}
+        {conversationEvents(events).map(event => <View key={event.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text style={{ color: colors.textDim, fontSize: 12 }}>{new Date(event.createdAt).toLocaleString()}</Text><Text selectable style={text}>{event.data.question || event.data.prompt || event.data.message}</Text>{event.data.answer && <StructuredAnswer answer={event.data.answer} />}<PdfEvidence sources={event.data.sources} grounding={event.data.grounding} />{event.data.error && <Text style={{ color: colors.danger }}>{event.data.error}</Text>}</View>)}
+        {selected.source === "local" && (creation?.interactions || []).map(turn => <View key={turn.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text selectable style={{ ...text, fontWeight: "600" }}>{turn.question || "Explore selected region"}</Text><StructuredAnswer answer={turn.answer || turn.error || "Answer pending"} /><PdfEvidence sources={turn.sources} grounding={turn.grounding} /></View>)}
         {!events.some(event => event.kind === "interaction") && !creation?.interactions?.length && <Text style={{ color: colors.textMuted }}>Continue this creation to ask questions or explore its details.</Text>}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={button} onPress={() => setDetailsOpen(!detailsOpen)}><Text style={text}>{detailsOpen ? "Hide generation details" : "Generation details"}</Text></Pressable>
         {detailsOpen && <View style={{ gap: 12 }}>
@@ -265,9 +268,11 @@ export default function CreationArchive({ active = true, onResume }: Props) {
       {!loading && !visible.length && <View style={[shared.card, { paddingVertical: 40, alignItems: "center", gap: 10 }]}><Icon name="image" color={colors.primary} size={32} /><Text style={{ ...text, fontWeight: "600" }}>{query.trim() ? "No matching creations" : trash ? "Recycle Bin is empty" : "Your ideas belong here"}</Text><Text style={{ color: colors.textMuted, textAlign: "center" }}>{query.trim() ? "Try a different search." : trash ? "Deleted creations stay here until you restore or permanently delete them." : "Create an image or drawing. Its conversation and versions will stay together."}</Text></View>}
       {groups.map(([label, rows]) => <View key={label} style={{ gap: 12 }}><Text accessibilityRole="header" style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>{label}</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>{rows.map(item => <View key={item.id} style={[shared.card, { padding: 14, gap: 12, width: cardWidth ?? "100%", flexGrow: 0, flexShrink: 0 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title}`} disabled={busy || trash} onPress={() => void open(item)} style={{ borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceSoft }}>{item.imageUrl ? <HistoryImagePreview uri={item.imageUrl} assetKey={item.imageKey || item.generationId || item.id} annotations={item.annotations as AnatomyAnnotation[]} /> : <View style={{ aspectRatio: 1, alignItems: "center", justifyContent: "center" }}><Icon name={item.mode === "sketch" ? "pencil" : item.mode === "anatomy" ? "heart" : "image"} size={40} color={colors.textDim} /></View>}</Pressable>
-        <Text numberOfLines={2} style={{ ...text, height: 44, fontWeight: "600", fontSize: 17 }}>{item.title}</Text><Text numberOfLines={2} style={{ color: colors.textMuted, height: 36, lineHeight: 18, fontSize: 12 }}>{modeLabel(item.mode)} · {new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}{item.hasThreeD ? " · 3D" : ""}</Text>
-        {trash ? <View style={row}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void restore(item)}><Text style={text}>Restore</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => setDeleting(item)}><Text style={{ ...text, color: colors.danger }}>Delete permanently</Text></Pressable></View> : <View style={row}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item)}><Text style={text}>Open</Text></Pressable>{onResume && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item, true)}><Text style={text}>Continue</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} accessibilityLabel={`More actions for ${item.title}`} accessibilityState={{ expanded: menu === item.id }} style={[button, { marginLeft: "auto" }]} onPress={() => setMenu(menu === item.id ? null : item.id)}><Text style={{ ...text, fontSize: 22 }}>⋯</Text></Pressable></View>}
-        {menu === item.id && <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}><Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => { setRenaming(item); setTitle(item.title); setMenu(null); }}><Text style={text}>Rename</Text></Pressable>{item.generationId && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void open(item)}><Text style={text}>Download options</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => { setDeleting(item); setMenu(null); }}><Text style={{ color: colors.danger }}>Delete</Text></Pressable></View>}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text numberOfLines={2} style={{ ...text, height: 44, fontWeight: "600", fontSize: 17, flex: 1 }}>{item.title}</Text>
+          <HistoryCardMenu title={item.title} disabled={busy} trashed={trash} onOpen={() => void open(item)} onContinue={onResume ? () => void open(item, true) : undefined}
+            onRename={() => { setRenaming(item); setTitle(item.title); setError(null); }} onDelete={() => { setDeleting(item); setError(null); }} onRestore={() => void restore(item)} />
+        </View>
+        <Text numberOfLines={2} style={{ color: colors.textMuted, height: 36, lineHeight: 18, fontSize: 12 }}>{modeLabel(item.mode)} · {new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}{item.hasThreeD ? " · 3D" : ""}</Text>
       </View>)}</View></View>)}
       {hasMore && !loading && !!items.length && <Pressable accessibilityRole="button" style={button} disabled={busy} onPress={() => void refresh(items[items.length - 1])}><Text style={text}>Load older creations</Text></Pressable>}
       </View>

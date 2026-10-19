@@ -19,11 +19,14 @@ class Annotation(BaseModel):
     source: Literal["automatic", "manual"] = "automatic"
 
 
-class OutputFeedback(BaseModel):
+class FeedbackTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    session_id: str = Field(min_length=1, max_length=128)
     agent_name: Literal["prompt-agent", "prompt-anatomy", "prompt-generic", "image-agent", "interactive-agent", "eval-agent", "threed-agent"]
     output_id: str = Field(min_length=1, max_length=128)
+
+
+class OutputFeedback(FeedbackTarget):
+    session_id: str = Field(min_length=1, max_length=128)
     rating: Literal[-1, 1]
     reason_codes: list[str] = Field(default_factory=list, max_length=8)
     comment: str | None = Field(default=None, max_length=2000)
@@ -103,6 +106,13 @@ class JobRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_kind(self):
+        if self.kind in {"generate", "enhance", "sketch"}:
+            from shared.safety import assess_prompt, blocked_error
+            instruction = "\n".join(filter(None, [self.prompt, self.raw_prompt, self.feedback, self.sketch.instruction if self.sketch else ""]))
+            if instruction.strip():
+                safety = assess_prompt(instruction)
+                if not safety.allowed:
+                    raise ValueError(blocked_error(safety))
         if self.kind == "sketch" and self.sketch is None:
             raise ValueError("Sketch data is required")
         if self.kind in {"generate", "enhance"} and not self.prompt.strip():
@@ -153,6 +163,7 @@ class ChatPatch(BaseModel):
     title: str = Field(min_length=1, max_length=80)
 
 class HistoryImport(BaseModel):
+    snapshot_interactions: bool = False
     model_config = ConfigDict(extra="forbid")
     legacy_id: str = Field(min_length=1, max_length=160)
     created_at: str = Field(max_length=80)

@@ -46,10 +46,10 @@ export default function ImageDownloadControls({ annotations, imageBase64, organ 
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { gap: 7 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  button: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 13, paddingVertical: 9 },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 8 },
+  button: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexGrow: 1, flexBasis: 180, minWidth: 0, minHeight: 48, gap: 8, backgroundColor: colors.buttonBackground, borderWidth: 1, borderColor: colors.buttonBackground, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
   secondary: { backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.primaryBright },
-  text: { color: colors.onButton, fontSize: 12, fontWeight: "800" },
+  text: { color: colors.onButton, fontSize: 14, fontWeight: "500", flexShrink: 1, textAlign: "center" },
   secondaryText: { color: colors.primaryBright },
   disabled: { opacity: 0.45 },
   error: { color: colors.danger, fontSize: 11 },

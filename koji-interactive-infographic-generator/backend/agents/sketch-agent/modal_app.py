@@ -119,11 +119,12 @@ def generate_sketch(payload: dict):
             "can pass finished_color when it has finished shaded material surfaces; pencil lines cannot. "
             "complete_subject requires the requested subject fully within frame with white margins and no "
             "unrelated or duplicate objects. white_background requires plain white without scenery or heavy shadows. "
-            "clean_image means no text, arrows, labels or watermarks. For human anatomy, check visible structures, "
-            "proportions, connections, viewpoint and natural tissue colors; do not require invisible internal parts. "
+            "clean_image means no text, arrows, labels or watermarks. This is a creative sketch workflow: "
+            "do not validate anatomy or require medical accuracy; anatomy_correct must be null. "
             "Return ONLY JSON with ALL fields: subject_matches (boolean), finished_color (boolean), "
             "white_background (boolean), complete_subject (boolean), clean_image (boolean), "
-            "anatomy_correct (boolean for anatomy, null otherwise), score (0..10), feedback (short actionable sentence).\n"
+            "anatomy_correct (null), score (0..10), feedback (short actionable sentence), "
+            "sexual_content (true for sexualized, nude or pornographic imagery; false for non-sexual educational subjects).\n"
             + json.dumps({"subject": understanding, "anatomy": anatomy})
         )
         return vision.inspect.remote(image, instruction)

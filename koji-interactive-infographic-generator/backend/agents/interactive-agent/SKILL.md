@@ -16,7 +16,9 @@ description: Identify, segment, and explain user-selected regions in educational
 
 - For `identify`, return a short structure name on the first line, followed by one or two simple sentences.
 - For `explain`, use these plain-language lines: `What it is:`, `What it does:`, and `Why it matters here:`.
-- For `ask`, answer the question directly first, then add one short `Visible evidence:` line.
+- For `ask`, use `Answer:` for the direct answer, then `Visible evidence:` for brief support.
+- Keep the hierarchy stable: section heading, explanation, then short ordered steps only when the question asks about a process.
+- For PDF-grounded answers, retain the separate evidence-selection JSON contract. The application renders the selected facts and verified citations; never invent headings or facts inside that machine contract.
 - Do not return markdown tables, hidden reasoning, coordinates, confidence scores, or JSON to the user.
 - If uncertain, say `Not clearly identifiable` and briefly state what is visibly unclear.
 

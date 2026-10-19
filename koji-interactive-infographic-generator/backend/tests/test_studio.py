@@ -57,6 +57,24 @@ class JobContractTests(unittest.TestCase):
         self.assertEqual(required_services({"kind":"sketch"}),{"sketch"})
 
 class OwnershipApiTests(unittest.TestCase):
+    def test_unauthenticated_requests_cannot_clear_feedback(self):
+        app.dependency_overrides.clear()
+        try:
+            with patch("studio.main.repo") as repo:
+                response = self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output"})
+                self.assertEqual(response.status_code,401)
+                repo.clear_feedback.assert_not_called()
+        finally:
+            app.dependency_overrides[require_user] = lambda: USER_B
+
+    def test_feedback_deselection_uses_authenticated_owner_and_only_selected_output(self):
+        with patch("studio.main.repo") as repo:
+            repo.clear_feedback.return_value = {"status":"removed"}
+            response = self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output"})
+            self.assertEqual(response.status_code,200)
+            repo.clear_feedback.assert_called_once_with(USER_B,"image-agent","chosen-output")
+            self.assertEqual(self.client.request("DELETE","/feedback",json={"agent_name":"image-agent","output_id":"chosen-output","user_id":USER_A}).status_code,422)
+
     def test_completed_model_link_does_not_download_large_assets_on_cpu_api(self):
         generation_id = str(uuid4())
         with patch("studio.main.repo") as repo, patch("studio.main.Storage") as storage:
@@ -134,6 +152,22 @@ class OwnershipApiTests(unittest.TestCase):
             repo.patch_history.assert_called_once_with(USER_B,generation_id,{"anatomyAnnotations":[],"annotationsEdited":True})
 
 class WorkflowRegressionTests(unittest.TestCase):
+    def test_label_version_keeps_answer_snapshot_without_reassigning_original_events(self):
+        from studio.schemas import HistoryImport
+        from studio.main import import_history
+        answers = [{"id":"original-question","answer":"Saved answer"}]
+        with patch("studio.main.repo") as repo, patch("studio.main.Storage"):
+            repo.get_history.return_value = None
+            result = import_history(HistoryImport(legacy_id="new-label-version", created_at="2026-10-19T00:00:00Z",
+                metadata={"mode":"general","chatId":"original-chat","interactions":answers},
+                image_base64="aW1hZ2U=", snapshot_interactions=True), USER_A)
+            saved = repo.save_history.call_args.args
+            self.assertEqual(saved[1], result["id"])
+            self.assertEqual(saved[2]["chatId"], "original-chat")
+            self.assertEqual(saved[2]["interactions"], answers)
+            repo.append_interaction.assert_not_called()
+            repo.patch_history.assert_not_called()
+
     def test_bad_history_cursor_is_rejected_before_database_access(self):
         app.dependency_overrides[require_user] = lambda: USER_A
         try:
@@ -149,7 +183,7 @@ class WorkflowRegressionTests(unittest.TestCase):
         pipeline=Pipeline(repo=repo,storage=storage)
         pipeline.invoke=Mock(side_effect=[
             {"image_base64":"first-image"},
-            {"visual_score":5,"pedagogical_score":6},
+            {"visual_score":4,"pedagogical_score":4},
             RuntimeError("GPU unavailable"),
         ])
         job={"id":str(uuid4()),"user_id":USER_A,"kind":"generate","state":{},"endpoints":{},

@@ -79,6 +79,19 @@ export function createAuthActions(auth: Auth, redirectTo: string) {
       const { error } = await auth.updateUser({ password, current_password: currentPassword });
       check(error);
     },
+    async changeEmail(email: string, currentPassword: string) {
+      const nextEmail = validateEmail(email);
+      if (!currentPassword) throw new Error("Enter your current password.");
+      const { data: { user }, error: userError } = await auth.getUser();
+      check(userError);
+      if (!user?.email) throw new Error("Sign in again before changing your email.");
+      if (user.email.toLowerCase() === nextEmail.toLowerCase()) throw new Error("Enter a different email address.");
+      const { data, error: signInError } = await auth.signInWithPassword({ email: user.email, password: currentPassword });
+      check(signInError);
+      if (!data.session || data.session.user.id !== user.id) throw new Error("Sign in again before changing your email.");
+      const { error } = await auth.updateUser({ email: nextEmail }, { emailRedirectTo: redirectTo });
+      check(error);
+    },
     async signOut() {
       const { error } = await auth.signOut({ scope: "local" });
       check(error);

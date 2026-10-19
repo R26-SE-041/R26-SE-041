@@ -1,18 +1,20 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import ChangePasswordForm from "./ChangePasswordForm";
+import ChangeEmailForm from "./ChangeEmailForm";
 import Icon from "./Icon";
 import { useAppTheme } from "../theme";
-interface Props { email?: string; name?: string; signOut: () => Promise<void>; changePassword: (current: string, password: string, confirmation: string) => Promise<void> }
-export default function StudioSessionPanel({ email, name, signOut, changePassword }: Props) {
+interface Props { email?: string; name?: string; signOut: () => Promise<void>; changePassword: (current: string, password: string, confirmation: string) => Promise<void>; changeEmail: (email: string, password: string) => Promise<void> }
+export default function StudioSessionPanel({ email, name, signOut, changePassword, changeEmail }: Props) {
   const { colors } = useAppTheme();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
   const displayName = name || email || "Your account";
-  const close = () => { if (!busy) { setOpen(false); setChangingPassword(false); setError(null); } };
+  const close = () => { if (!busy) { setOpen(false); setChangingPassword(false); setChangingEmail(false); setError(null); } };
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel="Open account menu" accessibilityState={{ expanded: open }} onPress={() => setOpen(true)}
       style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.buttonBackground, alignItems: "center", justifyContent: "center" }}>
@@ -29,7 +31,8 @@ export default function StudioSessionPanel({ email, name, signOut, changePasswor
           <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18 }}>{displayName}</Text>
           {email && <Text style={{ color: colors.textMuted, fontSize: 13 }}>{email}</Text>}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}><Icon name="check" size={14} color={colors.success} /><Text style={{ color: colors.textMuted, fontSize: 12 }}>Signed in</Text></View>
-          {open && changingPassword ? <ChangePasswordForm changePassword={changePassword} busy={busy} setBusy={setBusy} /> : <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setError(null); setChangingPassword(true); }} style={{ padding: 12, borderRadius: 8, backgroundColor: colors.surfaceSoft }}><Text style={{ color: colors.primaryBright, fontWeight: "600" }}>Change password</Text></Pressable>}
+          {open && changingPassword ? <ChangePasswordForm changePassword={changePassword} busy={busy} setBusy={setBusy} /> : !changingEmail && <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setError(null); setChangingPassword(true); }} style={{ padding: 12, borderRadius: 8, backgroundColor: colors.surfaceSoft }}><Text style={{ color: colors.primaryBright, fontWeight: "600" }}>Change password</Text></Pressable>}
+          {open && changingEmail ? <ChangeEmailForm changeEmail={changeEmail} busy={busy} setBusy={setBusy} /> : !changingPassword && <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setError(null); setChangingEmail(true); }} style={{ padding: 12, borderRadius: 8, backgroundColor: colors.surfaceSoft }}><Text style={{ color: colors.primaryBright, fontWeight: "600" }}>Change email</Text></Pressable>}
           <Pressable accessibilityRole="button" disabled={busy} onPress={async () => {
             setBusy(true); setSigningOut(true); setError(null);
             try { await signOut(); setOpen(false); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to sign out."); }

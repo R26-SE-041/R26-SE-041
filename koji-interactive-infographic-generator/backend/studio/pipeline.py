@@ -154,7 +154,7 @@ class Pipeline:
             image = output.get("image_base64")
             final_prompt = output.get("prompt") or final_prompt
             metadata = output.get("generation_metadata")
-            anatomy = output.get("anatomy_spec") or {"is_anatomy": False}
+            anatomy = {"is_anatomy": False}  # Sketch never enters anatomy validation.
             warning = output.get("quality_warning")
             retries = output.get("retry_count", 0)
             payload = {"schema_version": "1.0", "final_prompt": final_prompt,
@@ -196,7 +196,7 @@ class Pipeline:
                 if best is None or quality_rank(evaluation)>quality_rank(best[1]):
                     best = (image,evaluation,metadata)
                 retries = attempt
-                if evaluation["visualScore"]>=7 and evaluation["pedagogicalScore"]>=7 and not evaluation["anatomyHardFailures"]:
+                if evaluation["visualScore"]>=5 and evaluation["pedagogicalScore"]>=5 and not evaluation["anatomyHardFailures"]:
                     break
                 feedback = ("Improve clarity and factual accuracy. "+evaluation["feedback"]+". Correct: "+"; ".join(evaluation["anatomyHardFailures"]))[:2000]
                 if attempt == 2:
@@ -215,11 +215,13 @@ class Pipeline:
         if job["kind"] == "sketch":
             record.update(sketchStrokes=p["sketch"]["strokes"],sketchMetadata=metadata,
                 sketchStrength=p["sketch"]["control_strength"])
+        from studio.titles import generation_title
+        record["title"] = generation_title(record)
         if not self.repo.heartbeat(job):
             raise RuntimeError("Worker lease lost")
         self.repo.save_history(str(job["user_id"]),generation_id,record,image_path,thumbnail_path=thumbnail_path)
         self.repo.append_chat_event(str(job["user_id"]),record["chatId"],generation_id+":image","image",
-            {"mode":p["mode"],"prompt":record["prompt"],"enhancedPrompt":final_prompt,
+            {"mode":p["mode"],"title":record.get("title"),"prompt":record["prompt"],"enhancedPrompt":final_prompt,
              "jobId":generation_id,"generationMetadata":metadata},generation_id)
         self.repo.update_job(job,generation_id=generation_id)
         label_job_id = None

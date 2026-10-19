@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from studio.repository import Repository
 from studio.storage import Storage
-from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback
+from studio.schemas import JobRequest, HistoryPatch, Interaction, HistoryImport, ChatEvent, ChatPatch, OutputFeedback, FeedbackTarget
 from studio.pipeline import configured_endpoints, required_services
 from studio.modal_accounts import routing_endpoints
 from studio.documents import Documents, MAX_PDF_BYTES, filename_for_upload, public_document
@@ -118,6 +118,11 @@ def save_output_feedback(body: OutputFeedback,user_id: str=Depends(require_user)
         raise HTTPException(404,"Output feedback not found") from None
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from None
+
+
+@app.delete("/feedback")
+def clear_output_feedback(body: FeedbackTarget,user_id: str=Depends(require_user)):
+    return repo.clear_feedback(user_id,body.agent_name,body.output_id)
 
 @app.post("/studio/jobs",status_code=202)
 def start_job(body: JobRequest,user_id: str=Depends(require_user)):
@@ -341,8 +346,11 @@ def import_history(body: HistoryImport,user_id: str=Depends(require_user)):
     repo.save_history(user_id,generation_id,metadata,path,created_at=body.created_at,thumbnail_path=thumbnail_path)
     repo.append_chat_event(user_id,metadata.get("chatId") or generation_id,generation_id+":image","image",
         {"mode":metadata.get("mode"),"prompt":metadata.get("prompt"),"enhancedPrompt":metadata.get("enhancedPrompt")},generation_id)
-    for interaction in metadata.get("interactions",[]):
-        repo.append_interaction(user_id,generation_id,interaction)
+    # A copied version retains its answer snapshot. The original conversation
+    # events keep their IDs and ownership; do not reassign or duplicate them.
+    if not body.snapshot_interactions:
+        for interaction in metadata.get("interactions",[]):
+            repo.append_interaction(user_id,generation_id,interaction)
     if body.glb_base64:
         glb_path = storage.upload(f"{user_id}/{generation_id}/model.glb",body.glb_base64,"model/gltf-binary")
         repo.patch_history(user_id,generation_id,{},glb_path=glb_path)

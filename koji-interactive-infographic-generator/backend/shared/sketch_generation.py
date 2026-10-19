@@ -1,4 +1,4 @@
-"""Validated sketch understanding, anatomy routing and bounded quality retries.
+"""Sketch understanding, finished-color checks and one bounded quality retry.
 
 GPU-independent orchestration makes the same contract available to direct and
 durable cloud requests. Model calls are injected, so policy tests need no GPU.
@@ -42,6 +42,7 @@ class SketchUnderstanding(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     visible_structures: list[str] = Field(max_length=16)
     clarification: str = Field(max_length=240)
+    sexual_content: bool = False
 
 
 class SketchQuality(BaseModel):
@@ -54,6 +55,7 @@ class SketchQuality(BaseModel):
     anatomy_correct: bool | None
     score: float = Field(ge=0, le=10, allow_inf_nan=False)
     feedback: str = Field(max_length=600)
+    sexual_content: bool = False
 
     def failures(self, anatomy: bool) -> list[str]:
         checks = {
@@ -64,9 +66,8 @@ class SketchQuality(BaseModel):
             "clean_image": "Remove text, labels, arrows and watermarks",
         }
         failures = [message for key, message in checks.items() if not getattr(self, key)]
-        if anatomy and self.anatomy_correct is not True:
-            failures.append("Correct visible anatomical proportions, structures, connections and tissue colors")
-        if self.score < 7:
+        # Sketch is a creative workflow; anatomy validation belongs to Anatomy.
+        if self.score < 5:
             failures.append("Improve surface clarity and three-dimensional form")
         return failures
 
@@ -83,37 +84,12 @@ def understanding_instruction(instruction: str) -> str:
         "organ (canonical English human organ/body part, empty if generic), view (visible viewpoint, "
         "use external view if unclear), description (concise physical description including appropriate "
         "material/tissue colors, at most 20 words), visible_structures (array of only visible anatomical names, empty if generic), "
-        "clarification (question, empty when confident).\nUser instruction: " + instruction
+        "clarification (question, empty when confident), sexual_content (true for sexualized, nude or pornographic imagery; false for ordinary objects and non-sexual medical diagrams).\nUser instruction: " + instruction
     )
 
 
 def sketch_prompt(understanding: SketchUnderstanding, instruction: str) -> tuple[str, dict]:
-    from anatomy import canonicalize_structure, compile_any_anatomy_prompt, detect_supported_organ, select_anatomy_view
-
     anatomy = {"is_anatomy": False}
-    anatomy_prompt = ""
-    if understanding.is_anatomy:
-        if not understanding.organ.strip():
-            raise ValueError("Please name the organ or body part in Additional instruction.")
-        catalog_organ = detect_supported_organ(understanding.organ)
-        organ = catalog_organ or understanding.organ
-        spec = {
-            "is_anatomy": True, "organ": organ, "view_description": understanding.view,
-            "required_structures": [], "orientation": "square", "grade_level": "general_audience",
-        }
-        if catalog_organ:
-            spec["view"] = select_anatomy_view(organ, understanding.view)["id"]
-        else:
-            # Open-ended body parts use the existing conservative anatomy compiler.
-            # Never force internal default structures into an exterior drawing.
-            spec["required_structures"] = understanding.visible_structures
-        anatomy, anatomy_prompt = compile_any_anatomy_prompt(spec)
-        anatomy["visible_structures"] = understanding.visible_structures
-        if anatomy.get("view_description"):
-            anatomy["required_structures"] = list(dict.fromkeys(
-                value for name in understanding.visible_structures
-                if (value := canonicalize_structure(organ, name) if catalog_organ else name)
-            ))
     # Put subject/style first: SDXL's text encoder has a small token budget.
     prompt = generation_prompt(
         f"Full-color solid dimensional rendering of {understanding.subject}, {understanding.view}. "
@@ -121,7 +97,6 @@ def sketch_prompt(understanding: SketchUnderstanding, instruction: str) -> tuple
         + ("Anatomically accurate proportions and natural tissue colors. " if understanding.is_anatomy else "")
         + f"{understanding.description}. "
         + (f"User details: {instruction.strip()}. " if instruction.strip() else "")
-        + anatomy_prompt.replace("EDUANAT", "").strip()
     )
     safety = assess_prompt(prompt)
     if not safety.allowed:
@@ -132,13 +107,15 @@ def sketch_prompt(understanding: SketchUnderstanding, instruction: str) -> tuple
 def control_settings(strength: float, anatomy: bool, retry: bool = False) -> dict:
     # Scribble constrains early shape, then releases the final denoising steps
     # to paint solid colored surfaces rather than reproduce black pen marks.
-    scale = min(strength, 0.85) if anatomy else strength
+    scale = strength
     return {"control_strength": round(max(0.3, scale * (0.8 if retry else 1)), 3),
-            "control_guidance_end": 0.65 if anatomy else 0.8}
+            "control_guidance_end": 0.65}
 
 
 def generate_from_sketch(req: SketchRequest, recognize, render, inspect) -> dict:
     understanding = SketchUnderstanding.model_validate(recognize(understanding_instruction(req.instruction)))
+    if understanding.sexual_content:
+        raise ValueError("CONTENT_POLICY_BLOCKED[sexual]: Sexual imagery is not allowed. Choose a non-sexual educational subject.")
     if understanding.confidence < 0.65 or understanding.clarification.strip():
         return {"error": (understanding.clarification.strip() or "What did you draw?") +
                 " Add the subject in Additional instruction and generate again.",
@@ -150,7 +127,7 @@ def generate_from_sketch(req: SketchRequest, recognize, render, inspect) -> dict
     warning = None
     attempts = 0
     for attempt in range(2):
-        settings = control_settings(req.control_strength, understanding.is_anatomy, attempt > 0)
+        settings = control_settings(req.control_strength, False, attempt > 0)
         # Keep the subject and mandatory presentation rules in the first CLIP
         # tokens, including on retry. Corrections follow that short core.
         core, details = prompt.split(". ", 1)
@@ -175,7 +152,9 @@ def generate_from_sketch(req: SketchRequest, recognize, render, inspect) -> dict
                 best = (image, actual_prompt, metadata, None, ["Quality inspection unavailable"])
             warning = "Quality inspection unavailable; image preserved, quality is unverified."
             break
-        failures = quality.failures(understanding.is_anatomy)
+        if quality.sexual_content:
+            raise ValueError("CONTENT_POLICY_BLOCKED[sexual]: This output was blocked. Choose a non-sexual educational subject.")
+        failures = quality.failures(False)
         candidate = (image, actual_prompt, metadata, quality.model_dump(), failures)
         # Prioritize compliance over a flattering aggregate score.
         rank = lambda item: (-len(item[4]), item[3]["score"] if item[3] else -1)

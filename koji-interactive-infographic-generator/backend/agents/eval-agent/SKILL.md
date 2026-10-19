@@ -10,6 +10,7 @@ description: Evaluate generated educational images for prompt alignment, visual 
 - Ground every criticism in visible evidence and the supplied prompt.
 - Return concise, actionable corrections suitable for the next generation attempt.
 - Do not reward decorative polish that reduces factual accuracy or label readability.
+- Score honestly: a usable average output can score 5–6/10. Do not demand cosmetic perfection. The orchestrator accepts both scores at least 5 with no critical anatomy failure, and permits at most two generation retries.
 - Return only the response schema requested by the endpoint.
 
 ## Anatomy review

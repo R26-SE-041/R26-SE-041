@@ -51,6 +51,32 @@ class RepositoryIntegrationTests(unittest.TestCase):
     def payload(self,**changes):
         return {"request_id":str(uuid4()),"kind":"generate","prompt":"heart","mode":"general",**changes}
 
+    def test_sketch_subject_names_legacy_history_and_preserves_custom_renames(self):
+        chat_id, generation_id = str(uuid4()), str(uuid4())
+        self.repo.append_chat_event(self.owner,chat_id,"sketch-prompt","prompt",{"mode":"sketch"})
+        self.repo.save_history(self.owner,generation_id,
+            {"chatId":chat_id,"mode":"sketch","sketchMetadata":{"subject":"human eye"}},"test/image.png")
+        self.assertEqual(self.repo.list_chats(self.owner,query="eye")[0]["title"],"Human eye")
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"New conversation")
+        self.repo.append_chat_event(self.owner,chat_id,"sketch-image","image",{"title":"Human eye"},generation_id)
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"Human eye")
+        self.repo.rename_chat(self.owner,chat_id,"My viva drawing")
+        self.repo.append_chat_event(self.owner,chat_id,"next-image","image",{"title":"Another subject"},generation_id)
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"My viva drawing")
+        self.assertEqual(self.repo.list_chats(self.other,query="eye"),[])
+
+    def test_image_subject_titles_replace_automatic_prompts_and_keep_manual_names(self):
+        chat_id, generation_id = str(uuid4()), str(uuid4())
+        prompt = "Please generate an image of a red fox in a forest"
+        self.repo.append_chat_event(self.owner,chat_id,"image-prompt","prompt",{"mode":"general","prompt":prompt})
+        self.repo.save_history(self.owner,generation_id,{"chatId":chat_id,"mode":"general","prompt":prompt},"test/image.png")
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"A red fox in a forest")
+        self.repo.append_chat_event(self.owner,chat_id,"image-result","image",{"prompt":prompt,"title":"A red fox in a forest"},generation_id)
+        self.assertEqual(self.repo.get_chat(self.owner,chat_id)["title"],"A red fox in a forest")
+        self.repo.rename_chat(self.owner,chat_id,"My forest demo")
+        self.repo.append_chat_event(self.owner,chat_id,"next-result","image",{"prompt":prompt,"title":"A red fox"},generation_id)
+        self.assertEqual(self.repo.list_chats(self.owner)[0]["title"],"My forest demo")
+
     def test_output_ratings_save_change_and_remain_private_for_every_agent(self):
         from shared.db import _FEEDBACK_AGENTS
         for agent in _FEEDBACK_AGENTS:
@@ -77,6 +103,24 @@ class RepositoryIntegrationTests(unittest.TestCase):
             self.repo.save_feedback(self.other,retry)
         pair=self.repo.save_feedback(self.owner,retry)
         self.assertIsNotNone(pair["preference_pair_id"])
+
+    def test_feedback_deselection_is_owned_idempotent_and_never_deletes_history(self):
+        data={"session_id":"test","agent_name":"image-agent","output_id":str(uuid4()),"rating":-1}
+        self.repo.save_feedback(self.owner,data)
+        other_output=str(uuid4())
+        self.repo.save_feedback(self.owner,{**data,"output_id":other_output,"rating":1})
+        generation_id=str(uuid4())
+        self.repo.save_history(self.owner,generation_id,{"mode":"general","prompt":"Saved demo"},"test/image.png")
+        self.repo.clear_feedback(self.other,data["agent_name"],data["output_id"])
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("select count(*) from agent_feedback where auth_user_id=%s",(self.owner,))
+            self.assertEqual(cur.fetchone()[0],2)
+        self.repo.clear_feedback(self.owner,data["agent_name"],data["output_id"])
+        self.repo.clear_feedback(self.owner,data["agent_name"],data["output_id"])
+        with connection() as conn,conn.cursor() as cur:
+            cur.execute("select output_id from agent_feedback where auth_user_id=%s",(self.owner,))
+            self.assertEqual(cur.fetchall(),[(other_output,)])
+        self.assertIsNotNone(self.repo.get_history(self.owner,generation_id))
 
     def test_request_id_is_idempotent_but_not_reusable_for_changed_payload(self):
         payload=self.payload()

@@ -13,8 +13,14 @@ export type IconName =
   | "close"
   | "log-out"
   | "message-plus"
+  | "more"
   | "pencil"
   | "eraser"
+  | "undo"
+  | "redo"
+  | "trash"
+  | "square"
+  | "square-check"
   | "heart"
   | "image"
   | "sparkles"
@@ -43,10 +49,11 @@ interface IconProps {
   name: IconName;
   size?: number;
   strokeWidth?: number;
+  filled?: boolean;
 }
 
-export default function Icon({ color = "currentColor", name, size = 18, strokeWidth = 2 }: IconProps) {
-  const common = { fill: "none", stroke: color, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth };
+export default function Icon({ color = "currentColor", name, size = 18, strokeWidth = 2, filled = false }: IconProps) {
+  const common = { fill: filled && (name === "thumb-up" || name === "thumb-down") ? color : "none", stroke: color, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth };
   return (
     <Svg accessible={false} focusable={false} height={size} viewBox="0 0 24 24" width={size}>
       {name === "activity" && <Path {...common} d="M3 12h4l2.5-7 5 14 2.5-7h4" />}
@@ -60,8 +67,13 @@ export default function Icon({ color = "currentColor", name, size = 18, strokeWi
       {name === "close" && <Path {...common} d="m6 6 12 12M18 6 6 18" />}
       {name === "log-out" && <><Path {...common} d="M9 4H4v16h5M9 12h12m-4-4 4 4-4 4" /></>}
       {name === "message-plus" && <><Path {...common} d="M21 11v6a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h8M19 2v6m-3-3h6" /></>}
+      {name === "more" && <>{[5, 12, 19].map(cx => <Circle key={cx} cx={cx} cy={12} r={1.5} fill={color} />)}</>}
       {name === "pencil" && <><Path {...common} d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>}
       {name === "eraser" && <><Path {...common} d="m14 3 7 7-10 10H6l-4-4L14 3Zm-7 8 7 7M11 20h11" /></>}
+      {name === "undo" && <><Path {...common} d="M3 10h11a6 6 0 0 1 0 12" /><Polyline {...common} points="7 6 3 10 7 14" /></>}
+      {name === "redo" && <><Path {...common} d="M21 10H10a6 6 0 0 0 0 12" /><Polyline {...common} points="17 6 21 10 17 14" /></>}
+      {name === "trash" && <><Path {...common} d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>}
+      {(name === "square" || name === "square-check") && <><Rect {...common} x="3" y="3" width="18" height="18" rx="3" />{name === "square-check" && <Polyline {...common} points="7 12 10 15 17 8" />}</>}
       {name === "heart" && <><Path {...common} d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z" /><Path {...common} d="M4 12h4l2-4 3 8 2-4h5" /></>}
       {name === "image" && <><Rect {...common} x="3" y="3" width="18" height="18" rx="3" /><Circle {...common} cx="8" cy="8" r="1.5" /><Path {...common} d="m3 17 5-5 4 4 4-7 5 8" /></>}
       {name === "sparkles" && <><Path {...common} d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4m-2-2h4M3 18v4m-2-2h4" /></>}

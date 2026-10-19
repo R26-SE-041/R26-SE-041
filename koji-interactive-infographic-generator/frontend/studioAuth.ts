@@ -76,6 +76,7 @@ export function useStudioSession(externalToken?: string) {
     resetPassword: (email: string) => run(() => actions!.resetPassword(email)),
     resendVerification: (email: string) => run(() => actions!.resendVerification(email)),
     changePassword: (currentPassword: string, password: string, confirmation: string) => run(() => actions!.changePassword(currentPassword, password, confirmation)),
+    changeEmail: (email: string, currentPassword: string) => run(() => actions!.changeEmail(email, currentPassword)),
     updatePassword: (password: string, confirmation: string) => run(async () => {
       await actions!.updatePassword(password, confirmation);
       await actions!.signOut();
