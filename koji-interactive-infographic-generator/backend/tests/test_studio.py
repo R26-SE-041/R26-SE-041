@@ -149,7 +149,7 @@ class WorkflowRegressionTests(unittest.TestCase):
         pipeline=Pipeline(repo=repo,storage=storage)
         pipeline.invoke=Mock(side_effect=[
             {"image_base64":"first-image"},
-            {"visual_score":5,"pedagogical_score":6},
+            {"visual_score":4,"pedagogical_score":4},
             RuntimeError("GPU unavailable"),
         ])
         job={"id":str(uuid4()),"user_id":USER_A,"kind":"generate","state":{},"endpoints":{},

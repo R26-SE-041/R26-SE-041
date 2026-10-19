@@ -4,6 +4,7 @@ import type { GenerationInteraction } from "../historyStorage";
 import AnnotationEditor from "./AnnotationEditor";
 import PdfSourcesPanel from "./PdfSourcesPanel";
 import PdfEvidence from "./PdfEvidence";
+import StructuredAnswer from "./StructuredAnswer";
 import type { PdfSource } from "../pdfSources";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -391,14 +392,14 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
         </View>
       )}
 
-      {isLoading && analysisStartedAt !== null && <Text style={styles.durationText}>{analysisMode === "ask" ? "Question answering" : analysisMode === "identify" ? "Object identification" : "Region explanation"} · {formatDuration(Math.max(0, analysisNow - analysisStartedAt))} elapsed</Text>}
+      {(analysisStartedAt !== null || analysisDuration !== null) && <Text style={styles.durationText}>{analysisStartedAt !== null ? `${formatDuration(Math.max(0, analysisNow - analysisStartedAt))} elapsed` : `${error ? "Attempt ended after" : "Completed in"} ${formatDuration(analysisDuration!)}`}</Text>}
 
       {!!interactions.length && <View style={[shared.card, { gap: 12 }]}>
         <Text style={styles.badge}>Conversation about this image</Text>
         {interactions.map(turn => <View key={turn.id} style={{ gap: 8, paddingVertical: 10 }}>
           <Text style={{ color: colors.textDim, fontSize: 11 }}>{new Date(turn.createdAt).toLocaleString()} · {turn.selection?.type === "box" ? "Selected region" : "Selected point"}</Text>
           <Text style={{ color: colors.primaryBright, fontWeight: "700" }}>You: {turn.question || (turn.mode === "identify" ? "Identify selected object" : "Explain selected region")}</Text>
-          <Text style={styles.resultText}>{turn.status === "failed" ? turn.error : turn.answer || "Answer pending — reopen History to retrieve it."}</Text>
+          <StructuredAnswer answer={turn.status === "failed" ? turn.error || "This request failed." : turn.answer || "Answer pending — reopen History to retrieve it."} />
           <PdfEvidence sources={turn.sources} grounding={turn.grounding} />
           {turn.answer && turn.status !== "failed" && <FeedbackControls key={turn.id} agentName="interactive-agent"
             accessToken={accessToken} apiUrl={feedbackApiUrl} inputContext={{ interaction: turn.selection, mode: turn.mode, question: turn.question }}
@@ -409,9 +410,8 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
       </View>}
 
       {error && <View style={shared.error}><Text style={styles.errorTitle}>Interactive analysis failed</Text><Text style={styles.errorText}>{error}</Text></View>}
-      {error && analysisDuration !== null && <Text style={styles.durationText}>Attempt duration: {formatDuration(analysisDuration)}</Text>}
 
-      {analysisResult && (
+      {analysisResult && !interactions.some(turn => turn.status === "completed" && turn.answer === analysisResult) && (
         <View style={[shared.card, styles.resultPanel]}>
           <View style={styles.resultHeader}>
             <View style={styles.inlineInfo}><Icon color={colors.primaryBright} name="search" size={15} /><Text style={styles.badge}>Qwen2.5-VL Visual Explanation</Text></View>
@@ -419,9 +419,8 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
               {selectionType === "point" ? "SAM 2 + Qwen2.5-VL-7B" : "Direct region + Qwen2.5-VL-7B"}. {speedMode === "normal" ? "A10G" : speedMode === "promax" ? "H100" : "A100"}
             </Text>
           </View>
-          <Text style={styles.resultText}>{analysisResult}</Text>
+          <StructuredAnswer answer={analysisResult} />
           <PdfEvidence sources={resultSources} grounding={resultGrounding} />
-          {analysisDuration !== null && <View style={styles.inlineInfo}><Icon color={colors.textDim} name="clock" size={14} /><Text style={styles.durationText}>Completed in {formatDuration(analysisDuration)}</Text></View>}
           {outputId && (
             <FeedbackControls
               key={outputId}
@@ -455,7 +454,7 @@ function ModeButton({ active, icon, label, onPress }: { active: boolean; icon: I
   const { colors } = useAppTheme();
   const styles = makeStyles(colors);
   return (
-    <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.modeButton, active && styles.modeButtonActive, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} aria-pressed={active} accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.modeButton, active && styles.modeButtonActive, pressed && styles.pressed]}>
       <Icon color={active ? colors.primaryBright : colors.textMuted} name={icon} size={15} />
       <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text>
     </Pressable>
@@ -470,7 +469,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   toolbarHint: { color: colors.textDim, fontSize: 11 },
   labelToggle: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.cyan, borderRadius: 50, paddingHorizontal: 12, paddingVertical: 7 },
   labelToggleText: { color: colors.cyan, fontSize: 12, fontWeight: "800" },
-  modeButton: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  modeButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexGrow: 1, flexBasis: 140, minHeight: 44, gap: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
   modeButtonActive: { borderColor: colors.primaryBright, backgroundColor: colors.accentSoft },
   modeButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   modeButtonTextActive: { color: colors.text },

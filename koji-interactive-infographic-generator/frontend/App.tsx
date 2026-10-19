@@ -8,6 +8,10 @@ import { useStudioSession } from "./studioAuth";
 import StudioSessionPanel from "./components/StudioSessionPanel";
 import AuthScreen from "./components/AuthScreen";
 import EditorialHeadline from "./components/EditorialHeadline";
+import StudioBrand from "./components/StudioBrand";
+import ImageVersions from "./components/ImageVersions";
+import { saveAnnotationVersion } from "./historyVersions";
+import usePullToRefresh from "./usePullToRefresh";
 import JobsPanel from "./components/JobsPanel";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -36,7 +40,7 @@ import ThreeDViewer from "./components/ThreeDViewer";
 import HistoryPanel from "./components/HistoryPanel";
 import Icon, { IconName, StatusDot } from "./components/Icon";
 import { appendHistoryInteraction, GenerationHistoryItem, GenerationInteraction, listHistory, saveHistoryItem, updateHistoryItem } from "./historyStorage";
-import { ColorPalette, displayFont, headingFont, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
+import { bodyFont, ColorPalette, displayFont, headingFont, layout, makeSharedStyles, ThemeProvider, useAppTheme } from "./theme";
 import {
   STUDIO_API_URL,
   PROMPT_AGENT_URL,
@@ -350,6 +354,11 @@ function Home({ accessToken, studioSession }: AppProps) {
   const [evaluationWarning, setEvaluationWarning] = useState<string | null>(null);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const currentChatId = useRef<string | null>(null);
+  const scrollView = useRef<ScrollView>(null);
+  const annotationQueue = useRef<Promise<void>>(Promise.resolve());
+  const annotationPending = useRef(0);
+  const annotationRevision = useRef<{ source: string; latest: string } | null>(null);
+  const [savingAnnotations, setSavingAnnotations] = useState(false);
   const [historyInteractions, setHistoryInteractions] = useState<GenerationInteraction[]>([]);
   const threedRequestInFlight = useRef(false);
   const workspaceSnapshots = useRef<Partial<Record<"general" | "anatomy" | "sketch", {
@@ -375,6 +384,7 @@ function Home({ accessToken, studioSession }: AppProps) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [unsavedDraft]);
   const isLoading = stage === "enhancing" || stage === "generating" || threedStage === "converting";
+  const pullDistance = usePullToRefresh(scrollView, !isLoading && !unsavedDraft && !savingAnnotations && Object.keys(activeTimers).length === 0);
   // The 3D agent has its own browser-facing endpoint. Orchestrator downtime
   // must not incorrectly mark a healthy 3D service as offline.
   const displayedThreeDHealth: Health = threedHealth;
@@ -497,9 +507,31 @@ function Home({ accessToken, studioSession }: AppProps) {
     currentChatId.current = null;
   };
 
+  const resetForRevision = () => {
+    const chatId = currentChatId.current;
+    reset();
+    currentChatId.current = chatId;
+  };
   const handlePromptChange = (value: string) => {
     setPrompt(value);
-    if (stage !== "idle") reset();
+    if (stage !== "idle") resetForRevision();
+  };
+
+  const saveLabelRevision = (items: AnatomyAnnotation[]) => {
+    setAnatomyAnnotations(items);
+    if (!currentHistoryId) return;
+    const sourceId = currentHistoryId, sourceImage = imageBase64, chatId = currentChatId.current;
+    annotationPending.current++;
+    setSavingAnnotations(true);
+    annotationQueue.current = annotationQueue.current.catch(() => undefined).then(async () => {
+      const base = annotationRevision.current?.source === sourceId ? annotationRevision.current.latest : sourceId;
+      const version = await saveAnnotationVersion(base, items);
+      annotationRevision.current = { source: sourceId, latest: version.id };
+      if (visibleImage.current === sourceImage && currentChatId.current === chatId) setCurrentHistoryId(version.id);
+    }).catch(e => setLocalizationError("New label version could not be saved; your original is unchanged. " + e.message)).finally(() => {
+      annotationPending.current--;
+      setSavingAnnotations(annotationPending.current > 0);
+    });
   };
 
   const selectWorkspace = (next: GenerationWorkspace) => {
@@ -778,15 +810,15 @@ function Home({ accessToken, studioSession }: AppProps) {
   };
 
   const evaluationPassed = (result: EvaluationResult): boolean =>
-    result.visualScore >= 7 && result.pedagogicalScore >= 7 && result.anatomyHardFailures.length === 0;
+    result.visualScore >= 5 && result.pedagogicalScore >= 5 && result.anatomyHardFailures.length === 0;
 
   const evaluationRank = (result: EvaluationResult): number =>
     result.visualScore + result.pedagogicalScore - (result.anatomyHardFailures.length > 0 ? 20 : 0);
 
   const retryFeedbackFor = (result: EvaluationResult): string => {
     const corrections: string[] = [];
-    if (result.visualScore < 7) corrections.push("Improve composition, clarity, lighting, and visual legibility");
-    if (result.pedagogicalScore < 7) corrections.push("Correct factual content and match the learner's level");
+    if (result.visualScore < 5) corrections.push("Improve composition, clarity, lighting, and visual legibility");
+    if (result.pedagogicalScore < 5) corrections.push("Correct factual content and match the learner's level");
     if (result.anatomyHardFailures.length) {
       corrections.push(`Correct these anatomy failures: ${result.anatomyHardFailures.join("; ")}`);
     }
@@ -994,8 +1026,9 @@ function Home({ accessToken, studioSession }: AppProps) {
       await generateSketch(); return;
     }
     if (!prompt.trim() || isLoading || threedRequestInFlight.current) return;
+    const chatId = currentChatId.current ?? createOutputId("chat");
     reset();
-    currentChatId.current = createOutputId("chat");
+    currentChatId.current = chatId;
     if (workspace === "general") {
       const rawPrompt = prompt.trim();
       const anatomy: AnatomySpec = { is_anatomy: false };
@@ -1337,7 +1370,8 @@ function Home({ accessToken, studioSession }: AppProps) {
       : "Creating and checking your anatomy image…";
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView {...(Platform.OS === "web" ? { dataSet: { studioRoot: "true" } } : {})} style={styles.safeArea}>
+      {pullDistance > 8 && <View accessibilityLiveRegion="polite" style={{ position: "absolute", top: 8, alignSelf: "center", zIndex: 200, backgroundColor: colors.surface, borderRadius: 8, padding: 12 }}><Text style={{ color: colors.text }}>{pullDistance >= 72 ? "Release to refresh" : "Pull to refresh"}</Text></View>}
       <StudioSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} accessToken={accessToken} apiUrl={BACKEND_HEALTH_URL} />
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
       {workspace !== "history" && (
@@ -1361,17 +1395,16 @@ function Home({ accessToken, studioSession }: AppProps) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          ref={scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: screenWidth < 600 ? 20 : screenWidth < 1000 ? 32 : 64 }]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
             <View style={[styles.header, screenWidth < 600 && { gap: 20 }]}>
               <View style={styles.topBar}>
-                <View style={styles.brandRow}>
-                  <View style={styles.brandMark}><Text style={styles.brandMarkText}>L</Text></View>
-                  <Text style={styles.brand}>learnX</Text>
-                </View>
+                <StudioBrand compact={screenWidth < 700} />
                 <View style={styles.headerActions}>
+                {screenWidth >= 900 && <Text style={styles.navDetail}>Create. Explore. Understand.</Text>}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
@@ -1381,21 +1414,26 @@ function Home({ accessToken, studioSession }: AppProps) {
                   <Icon color={colors.text} name={themeMode === "dark" ? "sun" : "moon"} size={20} />
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Studio settings" onPress={() => setSettingsOpen(true)} style={styles.themeToggle}><Icon name="help" color={colors.text} size={20} /></Pressable>
-                {STUDIO_API_URL && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} changePassword={studioSession.changePassword} />}
+                {Boolean(STUDIO_API_URL) && studioSession?.configured && <StudioSessionPanel email={studioSession.email} name={studioSession.name} signOut={studioSession.signOut} changePassword={studioSession.changePassword} changeEmail={studioSession.changeEmail} />}
                 </View>
               </View>
-              <View nativeID="studio-hero" style={[styles.heroGrid, screenWidth < 600 && { gap: 16, paddingBottom: 8 }]}>
+              <View nativeID="studio-hero" style={[styles.heroGrid, screenWidth < 900 && { flexDirection: "column", alignItems: "stretch", gap: 24, paddingTop: 32, paddingBottom: 32 }]}>
                 <View style={styles.heroCopy}>
                   <Text style={styles.eyebrow}>A VISUAL LEARNING STUDIO</Text>
-                  <EditorialHeadline accessibilityRole="header" style={[styles.title, screenWidth < 600 && styles.titleCompact]}>Make ideas visible.</EditorialHeadline>
-                  <Text style={[styles.subtitle, screenWidth < 600 && { fontSize: 16, lineHeight: 23, marginTop: 10 }]}>
+                  <EditorialHeadline accessibilityRole="header" style={[styles.title, screenWidth < 600 && styles.titleCompact]}>{"Make ideas visible.\nMake learning yours."}</EditorialHeadline>
+                </View>
+                <View style={styles.heroIntroduction}>
+                  <Text style={[styles.subtitle, screenWidth < 600 && { fontSize: 22, lineHeight: 30 }]}>
                     Create thoughtful educational imagery, explore human anatomy, and turn flat visuals into interactive learning experiences.
                   </Text>
                 </View>
-                <View style={[styles.systemCard, screenWidth < 600 && { padding: 12 }]}>
+              </View>
+            </View>
+
+            <View style={[styles.systemCard, screenWidth < 600 && { paddingVertical: 16 }]}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Toggle service details" accessibilityState={{ expanded: statusOpen }} onPress={() => setStatusOpen(!statusOpen)} style={[styles.systemHeader, !statusOpen && { marginBottom: 0 }]}>
-                    <View><Text style={styles.systemKicker}>STUDIO STATUS</Text><Text style={styles.systemTitle}>Creative engine</Text></View>
-                    <View style={styles.liveBadge}><StatusDot color={backendHealth === "ok" ? colors.success : backendHealth === "error" ? colors.danger : colors.textDim} /><Text style={styles.liveBadgeText}>{backendHealth === "ok" ? "Connected" : backendHealth === "checking" ? "Checking" : "Unavailable"}</Text></View>
+                    <View style={styles.inlineInfo}><Text style={styles.systemKicker}>STUDIO STATUS</Text>{screenWidth >= 600 && <Text style={styles.systemCaption}>A space for your next discovery</Text>}</View>
+                    <View style={styles.liveBadge}><StatusDot color={backendHealth === "ok" ? colors.success : backendHealth === "error" ? colors.danger : colors.textDim} /><Text style={[styles.liveBadgeText, { color: backendHealth === "ok" ? colors.success : backendHealth === "error" ? colors.danger : colors.textMuted }]}>{backendHealth === "ok" ? "Connected" : backendHealth === "checking" ? "Checking" : "Unavailable"}</Text><Icon name={statusOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.textMuted} /></View>
                   </Pressable>
                   {statusOpen && <><View style={[shared.wrap, styles.healthWrap]}>
                     <HealthPill label="Prompt" now={now} status={promptHealth} warmUntil={warmUntil.prompt} />
@@ -1405,18 +1443,17 @@ function Home({ accessToken, studioSession }: AppProps) {
                     <HealthPill label="3D" now={now} status={displayedThreeDHealth} warmUntil={warmUntil.threed} />
                   </View>
                   <Text style={styles.warmNote}>Services may need time to warm up after inactivity.</Text></>}
-                </View>
-              </View>
             </View>
 
-            <View accessibilityRole="tablist" style={[styles.workspaceTabs, workspaceGridStyle]}>
-              <Pressable accessibilityRole="tab" accessibilityState={{ selected: workspace === "sketch", disabled: isLoading }} disabled={isLoading}
+            <View nativeID="studio-workspaces" accessibilityRole="tablist" accessibilityLabel="Creative workspaces" style={[styles.workspaceTabs, workspaceGridStyle]}>
+              <Pressable accessibilityRole="tab" aria-selected={workspace === "sketch"} accessibilityState={{ selected: workspace === "sketch", disabled: isLoading }} disabled={isLoading}
                 onPress={() => selectWorkspace("sketch")} style={[styles.workspaceTab, screenWidth < 600 && { padding: 8, minHeight: 66, flexDirection: "column", gap: 6 }, workspace === "sketch" && styles.workspaceTabActive]}>
                 <Icon name="pencil" color={workspace === "sketch" ? colors.primaryBright : colors.textMuted} size={20} />
                 <View style={[styles.workspaceTabCopy, screenWidth < 600 && { alignItems: "center" }]}><Text style={[styles.workspaceTabTitle, screenWidth < 600 && { fontSize: 11, textAlign: "center" }, workspace === "sketch" && styles.workspaceTabTitleActive]}>{screenWidth < 600 ? "Draw" : "Draw to Image"}</Text><Text style={[styles.workspaceTabDescription, screenWidth < 600 && { display: "none" }]}>Sketch + optional instruction</Text></View>
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
+                aria-selected={workspace === "general"}
                 accessibilityState={{ selected: workspace === "general", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("general")}
@@ -1430,6 +1467,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
+                aria-selected={workspace === "anatomy"}
                 accessibilityState={{ selected: workspace === "anatomy", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("anatomy")}
@@ -1443,6 +1481,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
+                aria-selected={workspace === "history"}
                 accessibilityState={{ selected: workspace === "history", disabled: isLoading }}
                 disabled={isLoading}
                 onPress={() => selectWorkspace("history")}
@@ -1461,14 +1500,19 @@ function Home({ accessToken, studioSession }: AppProps) {
               <HistoryPanel active={workspace === "history"} onResume={restoreHistory} />
             </View>
             {workspace !== "history" && <>
-            <View style={[shared.card, styles.promptCard]}>
+            <ImageVersions chatId={currentChatId.current} currentId={currentHistoryId} disabled={isLoading || savingAnnotations || unsavedDraft} onSelect={restoreHistory} />
+            <View {...(Platform.OS === "web" ? { dataSet: { studioPanel: workspace } } : {})} style={[shared.card, styles.promptCard, screenWidth < 600 && { padding: 20 }]}>
+              <View style={styles.composerHeading}>
+                <Text style={styles.eyebrow}>{workspace === "sketch" ? "01 / DRAW TO IMAGE" : workspace === "general" ? "02 / IMAGE GENERATION" : "03 / HUMAN ANATOMY"}</Text>
+                <Text accessibilityRole="header" style={[styles.composerTitle, screenWidth < 600 && { fontSize: 28, lineHeight: 34 }]}>{workspace === "sketch" ? "Every idea starts with a mark." : workspace === "general" ? "What would you like to create?" : "A closer look at the human body."}</Text>
+              </View>
               {workspace === "sketch" && <>
                 <Text style={styles.promptLabel}>Draw your subject</Text>
-                <SketchCanvas key={sketchCanvasKey} strokes={sketchStrokes} disabled={isLoading} onChange={(strokes) => { reset(); setSketchStrokes(strokes); setSketchMetadata(undefined); }} />
+                <SketchCanvas key={sketchCanvasKey} strokes={sketchStrokes} disabled={isLoading} onChange={(strokes) => { resetForRevision(); setSketchStrokes(strokes); setSketchMetadata(undefined); }} />
                 <Text style={styles.hint}>Drawing adherence</Text>
-                <View style={styles.actionButtons}>{[{ label: "Creative", value: 0.55 }, { label: "Balanced", value: 0.85 }, { label: "Strict", value: 1.1 }].map((option) =>
+                <View style={styles.optionGroup}>{[{ label: "Creative", value: 0.55 }, { label: "Balanced", value: 0.85 }, { label: "Strict", value: 1.1 }].map((option) =>
                   <Pressable key={option.label} accessibilityRole="button" accessibilityLabel={option.label + " drawing adherence"} aria-pressed={sketchStrength === option.value} accessibilityState={{ selected: sketchStrength === option.value, disabled: isLoading }} disabled={isLoading} onPress={() => setSketchStrength(option.value)} style={[styles.optionButton, sketchStrength === option.value && styles.optionButtonSelected, isLoading && shared.disabled]}>
-                    <Text style={[styles.optionText, sketchStrength === option.value && styles.optionTextSelected]}>{sketchStrength === option.value ? "✓ " : ""}{option.label}</Text>
+                    <Text style={[styles.optionText, sketchStrength === option.value && styles.optionTextSelected]}>{option.label}</Text>
                   </Pressable>)}</View>
                 {sketchMetadata && <Text style={styles.hint}>{sketchMetadata.subject ? `Detected: ${sketchMetadata.subject} · ` : ""}Seed {sketchMetadata.seed}</Text>}
               </>}
@@ -1491,7 +1535,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               {workspace !== "sketch" && <View style={[shared.wrap, { gap: 8, marginTop: 14 }]}><Text style={styles.optionLabel}>Speed</Text><SpeedSelector options={SPEED_MODES} value={speedMode} disabled={isLoading} onChange={setSpeedMode} /></View>}
               <View style={styles.promptFooter}>
                 <Text style={styles.hint}>
-                  {workspace === "sketch" ? "Create a finished colour image on a white background, ready for 3D conversion. Human anatomy receives extra structure checks. Add the subject or intended view if needed." : workspace === "anatomy"
+                  {workspace === "sketch" ? "Create a finished colour image on a white background, ready for 3D conversion. Add the subject or intended view if needed. Anatomy validation is reserved for the Anatomy workspace." : workspace === "anatomy"
                     ? "Choose an organ and view. Review the enhanced instruction before creating your image."
                     : "Describe your subject, audience and preferred visual style."}
                 </Text>
@@ -1517,10 +1561,6 @@ function Home({ accessToken, studioSession }: AppProps) {
                 </View>
                 <Text style={styles.hint}>{startedAt ? `${formatDuration(Math.max(0, now - startedAt))} elapsed · ` : ""}{cloudEnabled() ? "Your creation continues in the background." : "Keep this page open while your creation is processing."}</Text>
               </View>
-            )}
-
-            {(Object.keys(timings).length > 0 || Object.keys(activeTimers).length > 0) && (
-              <PerformanceInsights activeTimers={activeTimers} now={now} timings={timings} outcomes={outcomes} />
             )}
 
             {error && <View style={{ gap: 10 }}><ErrorBanner title="Unable to complete this request" message={error} /><ActionButton icon="refresh" label="Retry request" disabled={isLoading} onPress={handleSubmit} /></View>}
@@ -1569,12 +1609,13 @@ function Home({ accessToken, studioSession }: AppProps) {
 
             {imageBase64 && stage === "done" && (
               <View style={styles.resultSection}>
+                {workspace === "sketch" && typeof sketchMetadata?.quality?.score === "number" && <Text style={styles.hint}>Sketch quality {sketchMetadata.quality.score.toFixed(1)}/10 · Retries {evaluationRetries}/2 · Colour and subject checks; no anatomy validation</Text>}
                 {evaluationWarning && <ErrorBanner title="Quality-control notice" message={evaluationWarning} />}
                 {evaluation && (
                   <View style={[shared.card, styles.qualityCard]}>
                     <View style={styles.cardHeader}>
                       <Text style={styles.badge}>Quality evaluation</Text>
-                      <Text style={styles.modelTag}>{evaluationPassed(evaluation) ? "Approved" : "Best attempt"}</Text>
+                      <Text style={styles.modelTag}>{evaluationPassed(evaluation) ? "Accepted" : "Best attempt"}</Text>
                     </View>
                     <Text style={styles.qualityScore}>Visual {evaluation.visualScore.toFixed(1)}/10 · Educational {evaluation.pedagogicalScore.toFixed(1)}/10 · Retries {evaluationRetries}/2</Text>
                     {!!evaluation.anatomyHardFailures.length && <Text style={styles.errorMessage}>Anatomy failures: {evaluation.anatomyHardFailures.join("; ")}</Text>}
@@ -1585,7 +1626,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                 <SectionTitle title="Interactive Image Analysis" subtitle="Tap an object or select a region to ask questions and explore its details." />
                 {localizationError && <ErrorBanner title="Labels unavailable; clean image preserved" message={localizationError} />}
                 <View style={styles.actionButtons}>
-                  <ActionButton icon="tag" label={labelBusy ? "Labeling…" : "Label image automatically"} disabled={labelBusy || isLoading} onPress={() => { const sourceImage=imageBase64,sourceId=currentHistoryId; void localizeAnatomy(sourceImage,anatomySpec,true).then(items => sourceId ? updateHistoryItem(sourceId,{anatomyAnnotations:items}).catch(e=>setLocalizationError(e.message)) : undefined); }} />
+                  <ActionButton icon="tag" label={labelBusy ? "Labeling…" : "Label image automatically"} disabled={labelBusy || isLoading || savingAnnotations} onPress={() => { const sourceImage=imageBase64,chatId=currentChatId.current; void localizeAnatomy(sourceImage,anatomySpec,true).then(items => { if (visibleImage.current === sourceImage && currentChatId.current === chatId) saveLabelRevision(items); }); }} />
                 </View>
                 <InteractiveCanvas
                   chatId={currentChatId.current ?? currentHistoryId ?? undefined}
@@ -1593,7 +1634,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   anatomyAnnotations={anatomyAnnotations}
                   generationId={currentHistoryId ?? undefined}
                   interactions={historyInteractions}
-                  onAnnotationsChange={labelBusy ? undefined : (items) => { setAnatomyAnnotations(items); if(currentHistoryId) void updateHistoryItem(currentHistoryId,{anatomyAnnotations:items}).catch(e=>setLocalizationError("Label edits could not be saved: "+e.message)); }}
+                  onAnnotationsChange={labelBusy ? undefined : saveLabelRevision}
                   anatomyOrgan={anatomySpec.organ}
                   feedbackApiUrl={BACKEND_HEALTH_URL}
                   imageBase64={imageBase64}
@@ -1618,6 +1659,7 @@ function Home({ accessToken, studioSession }: AppProps) {
                   speedMode={speedMode}
                   sessionId={sessionId}
                 />
+                {savingAnnotations && <Text style={styles.hint}>Saving labels as a new version… Your previous version stays available.</Text>}
               </View>
             )}
                 <View style={styles.threeDSection}>
@@ -1667,6 +1709,11 @@ function Home({ accessToken, studioSession }: AppProps) {
                 </View>
 
             </>}
+            <View style={[styles.footer, screenWidth < 600 && { alignItems: "flex-start", gap: 12 }]}>
+              <Text style={styles.footerBrand}>LEARNX</Text>
+              <Text style={styles.footerCopy}>A little curiosity. A deeper understanding.</Text>
+              <Text style={styles.footerDetail}>VISUAL LEARNING STUDIO</Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1679,10 +1726,10 @@ function ActionButton({ disabled = false, icon, label, loading = false, onPress,
   const styles = makeStyles(colors);
   const shared = makeSharedStyles(colors);
   return (
-    <Pressable {...(Platform.OS === "web" ? { dataSet: { themeButton: secondary ? "secondary" : "primary" } } : {})} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
+    <Pressable {...(Platform.OS === "web" ? { dataSet: { themeButton: secondary ? "secondary" : "primary" } } : {})} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [shared.button, styles.actionButton, secondary ? shared.secondaryButton : shared.primaryButton, pressed && styles.pressed, disabled && shared.disabled]}>
       {loading && <ActivityIndicator color={secondary ? colors.primary : colors.onButton} size="small" style={styles.buttonSpinner} />}
       {!loading && icon && <Icon color={secondary ? colors.text : colors.onButton} name={icon} size={17} />}
-      <Text style={secondary ? shared.secondaryButtonText : shared.buttonText}>{label}</Text>
+      <Text style={[secondary ? shared.secondaryButtonText : shared.buttonText, { flexShrink: 1, textAlign: "center" }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -1725,64 +1772,38 @@ function SectionTitle({ icon, title, subtitle }: { icon?: IconName; title: strin
   return <View style={styles.sectionTitle}>{icon && <Icon color={colors.primaryBright} name={icon} size={25} />}<Text style={styles.sectionHeading}>{title}</Text><Text style={styles.sectionSubtitle}>{subtitle}</Text></View>;
 }
 
-function PerformanceInsights({ activeTimers, now, timings, outcomes }: { activeTimers: Partial<Record<ProcessKey, number>>; now: number; timings: Partial<Record<ProcessKey, number>>; outcomes: Partial<Record<ProcessKey, ProcessOutcome>> }) {
-  const { colors } = useAppTheme();
-  const styles = makeStyles(colors);
-  const shared = makeSharedStyles(colors);
-  const items = (Object.keys(PROCESS_LABELS) as ProcessKey[]).filter(key => timings[key] !== undefined || activeTimers[key] !== undefined);
-  return (
-    <View style={[shared.card, styles.insightsCard]}>
-      <View style={styles.insightsHeader}><Icon color={colors.primaryBright} name="clock" size={18} /><Text style={styles.insightsTitle}>Processing time</Text></View>
-      <Text style={styles.hint}>Latest attempt for each action, including queue and transfer time.</Text>
-      <View style={styles.metricsGrid}>
-        {items.map((key) => {
-          const activeSince = activeTimers[key];
-          const elapsed = activeSince !== undefined ? now - activeSince : timings[key];
-          return (
-            <View key={key} style={styles.metricItem}>
-              <Text style={styles.metricLabel}>{PROCESS_LABELS[key]}</Text>
-              <Text style={styles.metricValue}>{formatDuration(elapsed ?? 0)} · {activeSince !== undefined ? "Running" : outcomes[key] === "failed" ? "Failed attempt" : "Completed"}</Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 function ErrorBanner({ title, message }: { title: string; message: string }) {
   const { colors } = useAppTheme();
   const styles = makeStyles(colors);
   const shared = makeSharedStyles(colors);
-  return <View style={shared.error} accessibilityRole="alert"><Text style={styles.errorTitle}>{title}</Text><Text style={styles.errorMessage}>{message}</Text></View>;
+  const blocked = message.includes("CONTENT_POLICY_BLOCKED");
+  return <View style={shared.error} accessibilityRole="alert"><Text style={styles.errorTitle}>{blocked ? "Content blocked" : title}</Text><Text style={styles.errorMessage}>{blocked ? "Sexual or unsafe image requests are not allowed. Choose a non-sexual educational subject." : message}</Text></View>;
 }
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background, overflow: "hidden" },
-  floatingNewPrompt: { position: "absolute", zIndex: 100, bottom: 24, right: 24, width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: 28, backgroundColor: colors.buttonBackground, ...Platform.select({ web: { boxShadow: `0 10px 30px ${colors.shadow}` } as object }) },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 },
-  container: { width: "100%", maxWidth: 1160, alignSelf: "center", gap: 24 },
-  header: { paddingVertical: 8, gap: 48 },
-  topBar: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 22, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  themeToggle: { alignItems: "center", justifyContent: "center", width: 44, height: 44, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8 },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 4, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
-  brandMarkText: { color: colors.onBrand, fontFamily: Platform.select({ web: "Georgia, serif", default: "serif" }), fontWeight: "800", fontSize: 18 },
-  brand: { color: colors.text, fontSize: 24, fontWeight: "700", letterSpacing: -0.8 },
-  heroGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 40, paddingBottom: 24 },
-  heroCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 600, minWidth: 0, maxWidth: "100%" },
-  eyebrow: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 2.6, marginBottom: 12 },
-  title: { color: colors.text, fontFamily: displayFont, fontSize: 64, lineHeight: 70, fontWeight: "700", textAlign: "left", letterSpacing: -1.2 },
-  titleCompact: { fontSize: 44, lineHeight: 50, letterSpacing: -1.5 },
-  subtitle: { color: colors.textMuted, fontFamily: headingFont, textAlign: "left", fontSize: 20, lineHeight: 28, maxWidth: 610, marginTop: 16 },
-  systemCard: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 0, maxWidth: "100%", padding: 24, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
+  floatingNewPrompt: { position: "absolute", zIndex: 100, bottom: 24, right: 24, width: 52, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 8, backgroundColor: colors.buttonBackground },
+  scrollContent: { flexGrow: 1, paddingTop: 12, paddingBottom: 88 },
+  container: { width: "100%", maxWidth: layout.maxWidth - 128, alignSelf: "center", gap: 32 },
+  header: { gap: 0 },
+  topBar: { width: "100%", minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  navDetail: { color: colors.text, fontFamily: bodyFont, fontSize: 14, marginRight: 24 },
+  themeToggle: { alignItems: "center", justifyContent: "center", width: 44, height: 44, backgroundColor: "transparent", borderRadius: 8 },
+  heroGrid: { width: "100%", flexDirection: "row", alignItems: "center", gap: 64, paddingTop: 88, paddingBottom: 64 },
+  heroCopy: { flex: 1.35, minWidth: 0 },
+  heroIntroduction: { flex: 1, minWidth: 0 },
+  eyebrow: { color: colors.textMuted, fontFamily: bodyFont, fontSize: 11, fontWeight: "500", letterSpacing: 1, marginBottom: 16 },
+  title: { color: colors.text, fontFamily: displayFont, fontSize: 64, lineHeight: 67, fontWeight: "700", textAlign: "left", letterSpacing: -2.4 },
+  titleCompact: { fontSize: 42, lineHeight: 45, letterSpacing: -1.6 },
+  subtitle: { color: colors.text, fontFamily: headingFont, textAlign: "left", fontSize: 26, lineHeight: 34, maxWidth: 480 },
+  systemCard: { width: "100%", paddingVertical: 20, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   systemHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  systemKicker: { color: colors.textDim, fontSize: 9, fontWeight: "900", letterSpacing: 1.8 },
-  systemTitle: { color: colors.text, fontFamily: headingFont, fontSize: 24, fontWeight: "400", marginTop: 5 },
-  liveBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 50, backgroundColor: "rgba(100,122,81,0.10)" },
-  liveBadgeText: { color: colors.success, fontWeight: "800", fontSize: 11 },
+  systemKicker: { color: colors.textMuted, fontFamily: bodyFont, fontSize: 11, fontWeight: "500", letterSpacing: 0.8 },
+  systemCaption: { color: colors.textMuted, fontFamily: headingFont, fontSize: 16, marginLeft: 20 },
+  liveBadge: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 36 },
+  liveBadgeText: { fontFamily: bodyFont, fontWeight: "500", fontSize: 12 },
   healthWrap: { gap: 7 },
   healthPill: { flexGrow: 1, minWidth: 86, gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   agentSignals: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -1790,13 +1811,19 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   healthLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   healthState: { color: colors.textDim, fontSize: 12 },
   warmNote: { color: colors.textDim, fontSize: 10, lineHeight: 15, marginTop: 12 },
-  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 0 },
-  workspaceTab: { flexGrow: 1, flexBasis: 220, minWidth: 0, minHeight: 98, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  workspaceTabActive: { borderColor: colors.primaryBright, backgroundColor: colors.surfaceSoft },
+  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", gap: 0, padding: 0 },
+  workspaceTab: { flexGrow: 1, flexBasis: 220, minWidth: 0, minHeight: 88, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 20, backgroundColor: "transparent", borderBottomWidth: 1, borderColor: colors.border },
+  workspaceTabActive: { borderBottomWidth: 2, borderColor: colors.text, backgroundColor: colors.surface },
   workspaceTabCopy: { flex: 1, gap: 3 },
-  workspaceTabTitle: { color: colors.textMuted, fontWeight: "600", fontSize: 14 },
+  workspaceTabTitle: { color: colors.textMuted, fontFamily: bodyFont, fontWeight: "500", fontSize: 14 },
   workspaceTabTitleActive: { color: colors.text },
-  workspaceTabDescription: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
+  workspaceTabDescription: { color: colors.textDim, fontFamily: bodyFont, fontSize: 12, lineHeight: 18 },
+  composerHeading: { paddingBottom: 16, gap: 0 },
+  composerTitle: { color: colors.text, fontFamily: headingFont, fontSize: 36, lineHeight: 43, letterSpacing: -0.8 },
+  footer: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 24, borderTopWidth: 1, borderColor: colors.border, paddingTop: 32, marginTop: 32 },
+  footerBrand: { color: colors.text, fontFamily: displayFont, fontWeight: "700", fontSize: 18, letterSpacing: -0.7 },
+  footerCopy: { color: colors.textMuted, fontFamily: headingFont, fontSize: 16 },
+  footerDetail: { color: colors.textMuted, fontFamily: bodyFont, fontSize: 10, letterSpacing: 1 },
   speedSection: { gap: 12, alignItems: "center", padding: 20, borderRadius: 8, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border },
   centerText: { textAlign: "center" },
   speedPicker: { justifyContent: "center", gap: 10 },
@@ -1805,11 +1832,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   speedName: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
   speedNameActive: { color: colors.text },
   speedDesc: { color: colors.textDim, fontSize: 12, marginTop: 4 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center" },
+  hint: { color: colors.textMuted, fontFamily: bodyFont, fontSize: 12, lineHeight: 18, textAlign: "left" },
   promptCard: { gap: 14 },
-  promptInput: { minHeight: 140, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, color: colors.text, padding: 18, fontSize: 16, lineHeight: 25 },
+  promptInput: { minHeight: 160, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.text, fontFamily: headingFont, padding: 24, fontSize: 20, lineHeight: 28 },
   promptFooter: { gap: 14 },
-  actionButtons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 10 },
+  actionButtons: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 10, width: "100%", maxWidth: 640 },
+  actionButton: { width: 240, minHeight: 48, minWidth: 0, maxWidth: "100%" },
   inlineInfo: { flexDirection: "row", alignItems: "center", gap: 7 },
   pressed: { opacity: 0.88 },
   buttonSpinner: { marginRight: 8 },
@@ -1840,7 +1868,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   ghostText: { color: colors.textMuted, fontWeight: "700" },
   promptLabel: { color: colors.text, fontSize: 14, fontWeight: "700", letterSpacing: 0.5 },
   optionLabel: { color: colors.text, fontSize: 14, fontWeight: "700", alignSelf: "center", marginRight: 4 },
-  optionButton: { minHeight: 44, minWidth: 104, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.textDim, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  optionGroup: { flexDirection: "row", gap: 8, width: "100%", maxWidth: 420 },
+  optionButton: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 10, paddingVertical: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   optionButtonSelected: { backgroundColor: colors.buttonBackground, borderColor: colors.buttonBackground },
   optionText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   optionTextSelected: { color: colors.onButton },

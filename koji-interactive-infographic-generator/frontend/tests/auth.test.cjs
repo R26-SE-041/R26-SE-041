@@ -31,6 +31,24 @@ function fixture(session=null){
  const auth=Object.fromEntries(['signInWithPassword','signUp','resetPasswordForEmail','resend','updateUser','signOut'].map(method=>[method,async(...args)=>{calls.push({method,args});return{data:{session},error:null};}]));
  return{auth,calls,actions:createAuthActions(auth,redirect)};
 }
+
+test('email changes update the existing authenticated user and request confirmation without creating an account',async()=>{
+ const {auth,actions,calls}=fixture({user:{id:'same-owner'},access_token:'session'});
+ auth.getUser=async()=>({data:{user:{id:'same-owner',email:'old@example.com'}},error:null});
+ await actions.changeEmail('new@example.com','current-password');
+ assert.deepEqual(JSON.parse(JSON.stringify(calls)),[
+  {method:'signInWithPassword',args:[{email:'old@example.com',password:'current-password'}]},
+  {method:'updateUser',args:[{email:'new@example.com'},{emailRedirectTo:redirect}]},
+ ]);
+});
+
+test('email changes reject invalid addresses and a changed authenticated owner',async()=>{
+ const {auth,actions,calls}=fixture({user:{id:'different-owner'}});
+ auth.getUser=async()=>({data:{user:{id:'same-owner',email:'old@example.com'}},error:null});
+ await assert.rejects(actions.changeEmail('invalid','current-password'),/valid email/);
+ await assert.rejects(actions.changeEmail('new@example.com','current-password'),/Sign in again/);
+ assert.equal(calls.filter(call=>call.method==='updateUser').length,0);
+});
 test('invalid inputs never send credentials to Supabase',async()=>{
  const {actions,calls}=fixture();
  await assert.rejects(actions.signIn('invalid','password'),/valid email/);

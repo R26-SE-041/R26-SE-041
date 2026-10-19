@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from studio.pipeline import Pipeline
 
 
-def test_cloud_sketch_preserves_anatomy_quality_and_editable_strength():
+def test_cloud_sketch_preserves_quality_and_strength_without_anatomy_validation():
     repo, storage = Mock(), Mock()
     repo.heartbeat.return_value = True
     pipeline = Pipeline(repo, storage)
@@ -18,8 +18,8 @@ def test_cloud_sketch_preserves_anatomy_quality_and_editable_strength():
                        "sketch": {"strokes": [{"points": [[.2, .5], [.8, .5]]}], "control_strength": .85}}}
     pipeline.generate(job)
     record = repo.save_history.call_args.args[2]
-    assert record["anatomy"] == anatomy
-    assert record["enhancedPayload"]["route"] == "anatomy"
+    assert record["anatomy"] == {"is_anatomy": False}
+    assert record["enhancedPayload"]["route"] == "generic"
     assert record["sketchStrength"] == .85
     assert record["sketchMetadata"]["control_strength"] == .68
     assert record["evaluationRetries"] == 1

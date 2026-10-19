@@ -84,25 +84,23 @@ class SketchGenerationTests(unittest.TestCase):
                    "view": "anterior external view", "description": "Brown iris, black pupil, white sclera",
                    "visible_structures": ["iris", "pupil", "sclera"]}
         result = self.run_pipeline(subject, [{**self.quality, "anatomy_correct": True}])
-        self.assertTrue(result["anatomy_spec"]["is_anatomy"])
-        self.assertFalse(result["anatomy_spec"]["catalog_verified"])
-        self.assertEqual(result["anatomy_spec"]["required_structures"], ["iris", "pupil", "sclera"])
+        self.assertEqual(result["anatomy_spec"], {"is_anatomy": False})
         self.assertNotIn("retina", result["prompt"])
         self.assertNotIn("cross-sectional cutaway", result["prompt"])
         self.assertIn("natural tissue colors", result["prompt"])
 
-    def test_catalog_organ_visible_structures_keep_canonical_ids(self):
+    def test_organ_sketch_does_not_enter_catalog_validation(self):
         subject = SketchUnderstanding(**{**self.subject, "is_anatomy": True, "organ": "heart",
             "subject": "human heart", "view": "anterior external view", "visible_structures": ["aorta"]})
-        _, anatomy = sketch_prompt(subject, "")
-        self.assertEqual(anatomy["organ"], "heart")
-        self.assertEqual(anatomy["required_structures"], ["aorta"])
+        prompt, anatomy = sketch_prompt(subject, "")
+        self.assertEqual(anatomy, {"is_anatomy": False})
+        self.assertIn("human heart", prompt)
 
     def test_uncatalogued_hand_is_supported_without_forcing_internal_parts(self):
         subject = SketchUnderstanding(**{**self.subject, "is_anatomy": True, "organ": "hand",
             "subject": "human hand", "view": "palm external view", "visible_structures": ["thumb", "fingers"]})
         prompt, anatomy = sketch_prompt(subject, "")
-        self.assertEqual(anatomy["organ"], "hand")
+        self.assertEqual(anatomy, {"is_anatomy": False})
         self.assertNotIn("cutaway", prompt)
 
     def test_failed_color_check_retries_once_and_retains_original_requested_strength(self):
@@ -140,11 +138,26 @@ class SketchGenerationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             SketchQuality(**{**self.quality, "finished_color": "false"})
 
-    def test_anatomy_cannot_pass_without_positive_structure_check(self):
-        self.assertTrue(SketchQuality(**self.quality).failures(True))
+    def test_sketch_ignores_anatomy_flags_and_retains_requested_strength(self):
+        self.assertFalse(SketchQuality(**self.quality).failures(True))
         for strength in (.5, .85, 1.2):
-            self.assertLessEqual(control_settings(strength, True)["control_strength"], .85)
+            self.assertEqual(control_settings(strength, True)["control_strength"], strength)
             self.assertLess(control_settings(strength, False)["control_guidance_end"], 1)
+
+    def test_usable_average_output_does_not_retry(self):
+        result = self.run_pipeline(checks=[{**self.quality, "score": 5.0}])
+        self.render.assert_called_once()
+        self.assertEqual(result["retry_count"], 0)
+
+    def test_sexual_drawing_is_blocked_before_rendering(self):
+        with self.assertRaisesRegex(ValueError, "CONTENT_POLICY_BLOCKED"):
+            self.run_pipeline(subject={**self.subject, "sexual_content": True})
+        self.render.assert_not_called()
+
+    def test_sexual_output_is_never_returned_as_a_best_attempt(self):
+        with self.assertRaisesRegex(ValueError, "CONTENT_POLICY_BLOCKED"):
+            self.run_pipeline(checks=[{**self.quality, "sexual_content": True}])
+        self.render.assert_called_once()
 
     def test_prompt_chunks_preserve_details_and_fit_both_encoders(self):
         tokenizers = [SimpleNamespace(model_max_length=8, encode=lambda text: text.split() + [0, 0]),

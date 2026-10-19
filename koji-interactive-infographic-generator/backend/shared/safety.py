@@ -28,7 +28,7 @@ _SEXUAL = re.compile(
     re.I,
 )
 _EXPLICIT = re.compile(
-    r"(?:\b18\s*\+|\bgraphic sexual|\bexplicit sexual|\bporn(?:ographic)?|\berotic nude|\bsexual intercourse)",
+    r"(?:\b18\s*\+|\bgraphic sexual|\bexplicit sexual|\bporn(?:ographic)?|\berotic|\bsexual intercourse|\bsexually explicit|\bsexualized|\bsexy|\b(?:nude|naked)\s+(?:woman|women|man|men|girl|boy|person|people|model))",
     re.I,
 )
 _ILLEGAL_ACTION = re.compile(

@@ -170,7 +170,7 @@ class Repository:
     def save_history(self, user_id, generation_id, metadata, image_path, created_at=None, thumbnail_path=None):
         with connection() as conn, conn.cursor() as cur:
             cur.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (user_id,))
-            cur.execute("select count(*) from koji_generations where user_id=%s and metadata->>'chatId'=%s",(user_id,metadata.get("chatId")))
+            cur.execute("select count(*) from koji_generations where user_id=%s and coalesce(metadata->>'chatId',id::text)=%s",(user_id,metadata.get("chatId")))
             metadata = {**metadata,"version":cur.fetchone()[0]+1}
             cur.execute("""insert into koji_generations(id,user_id,metadata,image_path,created_at,thumbnail_path)
                 values(%s,%s,%s,%s,coalesce(%s::timestamptz,now()),%s) on conflict(id) do nothing""",(generation_id,user_id,Json(metadata),image_path,created_at,thumbnail_path))

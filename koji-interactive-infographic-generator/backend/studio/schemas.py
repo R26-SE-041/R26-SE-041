@@ -103,6 +103,13 @@ class JobRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_kind(self):
+        if self.kind in {"generate", "enhance", "sketch"}:
+            from shared.safety import assess_prompt, blocked_error
+            instruction = "\n".join(filter(None, [self.prompt, self.raw_prompt, self.feedback, self.sketch.instruction if self.sketch else ""]))
+            if instruction.strip():
+                safety = assess_prompt(instruction)
+                if not safety.allowed:
+                    raise ValueError(blocked_error(safety))
         if self.kind == "sketch" and self.sketch is None:
             raise ValueError("Sketch data is required")
         if self.kind in {"generate", "enhance"} and not self.prompt.strip():

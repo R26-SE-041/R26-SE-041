@@ -5,6 +5,7 @@ import { decode } from "base64-arraybuffer";
 import { cloudEnabled } from "../studioClient";
 import { useAppTheme } from "../theme";
 import Icon from "./Icon";
+import IconButton from "./IconButton";
 import { listPdfDocuments, MAX_PDF_BYTES, MAX_PDF_FILES, PdfDocument, reconcilePdfSelection, removePdfDocument, retryPdfDocument, uploadPdfDocument } from "../pdfSources";
 
 interface Props {
@@ -91,7 +92,7 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
     }
   });
 
-  const button = { minHeight: 44, justifyContent: "center" as const, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border };
+  const button = { minHeight: 44, flexGrow: 1, flexBasis: 140, alignItems: "center" as const, justifyContent: "center" as const, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface };
   const locked = disabled || busy || loading;
   return <View style={{ gap: 12, padding: 12, borderRadius: 10, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
     <Pressable accessibilityRole="button" accessibilityLabel="PDF sources" aria-expanded={expanded} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -102,7 +103,8 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
       <Icon name={expanded ? "chevron-up" : "chevron-down"} color={colors.textDim} size={16} />
     </Pressable>
     {expanded && <>
-    <Text style={{ color: colors.textMuted, fontSize: 12 }}>Choose workspace PDFs for this question. Answers include page references.</Text>
+    <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>1. Choose reference documents</Text>
+    <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 20 }}>Only selected, ready PDFs are used. Image evidence identifies the subject; PDF passages support the answer.</Text>
     {!enabled ? <Text style={{ color: colors.textDim }}>Sign in to a cloud workspace and save this image to use your PDF library.</Text> : <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <Pressable accessibilityRole="button" disabled={locked || documents.length >= MAX_PDF_FILES} onPress={() => void upload()} style={[button, locked && { opacity: .5 }]}><Text style={{ color: colors.primaryBright }}>Upload PDFs</Text></Pressable>
@@ -111,19 +113,21 @@ export default function PdfSourcesPanel({ chatId, disabled, selected, onSelectio
         {(busy || loading) && <ActivityIndicator color={colors.primaryBright} />}
       </View>
       {!loading && documents.length === 0 && <Text style={{ color: colors.textDim }}>Upload PDFs once to use them with any workspace image.</Text>}
-      {documents.map(item => <View key={item.id} style={{ gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+      {documents.map(item => <View key={item.id} style={{ gap: 6, padding: 12, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
           <Pressable accessibilityRole="checkbox" accessibilityLabel={`Use ${item.filename}`} aria-checked={selected.includes(item.id)} accessibilityState={{ checked: selected.includes(item.id), disabled: locked || item.status !== "ready" }} disabled={locked || item.status !== "ready"} onPress={() => onSelectionChange(selected.includes(item.id) ? selected.filter(id => id !== item.id) : [...selected, item.id])} style={{ flex: 1, flexDirection: "row", gap: 10, paddingVertical: 8, opacity: item.status === "ready" ? 1 : .6 }}>
-            <Text style={{ color: colors.primaryBright }}>{selected.includes(item.id) ? "☑" : "☐"}</Text>
+            <Icon name={selected.includes(item.id) ? "square-check" : "square"} color={colors.primaryBright} size={20} />
             <Text style={{ color: colors.text, flex: 1 }}>{item.filename}</Text>
           </Pressable>
           {item.status === "failed" && <Pressable accessibilityRole="button" disabled={locked} onPress={() => void perform(async () => { const row = await retryPdfDocument(item.id); if (mounted.current) setDocuments(current => current.map(value => value.id === row.id ? row : value)); })} style={button}><Text style={{ color: colors.primaryBright }}>Retry</Text></Pressable>}
-          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.filename}`} disabled={locked || item.status === "processing"} onPress={() => void perform(async () => { await removePdfDocument(item.id); if (mounted.current) { setDocuments(current => current.filter(value => value.id !== item.id)); latest.current.onSelectionChange(latest.current.selected.filter(id => id !== item.id)); } })} style={button}><Text style={{ color: colors.textDim }}>Remove</Text></Pressable>
+          <IconButton label={`Remove ${item.filename}`} icon="trash" disabled={locked || item.status === "processing"} onPress={() => void perform(async () => { await removePdfDocument(item.id); if (mounted.current) { setDocuments(current => current.filter(value => value.id !== item.id)); latest.current.onSelectionChange(latest.current.selected.filter(id => id !== item.id)); } })} />
         </View>
         <Text style={{ color: item.status === "failed" ? colors.danger : colors.textDim, fontSize: 12 }}>{item.status === "processing" ? "Processing PDF… You can keep studying while it becomes ready." : item.status === "failed" ? item.error : `${item.page_count} pages · ready`}</Text>
         {item.status === "ready" && item.skipped_pages > 0 && <Text style={{ color: colors.textDim, fontSize: 12 }}>{item.skipped_pages} pages had no readable text and were skipped. Scanned pages need OCR.</Text>}
       </View>)}
       <Text style={{ color: colors.textDim, fontSize: 12 }}>Up to {MAX_PDF_FILES} text PDFs · 15 MiB / 300 pages per file.</Text>
+      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>2. Ask about the selected region</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 20 }}>Use the question controls below. The answer appears first, followed by verified PDF references and supporting passages.</Text>
     </>}
     </>}
     {error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}

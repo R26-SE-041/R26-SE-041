@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Platform, StyleSheet } from "react-native";
 import WebInteractionStyles from "./components/WebInteractionStyles";
+import { layout } from "./designTokens";
+export { layout } from "./designTokens";
 
 export type ThemeMode = "dark" | "light";
 
@@ -61,8 +63,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  colors: darkColors,
-  mode: "dark",
+  colors: lightColors,
+  mode: "light",
   toggleTheme: () => undefined,
 });
 
@@ -86,29 +88,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export const useAppTheme = () => useContext(ThemeContext);
 
 export const headingFont = Platform.select({
-  web: "Georgia, 'Times New Roman', serif",
+  web: "'Anthropic Serif', Georgia, 'Times New Roman', serif",
   ios: "Georgia",
   default: "serif",
 });
 
 // Anthropic's display and UI use custom sans fonts. Use system fallbacks
 // rather than bundling fonts whose redistribution rights are unknown.
-export const displayFont = Platform.select({ web: "Arial, Helvetica, sans-serif", ios: "System", default: "sans-serif" });
-export const bodyFont = Platform.select({ web: "Arial, Helvetica, sans-serif", default: undefined });
+export const displayFont = Platform.select({ web: "'Anthropic Sans', Arial, Helvetica, sans-serif", ios: "System", default: "sans-serif" });
+export const bodyFont = displayFont;
 
 export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 24,
+    borderRadius: layout.panelRadius,
+    padding: layout.gutter,
   },
   label: {
     color: colors.textMuted,
+    fontFamily: bodyFont,
     fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.1,
+    fontWeight: "500",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   row: { flexDirection: "row", alignItems: "center" },
@@ -116,7 +117,7 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
   button: {
     minHeight: 46,
     paddingHorizontal: 18,
-    borderRadius: 8,
+    borderRadius: layout.controlRadius,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -129,7 +130,7 @@ export const makeSharedStyles = (colors: ColorPalette) => StyleSheet.create({
     borderWidth: 1,
   },
   buttonText: { color: colors.onButton, fontFamily: bodyFont, fontWeight: "500", fontSize: 16 },
-  secondaryButtonText: { color: colors.text, fontWeight: "700", fontSize: 14 },
+  secondaryButtonText: { color: colors.text, fontFamily: bodyFont, fontWeight: "500", fontSize: 16 },
   disabled: { opacity: 0.45 },
   error: {
     backgroundColor: colors.surface,

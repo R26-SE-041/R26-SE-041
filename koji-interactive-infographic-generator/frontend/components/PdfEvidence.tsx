@@ -24,8 +24,9 @@ export default function PdfEvidence({ sources = [], grounding }: { sources?: Pdf
   };
   if (!grounding && !sources.length) return null;
   return <View style={{ gap: 8 }}>
+    <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 14, fontWeight: "600", marginTop: 8 }}>Supporting evidence</Text>
     <Text style={{ color: colors.textDim, fontSize: 12 }}>{grounding === "no_match" ? "No relevant evidence found in your selected PDFs" : grounding === "pdf" ? "Sources · PDF references and supporting passages" : "Image-based explanation · no PDF sources used"}</Text>
-    {sources.map(source => <View key={`${source.documentId}:${source.number}`} style={{ gap: 6 }}>
+    {sources.map(source => <View key={`${source.documentId}:${source.number}`} style={{ gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         <Pressable accessibilityRole="button" disabled={opening} onPress={() => void open(source)}><Text style={{ color: colors.primaryBright }}>[{source.number}] {source.filename} · PDF page {source.page}{opening ? " · opening…" : " ↗"}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === source.number }} onPress={() => setExpanded(expanded === source.number ? null : source.number)}><Text style={{ color: colors.textDim }}>{expanded === source.number ? "Hide passage" : "Show passage"}</Text></Pressable>

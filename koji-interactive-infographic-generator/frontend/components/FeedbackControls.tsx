@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import Icon from "./Icon";
+import IconButton from "./IconButton";
 import { useAppTheme } from "../theme";
 
 export type FeedbackAgent = "prompt-agent" | "prompt-anatomy" | "prompt-generic" | "image-agent" | "interactive-agent" | "eval-agent" | "threed-agent";
@@ -67,15 +67,8 @@ export default function FeedbackControls(props: FeedbackControlsProps) {
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
       {([1, -1] as const).map(value => {
         const active = rating === value;
-        const color = active ? (value === 1 ? colors.success : colors.danger) : colors.textMuted;
-        return <Pressable key={value} accessibilityRole="button" accessibilityLabel={value === 1 ? "Like output" : "Dislike output"}
-          accessibilityState={{ selected: active, disabled: saving }} aria-pressed={active} disabled={saving} onPress={() => void chooseRating(value)}
-          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 10,
-            borderWidth: 1, borderColor: active ? color : "transparent", borderRadius: 7, backgroundColor: active ? colors.surfaceSoft : "transparent",
-            opacity: pressed ? .65 : saving ? .7 : 1 })}>
-          <Icon color={color} name={value === 1 ? "thumb-up" : "thumb-down"} size={16} />
-          <Text style={{ color, fontSize: 12, fontWeight: "600" }}>{value === 1 ? "Like" : "Dislike"}</Text>
-        </Pressable>;
+        return <IconButton key={value} label={value === 1 ? "Like output" : "Dislike output"}
+          icon={value === 1 ? "thumb-up" : "thumb-down"} selected={active} disabled={saving} onPress={() => void chooseRating(value)} />;
       })}
       {saving && <ActivityIndicator size="small" color={colors.textDim} />}
     </View>

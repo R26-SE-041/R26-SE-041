@@ -13,6 +13,7 @@ import AnatomyOverlay from "./AnatomyOverlay";
 import ThreeDViewer from "./ThreeDViewer";
 import ImageDownloadControls from "./ImageDownloadControls";
 import PdfEvidence from "./PdfEvidence";
+import StructuredAnswer from "./StructuredAnswer";
 import type { GenerationInteraction } from "../historyStorage";
 import type { AnatomyAnnotation } from "../App";
 
@@ -248,8 +249,8 @@ export default function CreationArchive({ active = true, onResume }: Props) {
         <Text accessibilityRole="header" style={{ ...text, fontWeight: "600" }}>Conversation</Text>
         {hasMoreEvents && <Pressable accessibilityRole="button" disabled={busy} style={button} onPress={() => void loadOlderEvents()}><Text style={text}>Load earlier messages</Text></Pressable>}
         {!events.some(event => event.kind === "prompt") && creation?.prompt && <Text selectable style={text}>{creation.prompt}</Text>}
-        {conversationEvents(events).map(event => <View key={event.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text style={{ color: colors.textDim, fontSize: 12 }}>{new Date(event.createdAt).toLocaleString()}</Text><Text selectable style={text}>{event.data.question || event.data.prompt || event.data.message}</Text>{event.data.answer && <Text selectable style={text}>{event.data.answer}</Text>}<PdfEvidence sources={event.data.sources} grounding={event.data.grounding} />{event.data.error && <Text style={{ color: colors.danger }}>{event.data.error}</Text>}</View>)}
-        {selected.source === "local" && (creation?.interactions || []).map(turn => <View key={turn.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text selectable style={{ ...text, fontWeight: "600" }}>{turn.question || "Explore selected region"}</Text><Text selectable style={text}>{turn.answer || turn.error || "Answer pending"}</Text><PdfEvidence sources={turn.sources} grounding={turn.grounding} /></View>)}
+        {conversationEvents(events).map(event => <View key={event.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text style={{ color: colors.textDim, fontSize: 12 }}>{new Date(event.createdAt).toLocaleString()}</Text><Text selectable style={text}>{event.data.question || event.data.prompt || event.data.message}</Text>{event.data.answer && <StructuredAnswer answer={event.data.answer} />}<PdfEvidence sources={event.data.sources} grounding={event.data.grounding} />{event.data.error && <Text style={{ color: colors.danger }}>{event.data.error}</Text>}</View>)}
+        {selected.source === "local" && (creation?.interactions || []).map(turn => <View key={turn.id} style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surfaceSoft, gap: 6 }}><Text selectable style={{ ...text, fontWeight: "600" }}>{turn.question || "Explore selected region"}</Text><StructuredAnswer answer={turn.answer || turn.error || "Answer pending"} /><PdfEvidence sources={turn.sources} grounding={turn.grounding} /></View>)}
         {!events.some(event => event.kind === "interaction") && !creation?.interactions?.length && <Text style={{ color: colors.textMuted }}>Continue this creation to ask questions or explore its details.</Text>}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={button} onPress={() => setDetailsOpen(!detailsOpen)}><Text style={text}>{detailsOpen ? "Hide generation details" : "Generation details"}</Text></Pressable>
         {detailsOpen && <View style={{ gap: 12 }}>

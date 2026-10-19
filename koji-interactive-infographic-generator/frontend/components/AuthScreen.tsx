@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import type { useStudioSession } from "../studioAuth";
 import Icon from "./Icon";
 import EditorialHeadline from "./EditorialHeadline";
+import StudioBrand from "./StudioBrand";
 import { authErrorCode } from "../authActions";
 import { displayFont, headingFont, useAppTheme } from "../theme";
 
@@ -91,7 +92,7 @@ export default function AuthScreen({ session }: Props) {
     password: ["Choose a new password.", "Set a new password for your account."],
   } as const;
   const label = { color: colors.text, fontSize: 13, fontWeight: "600" as const, marginBottom: 7 };
-  const input = { color: colors.text, backgroundColor: colors.surfaceSoft, borderColor: colors.textDim, borderWidth: 1, borderRadius: 8, minHeight: 50, paddingHorizontal: 14, fontSize: 15 };
+  const input = { color: colors.text, backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1, borderRadius: 8, minHeight: 50, paddingHorizontal: 16, fontSize: 16, fontFamily: displayFont };
   const link = { color: colors.primaryBright, fontWeight: "600" as const, fontSize: 13 };
   const button = { padding: 12, minHeight: 44, justifyContent: "center" as const };
   const passwordInput = (confirm = false) => <View style={{ marginTop: 18 }}>
@@ -112,32 +113,29 @@ export default function AuthScreen({ session }: Props) {
     </View>
   </View>;
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <ScrollView contentContainerStyle={{ flexGrow: 1, padding: wide ? 48 : 22 }} keyboardShouldPersistTaps="handled">
-      <View style={{ width: "100%", maxWidth: 1240, alignSelf: "center", flex: 1 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: wide ? 64 : 30 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={{ backgroundColor: colors.text, borderRadius: 4, width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.onBrand, fontWeight: "800", fontSize: 22 }}>L</Text></View>
-            <Text style={{ color: colors.text, fontWeight: "700", fontSize: 24, letterSpacing: -0.8 }}>learnX</Text>
-          </View>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: wide ? 64 : 22, paddingVertical: 20 }} keyboardShouldPersistTaps="handled">
+      <View style={{ width: "100%", maxWidth: 1304, alignSelf: "center", flex: 1 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 48, marginBottom: wide ? 88 : 40 }}>
+          <StudioBrand compact={!wide} />
           <Pressable accessibilityRole="button" accessibilityLabel={theme === "light" ? "Switch to dark mode" : "Switch to light mode"} onPress={toggleTheme} style={[button, { width: 44, alignItems: "center" }]}><Icon name={theme === "light" ? "moon" : "sun"} color={colors.textMuted} size={21} /></Pressable>
         </View>
         <View style={{ flexDirection: wide ? "row" : "column", gap: wide ? 80 : 28, alignItems: wide ? "center" : "stretch", flex: 1, paddingBottom: 40 }}>
           <View nativeID="auth-hero" style={{ flex: 1, gap: 20 }}>
-            <Text style={{ color: colors.primaryBright, letterSpacing: 2.5, fontSize: 11, fontWeight: "700" }}>YOUR VISUAL LEARNING STUDIO</Text>
-            <EditorialHeadline accessibilityRole="header" style={{ color: colors.text, fontFamily: displayFont, fontSize: wide ? 64 : 40, lineHeight: wide ? 72 : 48, letterSpacing: -1.2, fontWeight: "700", maxWidth: 550 }}>{"An idea. A drawing.\nA whole new perspective."}</EditorialHeadline>
-            <Text style={{ color: colors.textMuted, fontFamily: headingFont, fontSize: 20, lineHeight: 28, maxWidth: 450 }}>Bring your ideas to life, explore the details, and pick up exactly where you left off.</Text>
+            <Text style={{ color: colors.textMuted, fontFamily: displayFont, letterSpacing: 1, fontSize: 11, fontWeight: "500" }}>YOUR VISUAL LEARNING STUDIO</Text>
+            <EditorialHeadline accessibilityRole="header" style={{ color: colors.text, fontFamily: displayFont, fontSize: wide ? 64 : 40, lineHeight: wide ? 67 : 44, letterSpacing: wide ? -2.4 : -1.4, fontWeight: "700", maxWidth: 550 }}>{"An idea. A drawing.\nA whole new perspective."}</EditorialHeadline>
+            <Text style={{ color: colors.text, fontFamily: headingFont, fontSize: 24, lineHeight: 32, maxWidth: 450 }}>Bring your ideas to life, explore the details, and pick up exactly where you left off.</Text>
             {wide && <View style={{ gap: 12, marginTop: 18 }}>
               {[
                 ["01", "Create", "Turn a prompt or sketch into a visual."],
                 ["02", "Explore", "Ask questions, edit labels, and discover in 3D."],
                 ["03", "Continue", "Your images and conversations, saved together."],
               ].map(([number, title, body]) => <View key={number} style={{ flexDirection: "row", gap: 16, paddingVertical: 18, borderTopWidth: 1, borderTopColor: colors.border, maxWidth: 450 }}>
-                <Text style={{ color: colors.primaryBright, fontSize: 14, fontWeight: "700", paddingTop: 2 }}>{number}</Text>
-                <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 16, fontWeight: "700" }}>{title}</Text><Text style={{ color: colors.textMuted, lineHeight: 21, marginTop: 3 }}>{body}</Text></View>
+                <Text style={{ color: colors.textMuted, fontFamily: displayFont, fontSize: 12, paddingTop: 3 }}>{number}</Text>
+                <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontFamily: headingFont, fontSize: 20 }}>{title}</Text><Text style={{ color: colors.textMuted, fontFamily: displayFont, lineHeight: 21, marginTop: 4 }}>{body}</Text></View>
               </View>)}
             </View>}
           </View>
-          <View style={{ width: wide ? 440 : "100%", maxWidth: 520, alignSelf: wide ? "center" : "stretch", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: wide ? 36 : 24 }}>
+          <View style={{ width: wide ? 440 : "100%", maxWidth: 520, alignSelf: wide ? "center" : "stretch", backgroundColor: colors.surface, borderRadius: 16, padding: wide ? 40 : 24 }}>
             <Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 32, fontWeight: "400", lineHeight: 40 }}>{headings[mode][0]}</Text>
             <Text style={{ color: colors.textMuted, lineHeight: 22, marginTop: 10, marginBottom: 24 }}>{headings[mode][1]}</Text>
             {session.loading && <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 12 }}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textMuted }}>Checking your session…</Text></View>}
