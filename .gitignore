@@ -229,3 +229,7 @@ docker-compose.override.yml
 *.pid
 *.seed
 *.pid.lock
+
+# Frontend source helpers are not Python build outputs.
+!baskaran-interactive-audio-communication/frontend/src/lib/
+!baskaran-interactive-audio-communication/frontend/src/lib/**
