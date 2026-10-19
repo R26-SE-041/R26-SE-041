@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getHistoryRevision, isHistoryFresh, subscribeHistory } from "../historyActivity";
-import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { cloudEnabled, getCloudHistory, SavedModel, studioRequest } from "../studioClient";
 import { trashConversation, restoreConversation, purgeConversation, GenerationHistoryItem, listHistory, loadHistoryItem, syncLocalHistory, updateHistoryItem } from "../historyStorage";
 import { CreationSummary, creationTitle, conversationEvents, dateGroup, filterArchive, localSummaries, modeLabel } from "../historyView";
@@ -10,7 +10,6 @@ import HistoryCardMenu from "./HistoryCardMenu";
 import HistoryImagePreview from "./HistoryImagePreview";
 import { headingFont, makeSharedStyles, useAppTheme } from "../theme";
 import Icon from "./Icon";
-import AnatomyOverlay from "./AnatomyOverlay";
 import ThreeDViewer from "./ThreeDViewer";
 import ImageDownloadControls from "./ImageDownloadControls";
 import PdfEvidence from "./PdfEvidence";
@@ -243,7 +242,7 @@ export default function CreationArchive({ active = true, onResume }: Props) {
         <View style={[row, { justifyContent: "space-between" }]}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={{ color: colors.text, fontFamily: headingFont, fontSize: 28 }}>{selected.title}</Text><Text style={{ color: colors.textMuted, marginTop: 5 }}>{modeLabel(selected.mode)} · {new Date(selected.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</Text></View>{creation && onResume && <Pressable accessibilityRole="button" disabled={busy} style={[button, shared.primaryButton]} onPress={() => onResume(creation)}><Text style={shared.buttonText}>Continue</Text></Pressable>}</View>
         {busy && <ActivityIndicator color={colors.primary} />}
         {creation && <>
-          <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", aspectRatio: 1, backgroundColor: "white", borderRadius: 8, overflow: "hidden" }}><Image source={{ uri: creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl }} resizeMode="contain" style={{ width: "100%", height: "100%" }} /><AnatomyOverlay annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
+          <View style={{ width: "100%", maxWidth: 600, alignSelf: "center", borderRadius: 8, overflow: "hidden" }}><HistoryImagePreview key={creation.id} uri={creation.imageBase64 ? `data:image/png;base64,${creation.imageBase64}` : creation.imageUrl!} assetKey={creation.imageKey || creation.id} annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} /></View>
           <ImageDownloadControls imageBase64={creation.imageBase64} annotations={(creation.anatomyAnnotations || []) as AnatomyAnnotation[]} organ={(creation.anatomy as { organ?: string })?.organ} />
           {(creation.glbBase64 || creation.glbUrl) && <ThreeDViewer glbBase64={creation.glbBase64} modelUrl={creation.glbUrl} modelKey={creation.modelKey || creation.id} sizeKb={creation.glbSizeKb} active={active} />}
         </>}

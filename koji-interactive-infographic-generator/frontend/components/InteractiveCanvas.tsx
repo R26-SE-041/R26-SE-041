@@ -21,6 +21,8 @@ import {
 import { ColorPalette, makeSharedStyles, useAppTheme } from "../theme";
 import type { AnatomyAnnotation } from "../App";
 import AnatomyOverlay from "./AnatomyOverlay";
+import useImageAspectRatio from "./useImageAspectRatio";
+import ImageCoordinateSurface from "./ImageCoordinateSurface";
 import Icon, { IconName } from "./Icon";
 import FeedbackControls, { createOutputId, FeedbackReason } from "./FeedbackControls";
 import ImageDownloadControls from "./ImageDownloadControls";
@@ -100,7 +102,7 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
   }, [analysisStartedAt]);
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
-  const [aspectRatio, setAspectRatio] = useState(1);
+  const aspectRatio = useImageAspectRatio(`data:image/png;base64,${imageBase64}`);
   const dragStartRef = useRef<Point | null>(null);
   const [outputId, setOutputId] = useState<string | null>(null);
   const [retryLink, setRetryLink] = useState<{ feedbackId: string; outputId: string } | null>(null);
@@ -326,20 +328,15 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
 
       <ImageDownloadControls annotations={anatomyAnnotations} imageBase64={imageBase64} organ={anatomyOrgan} />
 
-      {!editingLabels && <View
+      {!editingLabels && <ImageCoordinateSurface
+        aspectRatio={aspectRatio}
         {...{ dataSet: { dragSurface: "true" } }}
         {...panResponder.panHandlers}
         onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
-        // Cap width instead of height so the image and normalized overlays keep
-        // the same aspect ratio, including on wide screens and portrait images.
-        style={[styles.canvas, { aspectRatio, maxWidth: 720 * aspectRatio }]}
+        style={styles.canvas}
       >
         <Image
           accessibilityLabel="Interactive educational image"
-          onLoad={(event) => {
-            const source = event.nativeEvent.source;
-            if (source?.width && source?.height) setAspectRatio(source.width / source.height);
-          }}
           resizeMode="contain"
           source={{ uri: imageUri }}
           style={StyleSheet.absoluteFill}
@@ -352,7 +349,7 @@ export default function InteractiveCanvas({ imageFeedback, chatId, generationId,
         )}
         {previewBox && <SelectionBox coords={previewBox} drawing />}
         {selectionType === "box" && currentSelection?.type === "box" && !isDrawingBox && <SelectionBox coords={currentSelection.coords} />}
-      </View>
+      </ImageCoordinateSurface>
 
       }
 
