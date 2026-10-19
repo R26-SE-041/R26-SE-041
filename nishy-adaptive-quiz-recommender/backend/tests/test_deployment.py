@@ -79,6 +79,33 @@ class PersistenceTests(unittest.TestCase):
 
 class PostgresTransactionTests(unittest.TestCase):
     @patch("app.services.postgres_connection._pool")
+    def test_concurrent_queries_wait_for_a_connection_slot(self, pool_factory):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import BoundedSemaphore, Event
+        entered, release, second_started = Event(), Event(), Event()
+        pool = pool_factory.return_value
+        cursor = pool.getconn.return_value.cursor.return_value.__enter__.return_value
+        cursor.description = None
+        def execute(query, params=None):
+            if query == "SELECT first":
+                entered.set()
+                self.assertTrue(release.wait(3))
+        cursor.execute.side_effect = execute
+        def second():
+            second_started.set()
+            return PostgresConnection().execute("SELECT second")
+        with patch("app.services.postgres_connection._pool_slots", BoundedSemaphore(1)), ThreadPoolExecutor(2) as executor:
+            first = executor.submit(PostgresConnection().execute, "SELECT first")
+            self.assertTrue(entered.wait(3))
+            waiting = executor.submit(second)
+            self.assertTrue(second_started.wait(3))
+            self.assertEqual(pool.getconn.call_count, 1)
+            release.set()
+            first.result(timeout=3)
+            waiting.result(timeout=3)
+        self.assertEqual(pool.putconn.call_count, 2)
+
+    @patch("app.services.postgres_connection._pool")
     def test_bound_parameters_and_buffered_results(self, pool_factory):
         pool = pool_factory.return_value
         connection = pool.getconn.return_value

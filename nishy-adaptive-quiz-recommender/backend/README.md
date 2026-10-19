@@ -25,7 +25,10 @@ wait for Uvicorn's `Application startup complete` message before opening the dem
 That moves model initialization out of the first quiz, rather than eliminating
 its cost. The first installation still needs to download the model. Set
 `PRELOAD_EMBEDDINGS=false` only if you deliberately want lazy loading again.
-Do not increase `QUIZ_GENERATION_BUDGET_SEC` just to hide a slow model.
+The October 19 quiz repair uses a 150-second shared generation deadline and a
+120-second HTTP inference timeout. Live probes showed that the former
+15-second deadline expired before a valid response could arrive. Setup remains
+asynchronous; health-probe failures no longer prevent an inference attempt.
 
 The Modal changes require a separate deployment from this backend directory:
 
@@ -38,7 +41,7 @@ and reduces the GPU idle window from 600 to 120 seconds. That reduces the config
 idle tail by 80%, not total inference costs. It also makes cold starts more likely
 after a pause. `MODAL_GPU_IDLE_SECONDS` can be set in the deployment shell to change
 this tradeoff; keep the demo window short instead of paying for an always-on GPU.
-`MODAL_MAX_GENERATION_SECONDS` defaults to 20. Transformers checks that limit during
+`MODAL_MAX_GENERATION_SECONDS` defaults to 40. Transformers checks that limit during
 generation; it is not a hard limit on cold starts, queueing, or request duration.
 Complete top-level JSON stops generation early, and requests are capped at 8192
 output tokens. These are resource controls, not a monetary spending cap.
@@ -80,6 +83,32 @@ Local verification on this Windows workspace: the offline MiniLM benchmark took
 and 0.000012 seconds per cached batch averaged over 100 runs. Cached vectors were
 identical. These measurements made zero Modal requests and do not establish live
 GPU latency or total quiz speed.
+
+## Question generation recovery
+
+An uploaded exam paper is treated as topic scope, not a verified answer key.
+Its distractors never become factual premises in the generation prompt.
+Reviewed questions are preferred for matching syllabus concepts and labelled
+`topic_model` (Syllabus practice), preserving their measured similarity scores.
+Study-note questions use their source text; grounding compares both full chunks
+and their actual sentence windows at the same threshold. Similarity remains a
+relevance measure, not proof of factual correctness.
+
+Topic quizzes carry a distinct concept focus for each question to avoid repeated
+interventions and answer facts. MCQ validation accepts scenarios up to 60 words
+and allows explanations to reject incorrect choices without misclassifying that
+discussion as endorsement. Generic source-copy fallbacks are limited to easy
+questions; application and analysis recovery requires reviewed content.
+
+JSON requests use the fine-tuned Qwen draft and independent regeneration with
+the already-loaded Qwen instruction-model base weights for MCQs or malformed
+output. The returned MCQ can therefore come from the base model rather than the
+LoRA adapter. Report this recovery path accurately in a demonstration or model
+evaluation; the live pipeline is not an adapter-only benchmark.
+
+Database operations wait for a bounded pool slot, and quiz status polling never
+overlaps itself. A failed later question publishes an error status so retry can
+resume from the saved material and answers instead of leaving a polling loop.
 
 Validation:
 

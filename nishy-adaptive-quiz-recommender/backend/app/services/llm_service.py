@@ -22,7 +22,7 @@ MODAL_ENDPOINT_URL = os.getenv(
     "MODAL_ENDPOINT_URL", DEFAULT_MODAL_ENDPOINT_URL
 ).strip()
 MODAL_API_KEY = os.getenv("MODAL_API_KEY", "").strip()
-MODAL_REQUEST_TIMEOUT_SEC = float(os.getenv("MODAL_REQUEST_TIMEOUT_SEC", "45"))
+MODAL_REQUEST_TIMEOUT_SEC = float(os.getenv("MODAL_REQUEST_TIMEOUT_SEC", "120"))
 MAX_NEW_TOKENS = int(os.getenv("MODAL_MAX_NEW_TOKENS", "180"))
 MODAL_HEALTH_CACHE_SEC = float(os.getenv("MODAL_HEALTH_CACHE_SEC", "30"))
 MODAL_FAILURE_COOLDOWN_SEC = float(os.getenv("MODAL_FAILURE_COOLDOWN_SEC", "30"))
@@ -98,7 +98,7 @@ class QwenModalService:
             logger.error("[ModalHealthCheck] %s", exc)
             return False
 
-    def call(self, prompt: str, max_new_tokens: int | None = None) -> str:
+    def call(self, prompt: str, max_new_tokens: int | None = None, *, json_mode: bool = False) -> str:
         """Generate text through Modal, allowing enough time for a GPU cold start."""
         endpoint = self._require_endpoint()
         start = time.time()
@@ -111,6 +111,8 @@ class QwenModalService:
             "prompt": prompt,
             "max_new_tokens": max_new_tokens or MAX_NEW_TOKENS,
         }
+        if json_mode:
+            payload["response_format"] = "json"
         try:
             # Modal may return HTTP 303 with a signed __modal_attempt_token
             # after a long-running web request. The signed continuation URL
@@ -191,20 +193,24 @@ class QwenModalService:
         # JSON includes five choices and an explanation (or a full written
         # answer). The short free-text default truncates that schema.
         budget = max_new_tokens if max_new_tokens is not None else max(MAX_NEW_TOKENS, 1024)
-        raw = self.call(full_prompt, max_new_tokens=budget)
+        raw = self.call(full_prompt, max_new_tokens=budget, json_mode=True)
         return self._extract_json(raw)
 
     @staticmethod
     def _extract_json(text: str) -> dict:
         """Robustly extract JSON even from messy LLM output."""
         try:
-            return json.loads(text.strip())
+            parsed = json.loads(text.strip())
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 
         clean = re.sub(r"```(?:json)?\n?", "", text).strip().rstrip("`")
         try:
-            return json.loads(clean)
+            parsed = json.loads(clean)
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 

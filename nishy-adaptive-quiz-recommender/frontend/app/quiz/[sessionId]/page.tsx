@@ -383,6 +383,7 @@ export default function QuizPage() {
   const [waitingForNext, setWaitingForNext] = useState(false);
   const [startTime, setStartTime] = useState(Date.now());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statusPollInFlight = useRef(false);
   const submitGuardRef = useRef(false);
 
   // Answered question history for prev navigation
@@ -398,6 +399,8 @@ export default function QuizPage() {
 
   // Poll for session readiness
   const pollStatus = useCallback(async () => {
+    if (statusPollInFlight.current) return;
+    statusPollInFlight.current = true;
     try {
       const status = await getSessionStatus(sessionId);
       setSessionStatus(status);
@@ -415,12 +418,14 @@ export default function QuizPage() {
       }
     } catch {
       setError("Could not connect to server. Is the backend running?");
+    } finally {
+      statusPollInFlight.current = false;
     }
   }, [sessionId, router]);
 
   const retrySetup = async () => {
     setError("");
-    setSessionStatus((previous) => previous ? { ...previous, status: "processing", message: "Preparing your quiz again?" } : previous);
+    setSessionStatus((previous) => previous ? { ...previous, status: "processing", message: "Preparing your quiz again..." } : previous);
     try {
       await retryQuestionGeneration(sessionId);
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -558,6 +563,13 @@ export default function QuizPage() {
         return;
       } catch (e) {
         lastErr = e;
+        if (e instanceof Error && e.message.includes("Question generation stopped")) {
+          const status = await getSessionStatus(sessionId);
+          setSessionStatus(status);
+          setQuestion(null);
+          setWaitingForNext(false);
+          return;
+        }
         const delay = i < fastDelays.length ? fastDelays[i] : steadyDelayMs;
         await new Promise((res) => setTimeout(res, delay));
       }

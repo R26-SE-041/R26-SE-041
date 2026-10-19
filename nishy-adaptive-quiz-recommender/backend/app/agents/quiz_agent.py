@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 from app.graph.state import AssessmentState, QuestionRecord
 from app.services.db_service import DbService
-from app.services.biology_recovery import reviewed_source_candidates
+from app.services.biology_recovery import BANK as RECOVERY_CONCEPTS, reviewed_source_candidates
 from app.services.topic_practice import reviewed_topic_bank
 from app.services.grounding_service import GroundingService
 from app.services.llm_service import LlmService
@@ -32,7 +32,7 @@ DIFF_BANDS = [
     (0.66, 1.0, "hard", "analyze"),
 ]
 INIT_DIFFICULTY = {"easy": 0.2, "medium": 0.5, "hard": 0.8, "adaptive": 0.8}
-QUIZ_GENERATION_BUDGET_SEC = float(os.getenv("QUIZ_GENERATION_BUDGET_SEC", "15"))
+QUIZ_GENERATION_BUDGET_SEC = float(os.getenv("QUIZ_GENERATION_BUDGET_SEC", "150"))
 MCQ_OPTION_KEYS = {"1", "2", "3", "4", "5"}
 INSUFFICIENT_SOURCE_MESSAGE = "Insufficient source context to generate a valid question."
 GENERATION_FAILED_MESSAGE = "Could not generate a complete valid quiz. Please try again."
@@ -79,7 +79,7 @@ Rules:
 - Write model_answer as a real 2-4 sentence explanation (35-70 words): state why the
   correct choice satisfies the tested relationship and the key distinction from distractors.
 - Never use the correct option text alone as model_answer.
-- Keep the question under 30 words, each choice under 18 words, and close every quote and brace.
+- Keep the question under 60 words, each choice under 18 words, and close every quote and brace.
 - Keep the complete JSON under 220 words.
 - Put choices only in the options object; never append choices to the question string.
 - HARD (0.66-1.00): Make the question indirect and intellectually demanding, requiring deep thinking. Require at least two linked reasoning steps using a scenario, comparison, cause-effect chain, prediction, or structure-function relationship. Never ask for a definition, simple identification, or direct word match. Make every distractor plausible.
@@ -107,7 +107,7 @@ Rules:
 - Exactly one choice must be correct according to its attached excerpt.
 - Every choice must be a complete standalone answer; do not use missing A-E statements.
 - Do not refer to the PDF, source, excerpt, plan, item, or page.
-- Keep each stem under 30 words and each choice under 18 words.
+- Keep each stem under 60 words and each choice under 18 words.
 - Give every question a substantive 2-4 sentence, 35-70 word explanation, not merely the correct option text.
 - Obey each plan item's difficulty exactly. HARD requires at least two linked reasoning steps, making it indirect and intellectually demanding; MEDIUM requires one application step and no direct definition; EASY must be a direct, clear recall question from the syllabus.
 
@@ -130,7 +130,7 @@ Return only compact JSON:
 Rules:
 - Use accepted Biology knowledge and terminology appropriate to the requested topic.
 - Include exactly five unique standalone choices and exactly one correct choice.
-- Keep the stem between 4 and 30 words and each choice under 22 words.
+- Keep the stem between 4 and 60 words and each choice under 22 words.
 - Give a clear 2-4 sentence explanation.
 - Do not repeat or paraphrase any prior question listed below.
 
@@ -218,6 +218,7 @@ Rules:
 COGNITIVE_DIFFICULTY_RULES = """
 Cognitive difficulty contract (applies to the requested level only):
 - HARD: Give a coherent but demanding scenario with at least two linked inferences.
+  Begin with "After" or "If" and state a concrete biological intervention and an observation.
   Combine observations or a perturbation and a contrasting condition; ask for the
   mechanism that explains both or a downstream prediction. Keep the deciding fact
   implicit. For MCQs, all five choices must address the same mechanism or outcome, with
@@ -446,8 +447,8 @@ def _validate_mcq(q_data: dict) -> dict:
 
     question_text = str(q_data.get("question", "")).strip()
     question_words = question_text.split()
-    if len(question_words) < 4 or len(question_words) > 30:
-        raise ValueError("MCQ stem must be a complete question of 4-30 words")
+    if len(question_words) < 4 or len(question_words) > 60:
+        raise ValueError("MCQ stem must be a complete question of 4-60 words")
     if re.search(r"\bdescribes?\s+regarding\b", question_text, re.IGNORECASE):
         raise ValueError("MCQ stem is grammatically malformed")
     if any(_looks_like_broken_option(option) for option in options.values()):
@@ -488,14 +489,27 @@ def _validate_mcq(q_data: dict) -> dict:
     explanation_folded = re.sub(r"\s+", " ", explanation).casefold()
     correct_text = re.sub(r"\s+", " ", str(options[correct_answer])).strip().casefold()
     correct_is_named = bool(correct_text and correct_text in explanation_folded)
-    named_wrong_options = [
-        str(key)
-        for key, value in options.items()
-        if key != correct_answer
-        and len(str(value).strip()) >= 3
-        and re.sub(r"\s+", " ", str(value)).strip().casefold() in explanation_folded
+    def rejected_mention(start: int, end: int) -> bool:
+        tail = explanation_folded[end:end + 70]
+        if re.match(r"\s*(?:is|would be|remains)\s+(?:the\s+)?correct\b", tail):
+            return False
+        clause_start = max(explanation_folded.rfind(mark, 0, start) for mark in ".;!?") + 1
+        boundaries = [explanation_folded.find(mark, end) for mark in ".;!?"]
+        clause_end = min([pos for pos in boundaries if pos >= 0] or [len(explanation_folded)])
+        clause = explanation_folded[max(clause_start, start - 80):min(clause_end, end + 100)]
+        return bool(re.search(r"\b(?:not|incorrect|wrong|cannot|unlike|rather than|instead of|neither)\b", clause))
+
+    named_wrong_options = []
+    for key, value in options.items():
+        needle = re.sub(r"\s+", " ", str(value)).strip().casefold()
+        if key == correct_answer or len(needle) < 3:
+            continue
+        if any(not rejected_mention(m.start(), m.end()) for m in re.finditer(re.escape(needle), explanation_folded)):
+            named_wrong_options.append(str(key))
+    explicit_option_refs = [
+        match.group(1) for match in re.finditer(r"\b(?:option|choice)\s*([1-5])\b", explanation_folded)
+        if not rejected_mention(match.start(), match.end())
     ]
-    explicit_option_refs = re.findall(r"\b(?:option|choice)\s*([1-5])\b", explanation_folded)
     if (
         (named_wrong_options and not correct_is_named)
         or any(key != correct_answer for key in explicit_option_refs)
@@ -701,9 +715,18 @@ def _concept_label(heading: str, focus: str) -> str:
     return " ".join(words[:10])[:80] or "Source-supported Biology concept"
 
 
+def _source_concept_group(text: str) -> str:
+    matches = [
+        (len(word), topic)
+        for topic, keywords, _ in RECOVERY_CONCEPTS for word in keywords
+        if re.search(r"\b" + re.escape(word) + r"\b", text, re.I)
+    ]
+    return max(matches)[1] if matches else ""
+
+
 def _infer_biology_topic(candidate: dict, slot: dict) -> str:
     """Derive a learner-facing biological topic, excluding exam/file metadata."""
-    declared_topic = re.sub(r"\s+", " ", str(candidate.get("_topic", ""))).strip(" .:;-")
+    declared_topic = re.sub(r"\s+", " ", str(candidate.get("_topic") or slot.get("_paper_topic") or slot.get("_topic_group") or "")).strip(" .:;-")
     if 1 <= len(declared_topic.split()) <= 8:
         return declared_topic
     stem = re.sub(r"\s+", " ", str(candidate.get("question", ""))).strip().rstrip("?")
@@ -803,9 +826,11 @@ def build_concept_plan(state: AssessmentState, source_chunks: List[dict]) -> Lis
             seen_focuses.append(focus)
             heading = str(chunk.get("heading", "")).strip()
             label = _concept_label(heading, focus)
+            group = _source_concept_group(focus)
             candidates.append({
-                "topic": label if label else (topics[len(candidates) % len(topics)] if topics else "Biology"),
-                "concept": label,
+                "topic": group or label or (topics[len(candidates) % len(topics)] if topics else "Biology"),
+                "concept": group or label,
+                "_topic_group": group,
                 "concept_focus": focus[:320],
                 "retrieval_query": f"{label} {focus[:220]}".strip(),
                 "source_chunk_id": str(chunk.get("chunk_id", "")),
@@ -838,6 +863,18 @@ def build_concept_plan(state: AssessmentState, source_chunks: List[dict]) -> Lis
     session_seed = f"{state.get('session_id') or uuid.uuid4()}:{state.get('retry_count', 0)}"
     rng = random.Random(session_seed)
     rng.shuffle(candidates)
+    # A shuffled list of distinct sentences can still select several facts
+    # about the same process while omitting other chapters. Cover the named
+    # biological concepts before reserving further facts from those concepts.
+    first_by_group, remaining, seen_groups = [], [], set()
+    for slot in candidates:
+        group = slot.get("_topic_group")
+        if group and group not in seen_groups:
+            first_by_group.append(slot)
+            seen_groups.add(group)
+        else:
+            remaining.append(slot)
+    candidates = first_by_group + remaining
 
     # Reuse is allowed only when the source did not yield enough distinct anchors.
     plan = candidates[:requested]
@@ -1005,10 +1042,16 @@ def _embedding_grounding_audit(
         )
         if part
     )
-    score = grounding.score(
-        generated_text,
-        [str(chunk.get("text", "")) for chunk in chunks],
-    )
+    evidence = []
+    for chunk in chunks:
+        text = str(chunk.get("text", ""))
+        evidence.append(text)
+        sentences = _concept_sentences(text)
+        # Long extraction chunks can mix several concepts. Compare against
+        # their actual sentence windows as well, preserving the same threshold.
+        evidence.extend(sentences)
+        evidence.extend(" ".join(sentences[i:i + 2]) for i in range(len(sentences) - 1))
+    score = grounding.score(generated_text, list(dict.fromkeys(evidence)))
     return {
         "grounding_status": "grounded" if score >= grounding.threshold else "rejected",
         "grounding_score": score,
@@ -1662,6 +1705,34 @@ def _with_live_difficulty(slot: dict, difficulty: float) -> dict:
     return adaptive_slot
 
 
+def _is_question_paper(chunks: List[dict]) -> bool:
+    """Exam options are competing claims, not a factual reference or answer key."""
+    text = " ".join(str(chunk.get("text", "")) for chunk in chunks)
+    options = re.findall(r"(?:^|\s)[1-5A-Ea-e]\s*[).]\s+", text)
+    return len(options) >= 4 and bool(re.search(
+        r"\b(?:which|select|statements?|correct|incorrect|following)\b", text, re.I
+    ))
+
+
+def _paper_topic_scope(slot: dict, chunks: List[dict]) -> str:
+    """Extract topic names, never an exam option's unverified assertion."""
+    focus = str(slot.get("concept_focus", ""))
+    context = " ".join(str(chunk.get("text", "")) for chunk in chunks)
+    for text in (focus, context):
+        for topic, keywords, _ in RECOVERY_CONCEPTS:
+            if any(re.search(r"\b" + re.escape(word) + r"\b", text, re.I) for word in keywords):
+                return topic
+        for topic, _ in _TOPIC_FALLBACK_BANK:
+            if re.search(r"\b" + re.escape(topic) + r"\b", text, re.I):
+                return topic.capitalize()
+    units = _source_question_units(chunks)
+    if units:
+        stem = str(units[0]["stem"])
+        return _infer_open_ended_topic(stem) or _infer_biology_topic({"question": stem}, {})
+    # A continuation without a complete stem cannot safely supply a premise.
+    return "Biology"
+
+
 def _targeted_mcq_prompt(
     slot: dict,
     chunks: List[dict],
@@ -1672,6 +1743,23 @@ def _targeted_mcq_prompt(
     subject: str = "Sri Lankan G.C.E. A/L Biology",
 ) -> str:
     diff_label, bloom = get_diff_info(difficulty)
+    if _is_question_paper(chunks):
+        # Unkeyed papers supply topic scope, not the truth of their distractors.
+        # Such questions are disclosed as syllabus practice when persisted.
+        prior = "\n".join(f"- {q.get('question', '')}" for q in accepted[-20:])
+        topic = str(slot.get("_paper_topic") or _paper_topic_scope(slot, chunks))
+        return TOPIC_ONLY_MCQ_PROMPT.format(
+            subject=subject, topic=topic,
+            difficulty=difficulty, diff_label=diff_label, bloom_level=bloom,
+            prior_questions=prior or "none", seed=str(uuid.uuid4()),
+        ) + (
+            "\nThe uploaded material is an exam paper WITHOUT a verified answer key. "
+            "Use it ONLY to identify the biological topic below. Its choices include false statements. "
+            "Use accepted syllabus knowledge to write a NEW, accurate question on that topic. "
+            "Do not copy its options or assume its statements are true.\n"
+            f"Biological topic identified in the exam paper: {topic}.\n"
+            "Create a fresh syllabus question. No unverified exam statements are provided as factual premises."
+        )
     plan_summary = "\n".join(
         f'- Q{index}: {item.get("concept", item.get("topic", "Biology"))} — {item.get("concept_focus", "")[:100]}'
         for index, item in enumerate(slots, start=1)
@@ -1701,7 +1789,7 @@ PREVIOUS OUTPUT REJECTION:
 {previous_rejection or '- none; this is the first attempt'}
 
 FORMAT RECOVERY RULES:
-- Write a direct question. Do not create a statement-combination item.
+- Write one standalone question at the requested cognitive difficulty. Do not create a statement-combination item.
 - Every option must contain an actual biological answer, never only letter labels.
 - Use numeric JSON keys "1", "2", "3", "4", "5" and quote every JSON key.
 - Include question, options, correct_answer, and model_answer.
@@ -1905,6 +1993,10 @@ def _source_fallback_mcq(
     curated = _curated_source_recovery(slot, difficulty, question_index, excluded)
     if curated is not None:
         return curated
+    if difficulty >= .33:
+        # Copying a fact into a generic "evidence" frame does not create an
+        # application or analysis question. Only reviewed recovery can do that.
+        return None
     correct = _compact_source_statement(focus)
     if len(_semantic_tokens(correct)) < 3:
         return None
@@ -2757,7 +2849,7 @@ def _difficulty_candidate_rejection(candidate: dict, diff_label: str) -> str:
         re.IGNORECASE,
     ))
     reasoning_markers = bool(re.search(
-        r"\b(?:after|before|blocked|change|compared|defect|evidence|experiment|fails?|if|inhibits?|observed|observations?|outcomes?|studies|inhibitor|mutant|reduced|increased|prevented|whereas|despite|although|predict|result|while|yet)\b",
+        r"\b(?:after|before|blocked|change|compared|defect|evidence|experiment|fails?|if|inhibits?|observed|observations?|outcomes?|studies|inhibitor|mutant|mutations?|mutated|deletion|deficient|absence|exposed|treatment|reduced|increased|prevented|whereas|despite|although|predict|result|while|yet)\b",
         stem,
         re.IGNORECASE,
     ))
@@ -2802,6 +2894,27 @@ def _topic_candidate_rejection(candidate: dict, topic: str, diff_label: str) -> 
     return _difficulty_candidate_rejection(candidate, diff_label)
 
 
+def _topic_concept_plan(topic: str, requested: int) -> List[dict]:
+    if re.search(r"\b(?:krebs|citric acid|tricarboxylic)\b", topic, re.I):
+        focuses = [
+            "entry of acetyl-CoA, oxaloacetate regeneration, and cycle continuity",
+            "NADH and FADH2 production and coupling to the electron transport chain",
+            "carbon tracing and the timing of carbon dioxide release",
+            "substrate-level phosphorylation and energy-carrier yields per acetyl-CoA",
+            "feedback regulation by ATP, ADP, and NADH under contrasting energy demands",
+        ]
+    else:
+        focuses = [
+            "a structure-function relationship and its biological consequence",
+            "inputs, products, and their relationship to a linked biological process",
+            "comparison of two contrasting biological conditions",
+            "interpretation of an experiment with a control and one changed variable",
+            "regulation or feedback and a downstream biological prediction",
+            "the effect of disrupting a different component or stage",
+        ]
+    return [{"topic": topic, "concept_focus": focuses[i % len(focuses)], "q_type": "mcq"} for i in range(requested)]
+
+
 def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     """Generate one adaptive MCQ from a student-entered Biology topic."""
     topic = str(state.get("requested_topic") or "").strip()
@@ -2809,6 +2922,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     questions = list(state.get("questions", []))
     requested = int(state.get("num_questions", 5))
     current_index = int(state.get("current_q_index", 0))
+    blueprint = state.get("quiz_blueprint") or _topic_concept_plan(topic, requested)
     historical_questions = _previous_learner_questions(state, "mcq")
 
     if len(questions) >= requested or current_index < len(questions):
@@ -2831,29 +2945,25 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     # topics and otherwise hard-fails the whole quiz setup.
     candidate = None
     service_error = ""
+    previous_rejection = ""
     fallback_candidate = _make_fallback_topic_question(
         topic, questions, difficulty, diff_label, historical_questions=historical_questions
     )
-    is_universal_fallback = False
     llm = LlmService(generation_budget_sec=QUIZ_GENERATION_BUDGET_SEC)
     # A valid local question is immediately usable. Do not send the learner
     # to a slow remote call merely because the remaining quiz is longer than
     # the currently available local pool.
     prefer_curated = fallback_candidate is not None
     endpoint_warm = llm.check_health() if not prefer_curated else False
-    if fallback_candidate is None and not endpoint_warm:
-        is_universal_fallback = True
-        fallback_candidate = _universal_topic_fallback(
-            topic, [*questions, *historical_questions], diff_label
-        )
-    if fallback_candidate is not None and (is_universal_fallback or not endpoint_warm or prefer_curated):
+    if fallback_candidate is not None:
         candidate = _validate_mcq(dict(fallback_candidate))
         logs.append(
             f"[QuizAgent] Used a distinct local {diff_label} topic question "
             "without waiting for remote inference"
         )
 
-    for attempt in range(1, 4) if candidate is None and endpoint_warm else range(0):
+    # A web health timeout does not establish that GPU inference is unusable.
+    for attempt in range(1, 4) if candidate is None else range(0):
         prompt = TOPIC_ONLY_MCQ_PROMPT.format(
             topic=topic,
             subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
@@ -2863,22 +2973,33 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
             prior_questions=prior_questions,
             seed=str(uuid.uuid4())
         )
+        prompt += (
+            f"\nASSIGNED DISTINCT FOCUS FOR QUESTION {len(questions) + 1}: "
+            f"{blueprint[len(questions)]['concept_focus']}. "
+            "Test this focus specifically. Do not generate another version of an earlier enzyme-inhibitor question. "
+            "Use a different biological relationship, intervention and correct-answer fact from all prior questions."
+        )
+        if previous_rejection:
+            prompt += f"\nYour previous draft was rejected: {previous_rejection}. Correct that issue. Retain a concrete biological scenario in the stem and use no more than 60 words."
         try:
             raw = llm.call_json(prompt, max_new_tokens=1024)
             parsed = _validate_mcq(raw)
             rejection = _topic_candidate_rejection(parsed, topic, diff_label)
             if rejection:
+                previous_rejection = rejection
                 logger.warning("[QuizAgent] Rejected topic candidate (attempt %d): %s", attempt, rejection)
                 logs.append(f"[QuizAgent] Rejected model question (attempt {attempt}): {rejection}")
                 continue
             duplicate_reason = _historical_duplicate_reason(parsed, [*questions, *historical_questions])
             if duplicate_reason:
+                previous_rejection = duplicate_reason
                 logger.warning("[QuizAgent] Duplicate detected (attempt %d), retrying: %s", attempt, duplicate_reason)
                 logs.append(f"[QuizAgent] Duplicate question rejected (attempt {attempt}): {duplicate_reason}")
                 continue
             candidate = parsed
             break
         except Exception as exc:
+            previous_rejection = str(exc)
             logger.warning("[QuizAgent] LLM call failed for topic '%s' (attempt %d): %s", topic, attempt, exc)
             logs.append(f"[QuizAgent] LLM attempt {attempt} failed ({exc})")
             if fallback_candidate is None:
@@ -2906,6 +3027,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
         return {
             "error": error,
             "questions": questions,
+            "quiz_blueprint": blueprint,
             "agent_logs": logs + ["[QuizAgent] Refused a repeated or unrelated fallback"],
         }
 
@@ -2918,6 +3040,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
         return {
             "error": "No new question at this difficulty is available for this topic. Try another topic or add study material.",
             "questions": questions,
+            "quiz_blueprint": blueprint,
             "agent_logs": logs + [f"[QuizAgent] Final candidate rejected: {final_rejection}"],
         }
 
@@ -2947,7 +3070,7 @@ def _topic_only_mcq_agent(state: AssessmentState) -> dict:
     )
     return {
         "questions": questions,
-        "quiz_blueprint": state.get("quiz_blueprint", []),
+        "quiz_blueprint": blueprint,
         "flagged_questions": list(state.get("flagged_questions", [])),
         "current_q_index": current_index,
         "current_difficulty": difficulty,
@@ -2993,7 +3116,16 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         and str(chunk.get("source", "")).strip()
     ]
     source_map = {str(chunk.get("chunk_id", "")): chunk for chunk in source_chunks}
+    question_paper = _is_question_paper(source_chunks)
+    if question_paper:
+        logs.append("[QuizAgent] Unkeyed question paper: generate syllabus practice; do not treat distractors as facts")
     blueprint = state.get("quiz_blueprint") or build_concept_plan(state, source_chunks)
+    if question_paper:
+        blueprint = [dict(slot) for slot in blueprint]
+        for slot in blueprint:
+            anchor = source_map.get(str(slot.get("source_chunk_id", "")))
+            topic = _paper_topic_scope(slot, [anchor] if anchor else source_chunks)
+            slot.update(topic=topic, concept=topic, concept_focus=topic, _paper_topic=topic)
     if len(blueprint) < requested:
         return {
             "error": INSUFFICIENT_SOURCE_MESSAGE,
@@ -3058,7 +3190,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     # A cold endpoint previously consumed 45 seconds per retry. The validated
     # concept-specific recovery bank now preserves real difficulty without
     # making setup wait for a container that the health probe cannot reach.
-    generation_service_unavailable = not endpoint_warm
+    generation_service_unavailable = not endpoint_warm or question_paper
     if not endpoint_warm:
         logs.append("[QuizAgent] Endpoint is cold; using validated source recovery without waiting")
     batch_prompt = BATCH_MCQ_PROMPT.format(
@@ -3068,10 +3200,16 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
         f"- {q.get('question', '')} | Answer fact: {_answer_text(q)}"
         for q in [*existing_questions, *historical_questions[:30]]
     )
+    if question_paper and len(pending_slots) == 1:
+        batch_prompt = _targeted_mcq_prompt(
+            pending_slots[0], _slot_chunks(rag, state["chroma_collection_id"], pending_slots[0], source_map),
+            blueprint, [*existing_questions, *historical_questions[:30]], active_difficulty,
+            subject=state.get("subject", "Sri Lankan G.C.E. A/L Biology"),
+        )
 
     try:
         if generation_service_unavailable:
-            raise RuntimeError("Modal endpoint is cold; using validated source recovery")
+            raise RuntimeError("Trying validated recovery before remote inference")
         # Keep the model from running to a very large token ceiling when a
         # compact batch is requested; malformed LoRA output otherwise makes
         # setup appear hung for several minutes.
@@ -3136,6 +3274,12 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 )
                 return False
             audit = _embedding_grounding_audit(grounding, candidate, chunks)
+            if question_paper and not reviewed_recovery:
+                if float(audit.get("grounding_score", 0.0)) < SOURCE_RAG_MIN_SIMILARITY:
+                    rejection_by_index[absolute_index] = "question is unrelated to the uploaded exam topic"
+                    return False
+                audit["grounding_status"] = "topic_model"
+                audit["reason"] = "question_paper_syllabus_practice"
             if reviewed_recovery:
                 # An unkeyed question paper names a concept but cannot entail an
                 # answer. Preserve its real similarity score and disclose reviewed
@@ -3143,7 +3287,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                 audit["grounding_status"] = "topic_model"
                 audit["reason"] = "reviewed_syllabus_practice"
             if (
-                audit["grounding_status"] != "grounded"
+                audit["grounding_status"] == "rejected"
                 and not use_embedding_duplicate_check
                 and float(audit.get("grounding_score", 0.0))
                 >= SOURCE_ONLY_RECOVERY_MIN_GROUNDING
@@ -3214,6 +3358,10 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     for local_index, slot in enumerate(pending_slots, start=1):
         absolute_index = len(existing_questions) + local_index - 1
         if absolute_index in generated_by_index:
+            continue
+        if question_paper:
+            # Source-extractive fallbacks cannot determine the correct answer
+            # to an unkeyed paper. Avoid scanning and copying its distractors.
             continue
         chunks = _slot_chunks(rag, state["chroma_collection_id"], slot, source_map)
         if not chunks:
@@ -3329,7 +3477,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
     # usable. Prefer fast recovery, but do not let that probe alone prevent all
     # generation for concepts outside the recovery bank. Reuse the same client
     # so this final attempt remains inside the original generation deadline.
-    if not endpoint_warm:
+    if not endpoint_warm or question_paper:
         for local_index, slot in enumerate(pending_slots, start=1):
             absolute_index = len(existing_questions) + local_index - 1
             if absolute_index in generated_by_index:
@@ -3349,7 +3497,7 @@ def _batch_mcq_quiz_agent(state: AssessmentState) -> dict:
                     max_new_tokens=1024,
                 )
                 if validate_for_slot(local_index, candidate):
-                    logs.append(f"[QuizAgent] Generated Q{absolute_index + 1} despite failed health probe")
+                    logs.append(f"[QuizAgent] Generated Q{absolute_index + 1} after recovery was exhausted")
             except Exception as exc:
                 logs.append(f"[QuizAgent] Generation after failed health probe failed: {exc}")
                 break

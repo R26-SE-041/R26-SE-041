@@ -14,7 +14,7 @@ BASE_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 LORA_ADAPTER_ID = "Nishy11/nishy-qwen2.5-7b-v4"
 GPU_TYPE = "A10G"
 GPU_IDLE_SECONDS = int(os.getenv("MODAL_GPU_IDLE_SECONDS", "120"))
-MAX_GENERATION_SECONDS = float(os.getenv("MODAL_MAX_GENERATION_SECONDS", "20"))
+MAX_GENERATION_SECONDS = float(os.getenv("MODAL_MAX_GENERATION_SECONDS", "40"))
 
 hf_secret = modal.Secret.from_name("huggingface-secret")
 
@@ -102,6 +102,7 @@ class QwenModel:
         prompt: str,
         temperature: float = 0.4,
         max_tokens: int = 1024,
+        json_mode: bool = False,
     ) -> str:
         """Generate a response with the fine-tuned model."""
         import torch
@@ -151,7 +152,26 @@ class QwenModel:
             output_ids = self.model.generate(**inputs, **generation_kwargs)
 
         new_tokens = output_ids[0, inputs["input_ids"].shape[1]:]
-        return self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        draft = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        if json_mode:
+            if not complete_json_object(draft) or '"options"' in draft:
+                # The assessment LoRA sometimes emits exam prose even when JSON
+                # is requested. Repair with the instruction-tuned base weights
+                # already resident on the same GPU, without loading another model.
+                repair_messages = [
+                    {"role": "system", "content": "You are an expert Biology examiner. Independently create a scientifically correct question that meets every constraint in the user request. Every MCQ must have exactly one correct answer, and its explanation must establish why all other choices are incorrect. Retain the requested scenario and cognitive difficulty. Return exactly one JSON object in the requested schema."},
+                    # Regenerate from the original requirements. Supplying a
+                    # scientifically incorrect draft anchored the repair model
+                    # to its incorrect premise and answer even after reformatting.
+                    {"role": "user", "content": prompt},
+                ]
+                repair_prompt = self.tokenizer.apply_chat_template(repair_messages, tokenize=False, add_generation_prompt=True)
+                repair_inputs = self.tokenizer(repair_prompt, return_tensors="pt").to("cuda")
+                prompt_length = repair_inputs["input_ids"].shape[1]
+                with self.model.disable_adapter(), torch.inference_mode():
+                    repaired_ids = self.model.generate(**repair_inputs, **generation_kwargs)
+                draft = self.tokenizer.decode(repaired_ids[0, prompt_length:], skip_special_tokens=True).strip()
+        return draft
 
 
 @app.function(timeout=600)
@@ -169,6 +189,7 @@ def web_endpoint():
         prompt: str
         temperature: float = 0.4
         max_new_tokens: int = Field(default=1024, ge=1, le=8192)
+        response_format: str = "text"
 
     class GenerateResponse(BaseModel):
         response: str
@@ -181,6 +202,7 @@ def web_endpoint():
                 req.prompt,
                 temperature=req.temperature,
                 max_tokens=req.max_new_tokens,
+                json_mode=req.response_format == "json",
             )
             return GenerateResponse(response=text)
         except Exception as exc:

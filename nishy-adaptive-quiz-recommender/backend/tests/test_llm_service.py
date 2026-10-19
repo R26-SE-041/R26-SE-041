@@ -9,6 +9,18 @@ from app.services.llm_service import (
 
 
 class ModalApiContractTests(unittest.TestCase):
+    def test_rejects_json_primitives_instead_of_passing_them_to_question_validation(self):
+        for raw in ('"Exam prose instead of an object"', '[]', 'null', '42'):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                QwenModalService._extract_json(raw)
+
+    @patch("app.services.llm_service.httpx.post")
+    def test_json_requests_enable_endpoint_format_repair(self, post):
+        post.return_value.status_code = 200
+        post.return_value.json.return_value = {"response": '{"question":"Complete"}'}
+        QwenModalService().call_json("Generate a question")
+        self.assertEqual(post.call_args.kwargs["json"]["response_format"], "json")
+
     def test_truncated_question_does_not_return_nested_options_as_json(self):
         raw = '{"question":"Which sugar?","options":{"1":"Glucose","2":"Starch"},"model_answer":"unfinished'
         with self.assertRaises(ValueError):

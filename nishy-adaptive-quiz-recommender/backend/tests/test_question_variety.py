@@ -13,6 +13,8 @@ from app.agents.quiz_agent import (
     _universal_topic_fallback,
     _validate_mcq,
     quiz_agent,
+    _is_question_paper,
+    _targeted_mcq_prompt,
 )
 from app.services.db_service import DbService
 from app.services.biology_recovery import BANK, reviewed_source_candidates
@@ -150,6 +152,41 @@ class RetakeAndDifficultyTests(unittest.TestCase):
 
 
 class DocumentRetakeTests(unittest.TestCase):
+    def test_exam_distractors_are_not_presented_as_source_facts(self):
+        chunks = [{"chunk_id": "exam", "text": "Which statement about ribosomes is correct? 1) They make lipids. 2) They contain DNA. 3) They make proteins. 4) They store glucose. 5) They contain cellulose."}]
+        self.assertTrue(_is_question_paper(chunks))
+        self.assertFalse(_is_question_paper([{"text": "Ribosomes translate messenger RNA into polypeptide chains. They contain ribosomal RNA and proteins."}]))
+        prompt = _targeted_mcq_prompt({"concept": "Ribosomes"}, chunks, [], [], .8)
+        self.assertIn("WITHOUT a verified answer key", prompt)
+        self.assertIn("accepted syllabus knowledge", prompt)
+        self.assertNotIn("sole source of truth", prompt)
+        self.assertNotIn("They make lipids", prompt)
+        self.assertNotIn("They contain DNA", prompt)
+        self.assertIn("Ribosomes and translation", prompt)
+
+    @patch("app.agents.quiz_agent.DbService")
+    @patch("app.agents.quiz_agent.GroundingService")
+    @patch("app.agents.quiz_agent.RagService")
+    @patch("app.agents.quiz_agent.LlmService")
+    def test_unkeyed_paper_model_question_is_disclosed_as_syllabus_practice(self, llm, rag, grounding, db):
+        chunk = {"chunk_id": "exam", "source": "exam.pdf", "page": 1, "text": "Which statements about lymphatic vessels are correct? 1) They bear valves. 2) They pump arterial blood. 3) They contain red cells. 4) They transport urine. 5) They digest protein."}
+        candidate = reviewed_source_candidates([chunk], "hard")[0][0]
+        rag.return_value.get_source_chunks.return_value = [chunk]
+        rag.return_value.retrieve.return_value = [chunk]
+        db.return_value.get_previous_questions.return_value = []
+        llm.return_value.check_health.return_value = True
+        llm.return_value.call_json.return_value = copy.deepcopy(candidate)
+        grounding.return_value.score.return_value = .429
+        grounding.return_value.threshold = .55
+        doc_state = state("hard", "Lymphatic system", documents=True)
+        doc_state["quiz_blueprint"] = [{"concept": "Lymphatic system", "source_chunk_id": "exam"}]
+        with patch("app.agents.quiz_agent.reviewed_source_candidates", return_value=[]):
+            result = quiz_agent(doc_state)
+        self.assertIsNone(result.get("error"))
+        self.assertEqual(result["questions"][0]["grounding_status"], "topic_model")
+        self.assertEqual(result["questions"][0]["grounding_score"], .429)
+        self.assertEqual(result["questions"][0]["difficulty"], .8)
+
     @patch("app.agents.quiz_agent.DbService")
     @patch("app.agents.quiz_agent.GroundingService")
     @patch("app.agents.quiz_agent.RagService")
@@ -206,11 +243,14 @@ class DocumentRetakeTests(unittest.TestCase):
         db.return_value.get_previous_questions.return_value = []
         paper_state = state("hard", "Lymphatic system", documents=True)
         paper_state["quiz_blueprint"] = [{"concept": "Lymphatic system", "source_chunk_id": "exam", "difficulty": .8}]
-        result = quiz_agent(paper_state)
-        self.assertIsNone(result.get("error"))
-        self.assertEqual(result["questions"][0]["grounding_status"], "topic_model")
-        self.assertEqual(result["questions"][0]["grounding_score"], .429)
-        self.assertEqual(result["questions"][0]["difficulty"], .8)
+        for score in (.429, .9):
+            with self.subTest(score=score):
+                grounding.return_value.score.return_value = score
+                result = quiz_agent(copy.deepcopy(paper_state))
+                self.assertIsNone(result.get("error"))
+                self.assertEqual(result["questions"][0]["grounding_status"], "topic_model")
+                self.assertEqual(result["questions"][0]["grounding_score"], score)
+                self.assertEqual(result["questions"][0]["difficulty"], .8)
         llm.return_value.call_json.assert_not_called()
 
     @patch("app.agents.quiz_agent.DbService")

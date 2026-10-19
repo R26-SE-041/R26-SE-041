@@ -1,5 +1,47 @@
 # Nishy adaptive quiz deployment
 
+## End-to-end quiz recovery — 19 October 2026
+
+The failed session `24e7e708-9b43-4ce7-84b5-960dcfa11aa7` contained an
+unkeyed Biology question paper, not explanatory notes. Its distractors were
+being treated as source facts. A live Modal probe also returned plain exam
+prose instead of JSON after 22.86 seconds, exceeding the old 15-second budget.
+Further live tests exposed false contradiction rejections when explanations
+rejected distractors, repeated topic-question frames, and diluted similarity
+scores from chunks containing multiple concepts.
+
+The release now separates paper topic scope from factual evidence, prefers
+reviewed paper recovery, sanitizes exam choices out of generation prompts,
+plans distinct topic focuses, and compares source sentence windows at the
+existing threshold. Generic source-copy questions cannot masquerade as medium
+or hard recovery. Reviewed syllabus questions retain `topic_model` status even
+at high similarity. Pool operations wait for a connection slot; status polls
+do not overlap, and failed later questions publish a retryable error status.
+
+The existing Modal app was redeployed with JSON-mode base-model regeneration.
+The final MCQ can come from the instruction-model base weights after the LoRA
+draft; this is not an adapter-only model evaluation. Runtime inference and
+generation deadlines are 120 and 150 seconds; the existing encrypted backend
+parameter was updated to version 5, preserving credentials and its KMS key.
+
+Final EC2 release command: `829019b9-5a1e-441f-a2e6-124381a86345`.
+All six running source hashes matched the tested release, and `/health` and
+PostgreSQL `/ready` passed. Rollback:
+`/opt/nishy-quiz/viva-fix-backup-AkV8EDFD`.
+Vercel production deployment `dpl_2JUTQsZ7KsDMnLwDTRQSiyfUMG3X` reached `READY`.
+The public quiz page and API readiness both returned HTTP 200.
+
+The original failed quiz was repaired and its unanswered, contradictory first
+question replaced with reviewed ribosome practice. No learner answers were
+submitted or removed. Local validation: 139 backend tests passed and frontend
+TypeScript checking passed. Full authenticated live runs verified five generated
+questions, persisted answers, evaluation and final results for typed Ribosomes,
+typed Krebs cycle (live model generation), an uploaded question paper and
+uploaded study notes. The final planner also prefers different named source
+processes before reusing one process; its diversity regression test passes.
+These completion checks are workflow evidence, not expert ratings of every
+model-written question's scientific accuracy or cognitive difficulty.
+
 ## Question generation recovery release — 19 October 2026
 
 Deployed the tested quiz agent to the existing EC2 backend through SSM command

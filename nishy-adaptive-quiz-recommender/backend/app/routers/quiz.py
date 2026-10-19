@@ -113,7 +113,13 @@ def _continue_session_after_response(session_id: str, quiz_complete: bool) -> No
             db.record_report(session_id, completed_report)
         else:
             # Resume from the post-evaluation interrupt: adaptive -> generate.
-            graph.invoke(None, config=config)
+            continued = graph.invoke(None, config=config)
+            if continued.get("error") and len(continued.get("questions", [])) <= int(continued.get("current_q_index", 0)):
+                from app.routers.session import _session_errors, _session_logs
+                _session_errors[session_id] = str(continued["error"])
+                _session_logs[session_id] = continued.get("agent_logs", [])
+                db.update_session_status(session_id, "error")
+                return
             # Replenish look-ahead so the following Next click is also instant.
             prefetch_next_question(session_id)
     except Exception:

@@ -7,6 +7,20 @@ from app.routers import quiz
 
 
 class RetryGenerationTests(unittest.TestCase):
+    @patch.object(quiz, "prefetch_next_question")
+    @patch.object(quiz, "get_graph")
+    @patch.object(quiz, "db")
+    def test_background_generation_failure_is_published_for_retry(self, db, graph, prefetch):
+        from app.routers.session import _session_errors, _session_logs
+        graph.return_value.get_state.return_value.values = {"questions": [{"q_id": "answered"}], "current_q_index": 1}
+        graph.return_value.invoke.return_value = {"questions": [{"q_id": "answered"}], "current_q_index": 1, "error": "Model unavailable", "agent_logs": ["failed"]}
+        with patch.dict(_session_errors, {}, clear=True), patch.dict(_session_logs, {}, clear=True):
+            quiz._continue_session_after_response("failed-next", False)
+            self.assertEqual(_session_errors["failed-next"], "Model unavailable")
+            self.assertEqual(_session_logs["failed-next"], ["failed"])
+        db.update_session_status.assert_called_once_with("failed-next", "error")
+        prefetch.assert_not_called()
+
     @patch.object(quiz, "submit_session_work")
     @patch.object(quiz, "get_graph")
     @patch.object(quiz, "db")

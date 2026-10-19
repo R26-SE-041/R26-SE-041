@@ -8,6 +8,44 @@ import re
 
 # Each tuple is (stem, correct choice, four distractors, explanation).
 BANK = [
+    ("Ribosomes and translation", ("ribosome", "ribosomes", "translation", "polypeptide"), {
+        "hard": [
+            ("After a mutation removes a secreted protein's ER signal sequence, its mRNA still binds ribosomes. Which paired outcome is expected for synthesis and targeting?",
+             "Translation can continue in the cytosol, but normal ER targeting is lost",
+             ["Translation stops because all proteins require an ER signal", "The protein enters the nucleus directly because its mRNA is unchanged", "The protein becomes a membrane lipid without translation", "The ribosome gains a signal sequence and secretes the protein itself"],
+             "An ER signal sequence directs a translating ribosome and its nascent polypeptide to the ER. Removing that sequence need not prevent translation, but it disrupts the usual entry into the secretory pathway."),
+            ("After an antibiotic specifically blocks bacterial 30S subunits, bacterial growth slows while human cytosolic translation continues. Which distinction explains this selective effect?",
+             "Bacterial 70S and human cytosolic 80S ribosomes have different small subunits",
+             ["Bacteria translate proteins without messenger RNA", "Human cytosolic ribosomes contain no ribosomal RNA", "Bacterial proteins are assembled from nucleotides rather than amino acids", "Human cytosolic translation occurs exclusively inside the nucleus"],
+             "Bacterial ribosomes contain 30S and 50S subunits, whereas human cytosolic ribosomes contain 40S and 60S subunits. A drug specific to the bacterial small subunit can therefore inhibit bacterial translation selectively."),
+            ("After ribosomal catalytic RNA is damaged, charged tRNAs still bind but no new peptide bonds form. Which conclusion links the observations to ribosome function?",
+             "Ribosomal RNA participates in catalysis as well as ribosomal structure",
+             ["Ribosomal RNA stores the entire genome instead of DNA", "Binding charged tRNAs alone is sufficient to complete every peptide bond", "Messenger RNA normally catalyses all amino-acid charging reactions", "Peptide bonds form in the nucleus independently of ribosomes"],
+             "The large-subunit ribosomal RNA forms the catalytic centre for peptide-bond formation. Continued tRNA binding with failed bond formation distinguishes loss of catalysis from failure to deliver amino acids."),
+            ("After a mutation replaces an internal sense codon with a premature stop codon, translation begins normally. Which outcome follows when the ribosome reaches that position?",
+             "A release factor promotes early termination, producing a shorter polypeptide",
+             ["The ribosome always reads through the stop codon without termination", "DNA polymerase adds the missing amino acids to the protein", "The ribosome reverses direction and restores the original codon", "Every remaining codon is translated into the same amino acid"],
+             "Stop codons are recognised by release factors rather than ordinary aminoacyl-tRNAs. A premature stop can therefore terminate translation before the normal end of the coding sequence, shortening the product."),
+            ("After a charging enzyme attaches valine to a leucine-specific tRNA, its anticodon remains unchanged. What happens when the ribosome reads a matching leucine codon?",
+             "Valine may be incorporated because codon recognition depends on the tRNA anticodon",
+             ["The ribosome automatically converts the attached valine into leucine", "The leucine codon in the messenger RNA changes into a valine codon", "DNA replication stops before the charged tRNA can bind", "The ribosome reads the amino acid instead of the tRNA anticodon"],
+             "The ribosome matches codons to tRNA anticodons and does not normally correct an incorrectly attached amino acid. Misacylation can therefore introduce the wrong amino acid while leaving the mRNA sequence unchanged."),
+        ],
+        "medium": [
+            ("If a cell produces many secreted proteins, why are numerous ribosomes associated with its rough ER?", "Translation is coupled to entry of those proteins into the secretory pathway", ["Ribosomes convert the proteins directly into membrane lipids", "The rough ER replaces the need for messenger RNA", "Ribosomes store secreted proteins permanently without synthesis", "Only the nucleus can receive newly synthesised secreted proteins"], "Ribosomes synthesise polypeptides, and ER-targeting signals bring appropriate translating complexes to the ER. This couples protein synthesis to entry into the secretory pathway."),
+            ("If messenger RNA cannot bind to ribosomes, which process is most directly disrupted?", "Translation of its coding sequence into a polypeptide", ["Replication of chromosomal DNA", "Osmotic movement of water across membranes", "Hydrolysis of stored triglycerides", "Separation of homologous chromosomes"], "Ribosomes must bind and read messenger RNA to translate its sequence. Loss of that interaction directly disrupts polypeptide synthesis."),
+            ("If an antibiotic blocks peptide-bond formation, what immediate change is expected in an actively translating bacterial cell?", "Elongation of newly synthesised polypeptides is inhibited", ["Existing DNA is converted directly into protein", "All amino acids become nucleotides", "The plasma membrane becomes a cellulose wall immediately", "Every mature protein is instantly converted into RNA"], "Polypeptide elongation requires peptide bonds between successive amino acids. Blocking bond formation prevents further chain growth even if other cellular structures remain present."),
+            ("If a single messenger RNA carries several translating ribosomes, what does this arrangement allow?", "Several polypeptide copies can be synthesised from that messenger RNA concurrently", ["The messenger RNA becomes a double-stranded chromosome", "Each ribosome replicates a separate DNA molecule", "Only the last ribosome can make any peptide bonds", "The ribosomes fuse into one larger nucleus"], "A polysome contains multiple ribosomes translating one mRNA. This permits concurrent synthesis of multiple copies of its encoded polypeptide."),
+            ("If a ribosome reaches the normal stop codon, which event completes translation?", "A release factor promotes release of the completed polypeptide", ["A DNA polymerase replaces the ribosome", "The ribosome adds an amino acid encoded by every stop codon", "The messenger RNA is converted into a fatty acid", "A chromosome enters the ribosomal active site"], "A stop codon recruits a release factor rather than a tRNA carrying another amino acid. The completed polypeptide is released and the translation complex can disassemble."),
+        ],
+        "easy": [
+            ("What is the main function of ribosomes?", "Protein synthesis", ["Lipid storage", "DNA replication", "Photosynthetic light absorption", "Digestion of cellulose"], "Ribosomes translate messenger RNA and assemble amino acids into polypeptide chains."),
+            ("Which two types of molecules form ribosomes?", "Ribosomal RNA and proteins", ["DNA and cellulose", "Triglycerides and starch", "Cholesterol and glycogen", "Glucose and wax"], "Ribosomes consist of ribosomal RNA associated with ribosomal proteins in large and small subunits."),
+            ("What is the sedimentation designation of typical bacterial ribosomes?", "70S", ["80S", "40S", "60S", "90S"], "Typical bacterial ribosomes are designated 70S and contain 30S and 50S subunits. Sedimentation coefficients are not added arithmetically."),
+            ("Which RNA carries a coding sequence to the ribosome?", "Messenger RNA", ["Ribosomal RNA only", "Transfer RNA only", "MicroRNA only", "Small nuclear RNA only"], "Messenger RNA supplies the coding sequence read by ribosomes during protein synthesis."),
+            ("Which bond joins adjacent amino acids during translation?", "Peptide bond", ["Glycosidic bond", "Phosphodiester bond", "Ester bond in a triglyceride", "Hydrogen bond between DNA bases"], "The ribosome catalyses peptide-bond formation as amino acids are joined into a polypeptide."),
+        ],
+    }),
     ("Lymphatic circulation", ("lymphatic", "lymph"), {
         "hard": [
             ("After lymphatic drainage from one leg is blocked, tissue swelling increases although arterial supply remains normal. Which paired change best explains the swelling?",

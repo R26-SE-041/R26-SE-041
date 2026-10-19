@@ -29,7 +29,7 @@ LIPIDS = {
         ("Bile delivery stops although pancreatic lipase remains active. Why does fat digestion decline despite continued enzyme production?",
          "Reduced emulsification leaves less fat surface accessible to lipase",
          ["Bile normally supplies the peptide bonds that lipase must break", "Bile normally hydrolyses all triglycerides without any enzymes", "Without bile, lipase converts fatty acids directly into glucose", "Lipase can act only after all fatty acids become saturated"],
-         "Bile salts help disperse large fat droplets into smaller droplets. This increases the surface available to lipase; reduced emulsification can therefore limit digestion even when the enzyme is present."),
+         "Bile salts help disperse large triglyceride droplets into smaller droplets. This increases the surface available to lipase; reduced emulsification can therefore limit digestion even when the enzyme is present."),
         ("Oxygen diffusion is observed through a lipid bilayer while sodium-ion movement is strongly restricted. Which feature explains this difference beyond molecule size alone?",
          "The hydrophobic interior favours nonpolar solutes over hydrated charged ions",
          ["The bilayer contains permanent open pores for all gases and ions", "Its fatty-acid tails are strongly positively charged", "Sodium ions dissolve freely in hydrocarbon chains but oxygen cannot", "Polar heads actively pump oxygen using ATP"],

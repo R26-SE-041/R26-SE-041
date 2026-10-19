@@ -6,18 +6,29 @@ before returning the connection, so API threads never share transactions.
 import os
 import re
 from functools import lru_cache
+from threading import BoundedSemaphore, Lock
+
+_pool_size = max(1, int(os.getenv("DB_POOL_MAX", "10")))
+_pool_slots = BoundedSemaphore(_pool_size)
+_pool_lock = Lock()
 
 
 @lru_cache(maxsize=1)
-def _pool():
+def _create_pool():
     from psycopg2.pool import ThreadedConnectionPool
 
     return ThreadedConnectionPool(
-        1, int(os.getenv("DB_POOL_MAX", "10")),
+        1, _pool_size,
         dsn=os.environ["DATABASE_URL"],
         connect_timeout=10,
         sslmode="require",
     )
+
+
+def _pool():
+    # lru_cache alone can invoke its factory concurrently on a cache miss.
+    with _pool_lock:
+        return _create_pool()
 
 
 class Rows:
@@ -41,8 +52,13 @@ class PostgresConnection:
         else:
             query = query.replace("?", "%s")
         pool = _pool()
-        connection = pool.getconn()
+        # psycopg2's pool raises immediately when busy. Polling and background
+        # generation must wait for a slot instead of randomly returning 500s.
+        if not _pool_slots.acquire(timeout=35):
+            raise TimeoutError("Database is busy; connection wait timed out")
+        connection = None
         try:
+            connection = pool.getconn()
             with connection:
                 with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Set these inside the transaction rather than relying on
@@ -52,7 +68,11 @@ class PostgresConnection:
                     rows = cursor.fetchall() if cursor.description else []
             return Rows(rows)
         finally:
-            pool.putconn(connection)
+            try:
+                if connection is not None:
+                    pool.putconn(connection)
+            finally:
+                _pool_slots.release()
 
     def commit(self):
         # execute() commits each successful statement, rolls back failures.

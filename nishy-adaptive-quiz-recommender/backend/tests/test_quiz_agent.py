@@ -15,6 +15,7 @@ from app.agents.quiz_agent import (
     _make_fallback_topic_question,
     _record_from_candidate,
     _topic_candidate_rejection,
+    _topic_concept_plan,
     _with_live_difficulty,
     build_blueprint,
     build_concept_plan,
@@ -23,6 +24,44 @@ from app.agents.quiz_agent import (
 
 
 class FiveOptionMcqTests(unittest.TestCase):
+    def test_topic_plan_separates_biological_relationships(self):
+        plan = _topic_concept_plan("Krebs cycle", 5)
+        self.assertEqual(len({slot["concept_focus"] for slot in plan}), 5)
+        self.assertIn("carbon tracing", plan[2]["concept_focus"])
+
+    def test_source_plan_covers_distinct_processes_before_reusing_a_process(self):
+        chunks = [{"chunk_id":"notes", "source":"biology.txt", "text": (
+            "DNA replication uses helicase to separate complementary parental strands. "
+            "DNA polymerase extends new complementary strands during DNA replication. "
+            "DNA ligase joins newly formed fragments during DNA replication. "
+            "Guard cells regulate stomatal opening through changes in cell turgor. "
+            "Lymphatic vessels return excess tissue fluid to the blood circulation."
+        )}]
+        plan = build_concept_plan({"session_id":"variety", "num_questions":3, "exam_type":"mcq"}, chunks)
+        self.assertEqual(len({slot["_topic_group"] for slot in plan}), 3)
+
+    def test_grounding_retains_chunk_and_real_sentence_windows(self):
+        grounding = Mock(threshold=.55)
+        grounding.score.return_value = .7
+        text = "Guard cells control stomatal opening through changes in their turgor. Potassium uptake lowers water potential and water enters guard cells by osmosis."
+        result = _embedding_grounding_audit(grounding, {"question":"What controls stomatal opening?", "options":{"1":"Guard cells"}, "correct_answer":"1", "model_answer":"Guard-cell turgor regulates the pore."}, [{"chunk_id":"leaf","text":text}])
+        evidence = grounding.score.call_args.args[1]
+        self.assertIn(text, evidence)
+        self.assertIn("Guard cells control stomatal opening through changes in their turgor.", evidence)
+        self.assertEqual(result["grounding_status"], "grounded")
+
+    def test_explaining_why_a_distractor_is_incorrect_is_not_a_contradiction(self):
+        candidate = {
+            "question": "Which bond joins amino acids during translation?",
+            "options": {"1": "Peptide bond", "2": "Glycosidic bond", "3": "Ester bond", "4": "Phosphodiester bond", "5": "Hydrogen bond"},
+            "correct_answer": "1",
+            "model_answer": "The ribosome links amino acids through peptide linkages. Option 2 is incorrect: a glycosidic bond joins sugars rather than amino acids.",
+        }
+        self.assertEqual(_validate_mcq(candidate)["correct_answer"], "1")
+        candidate["model_answer"] = "Option 2 is correct. A glycosidic bond joins the amino acids in this reaction."
+        with self.assertRaisesRegex(ValueError, "contradicts"):
+            _validate_mcq(candidate)
+
     def test_reserve_plan_cannot_overwrite_live_easy_difficulty(self):
         stale_reserve = {"concept": "Golgi apparatus", "difficulty": 0.8}
         live = _with_live_difficulty(stale_reserve, 0.2)
@@ -345,7 +384,7 @@ class FiveOptionMcqTests(unittest.TestCase):
             "source": "biology.pdf",
             "page": 1,
         }]
-        slot = {"concept_focus": "Lymphatic capillaries are blind-ended and collect tissue fluid."}
+        slot = {"concept_focus": "Lymphatic capillaries are blind-ended and collect tissue fluid.", "difficulty": .2}
 
         fallback = _source_fallback_mcq(slot, chunks, 0)
 
