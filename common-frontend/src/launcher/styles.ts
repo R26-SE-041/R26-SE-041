@@ -20,7 +20,7 @@ export const dashboardCss = `
   .page-width, .header-inner { width: min(100% - 112px, 1440px); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 20; background: #f0eee6f5; backdrop-filter: blur(12px); }
   .header-inner { display: flex; justify-content: space-between; align-items: center; min-height: 92px; gap: 40px; }
-  .wordmark { position: relative; font-family: var(--sans); font-size: 26px; line-height: 1; font-weight: 800; letter-spacing: -.9px; display: inline-flex; align-items: center; }
+  .wordmark { cursor: pointer; user-select: none; -webkit-user-select: none; position: relative; font-family: var(--sans); font-size: 26px; line-height: 1; font-weight: 800; letter-spacing: -.9px; display: inline-flex; align-items: center; }
   .wordmark::after { content: ''; position: absolute; left: 0; right: 0; bottom: -7px; height: 2px; background: var(--clay); transform: scaleX(0); transform-origin: left; transition: transform 320ms cubic-bezier(.2,.65,.3,1); }
   .wordmark-x { display: inline-block; font-weight: 400; margin-left: 1px; transform: skew(-11deg); transition: transform 320ms cubic-bezier(.2,.65,.3,1), color 220ms ease; }
   .wordmark:is(:hover, :focus-visible)::after { transform: scaleX(1); }

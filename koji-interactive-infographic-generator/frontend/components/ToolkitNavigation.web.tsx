@@ -53,7 +53,7 @@ export default function ToolkitNavigation({ componentName, background = "var(--b
   return <div className="lx-toolkit-bar" style={{ "--lx-bg": background, "--lx-ink": color, "--lx-border": border } as CSSProperties}>
     <style>{`
       .lx-toolkit-bar { box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; gap: 20px; min-height: 48px; padding: 10px 24px; background: var(--lx-bg); color: var(--lx-ink); border-bottom: 1px solid var(--lx-border); font-family: Arial, Helvetica, sans-serif; }
-      .lx-toolkit-home { position: relative; display: inline-flex; align-items: center; color: inherit; text-decoration: none; font-size: 18px; line-height: 1; font-weight: 800; letter-spacing: -.6px; }
+      .lx-toolkit-home { cursor: pointer; user-select: none; -webkit-user-select: none; position: relative; display: inline-flex; align-items: center; color: inherit; text-decoration: none; font-size: 18px; line-height: 1; font-weight: 800; letter-spacing: -.6px; }
       .lx-toolkit-home::after { content: ''; position: absolute; left: 0; right: 0; bottom: -7px; height: 2px; background: #c6613f; transform: scaleX(0); transform-origin: left; transition: transform 320ms cubic-bezier(.2,.65,.3,1); }
       .lx-toolkit-x { display: inline-block; font-weight: 400; margin-left: 1px; transform: skew(-11deg); transition: transform 320ms cubic-bezier(.2,.65,.3,1), color 220ms ease; }
       .lx-toolkit-home:is(:hover, :focus-visible)::after { transform: scaleX(1); }
