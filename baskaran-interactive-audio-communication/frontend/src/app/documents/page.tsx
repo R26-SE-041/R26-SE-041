@@ -7,7 +7,6 @@ import { DocumentList } from '@/components/documents/DocumentList'
 import type { DocumentItem, Language, AskResponse, ChunkReference } from '@/types'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 import Link from 'next/link'
-import { LearnXBrand } from '@/components/ui/LearnXBrand'
 
 const LANG_OPTIONS: { value: Language; label: string; flag: string }[] = [
   { value: 'english', label: 'English', flag: '🇬🇧' },
@@ -72,7 +71,7 @@ export default function DocumentsPage() {
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span className="text-ink"><LearnXBrand /></span>
+            <span className="font-semibold text-sm text-ink">VoiceLearn AI</span>
           </div>
           <nav className="flex items-center gap-2">
             <Link

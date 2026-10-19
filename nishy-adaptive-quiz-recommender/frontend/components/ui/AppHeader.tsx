@@ -23,10 +23,7 @@ export default function AppHeader({ children, home = false }: { children?: React
   }
   return (
     <header className="app-header">
-      <Link href="/" className="app-wordmark learnx-header-brand" aria-label="LearnX AdaptiveIQ home">
-        <span data-learnx-logo="true">Learn<span data-learnx-logo-x="true">X</span></span>
-        <span className="learnx-app-name">AdaptiveIQ</span>
-      </Link>
+      <Link href="/" className="app-wordmark" aria-label="AdaptiveIQ home">AdaptiveIQ</Link>
       <nav aria-label="Main navigation" className="account-nav">
         {home && !user && <div className="hidden lg:flex items-center gap-7 text-sm">
           <a className="nav-link" href="#how-it-works">How it works</a>

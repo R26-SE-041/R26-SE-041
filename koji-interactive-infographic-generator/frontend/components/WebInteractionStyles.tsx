@@ -7,15 +7,6 @@ export default function WebInteractionStyles({ colors, mode }: { colors: ColorPa
   if (Platform.OS !== "web") return null;
   const controls = ':is(button, [role="button"], [role="tab"], [tabindex="0"]):not(input):not(textarea):not([aria-label="Dismiss account menu"])';
   return React.createElement("style", null, `
-    [data-learnx-logo="true"] { position: relative; display: inline-flex; align-items: center; overflow: visible; }
-    [data-learnx-logo="true"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -7px; height: 2px; background: #c6613f; transform: scaleX(0); transform-origin: left; transition: transform 320ms cubic-bezier(.2,.65,.3,1); }
-    [data-learnx-logo-x="true"] { display: inline-block; font-weight: 400; margin-left: 1px; transform: skew(-11deg); transition: transform 320ms cubic-bezier(.2,.65,.3,1), color 220ms ease; }
-    [data-learnx-logo="true"]:hover::after { transform: scaleX(1); }
-    [data-learnx-logo="true"]:hover [data-learnx-logo-x="true"] { color: #c6613f; transform: translate(3px,-2px) rotate(12deg) skew(-11deg); }
-    @media (prefers-reduced-motion: reduce) {
-      [data-learnx-logo="true"]::after, [data-learnx-logo-x="true"] { transition: none; }
-      [data-learnx-logo="true"]:hover [data-learnx-logo-x="true"] { transform: skew(-11deg); }
-    }
     html, body, #root { background-color: ${colors.background}; font-family: Arial, Helvetica, sans-serif; }
     ::selection { background-color: ${colors.primary}; color: white; }
     input, textarea { caret-color: ${colors.primaryBright}; transition: border-color 200ms ease; }

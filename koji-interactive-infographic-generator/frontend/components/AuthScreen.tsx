@@ -117,7 +117,7 @@ export default function AuthScreen({ session }: Props) {
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: wide ? 64 : 30 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <View style={{ backgroundColor: colors.text, borderRadius: 4, width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.onBrand, fontWeight: "800", fontSize: 22 }}>L</Text></View>
-            <Text {...{ dataSet: { learnxLogo: 'true' } }} style={{ color: colors.text, fontWeight: "700", fontSize: 24, letterSpacing: -0.8 }}>learn<Text {...{ dataSet: { learnxLogoX: 'true' } }}>X</Text></Text>
+            <Text style={{ color: colors.text, fontWeight: "700", fontSize: 24, letterSpacing: -0.8 }}>learnX</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={theme === "light" ? "Switch to dark mode" : "Switch to light mode"} onPress={toggleTheme} style={[button, { width: 44, alignItems: "center" }]}><Icon name={theme === "light" ? "moon" : "sun"} color={colors.textMuted} size={21} /></Pressable>
         </View>

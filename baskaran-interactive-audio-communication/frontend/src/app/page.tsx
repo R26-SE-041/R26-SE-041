@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { LearnXBrand } from '@/components/ui/LearnXBrand'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -75,7 +74,7 @@ export default function HomePage() {
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
             </div>
-            <span style={{ color: 'var(--text)' }}><LearnXBrand /></span>
+            <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--text)' }}>VoiceLearn AI</span>
           </div>
           <div className="flex items-center gap-2">
             <Link

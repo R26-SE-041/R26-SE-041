@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/components/ui/ThemeProvider'
+import ToolkitNavigation from '@/components/ui/ToolkitNavigation'
 
 export const metadata: Metadata = {
   title: 'VoiceLearn AI — Voice-Powered Study Assistant',
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ThemeProvider>
+          <ToolkitNavigation componentName="VoiceLearn AI" />
           {children}
         </ThemeProvider>
       </body>

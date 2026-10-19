@@ -1369,7 +1369,7 @@ function Home({ accessToken, studioSession }: AppProps) {
               <View style={styles.topBar}>
                 <View style={styles.brandRow}>
                   <View style={styles.brandMark}><Text style={styles.brandMarkText}>L</Text></View>
-                  <Text {...{ dataSet: { learnxLogo: 'true' } }} style={styles.brand}>learn<Text {...{ dataSet: { learnxLogoX: 'true' } }}>X</Text></Text>
+                  <Text style={styles.brand}>learnX</Text>
                 </View>
                 <View style={styles.headerActions}>
                 <Pressable
